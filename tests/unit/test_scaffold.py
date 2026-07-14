@@ -24,7 +24,9 @@ PACKAGE_MODULES = [
     "nereus_camera_test_rig.cameras.registry",
     "nereus_camera_test_rig.cameras.imx708",
     "nereus_camera_test_rig.cameras.openmv_usb",
+    "nereus_camera_test_rig.cameras.builtin",
     "nereus_camera_test_rig.capture.naming",
+    "nereus_camera_test_rig.capture.image_probe",
     "nereus_camera_test_rig.capture.coordinator",
     "nereus_camera_test_rig.capture.image_capture",
     "nereus_camera_test_rig.capture.video_capture",
@@ -55,10 +57,11 @@ def test_camera_adapters_expose_driver():
 
 def test_placeholder_camera_methods_raise():
     # Not-yet-implemented adapters must fail loudly, not silently no-op.
-    from nereus_camera_test_rig.cameras.imx708 import Imx708Camera
+    # (imx708 is implemented in Phase 1; openmv_usb remains a placeholder.)
+    from nereus_camera_test_rig.cameras.openmv_usb import OpenMvUsbCamera
 
     with pytest.raises(NotImplementedError):
-        Imx708Camera().get_device_info()
+        OpenMvUsbCamera().get_device_info()
 
 
 @pytest.mark.parametrize("yaml_path", sorted(str(p) for p in Path("configs").rglob("*.yaml")))
