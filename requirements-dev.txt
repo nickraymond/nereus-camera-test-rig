@@ -1,0 +1,5 @@
+# Development dependencies for host-side (Mac) work.
+# Runtime deps are declared in pyproject.toml; install the package editable with the
+# dev extra to get everything: `pip install -e ".[dev]"` (see the Makefile).
+pytest>=8.0
+ruff>=0.5
