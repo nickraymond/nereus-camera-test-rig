@@ -38,10 +38,13 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 
 ## IMX708 / Pi capture
 
-- **[NEEDS-HARDWARE] OQ-7 — `rpicam-still` vs `libcamera-still` availability on the target
-  Pi OS.** The prior art selects via `shutil.which`; confirm which exists on our Pi image
-  and that the control flags (`--autofocus-mode`, `--awbgains`, `--shutter`, `--gain`, …)
-  are accepted by that build. Blocks Phase 1 exit.
+- **[RESOLVED] OQ-7 — `rpicam-still` vs `libcamera-still` availability on the target Pi OS.**
+  Target Pi (`nereus000`) is a Pi 5 on Debian 13 "trixie". `rpicam-still`/`rpicam-vid` are
+  present at `/usr/bin/`; the old `libcamera-still`/`libcamera-vid` names are **absent**
+  (dropped in favor of the `rpicam-*` apps). So the adapter uses `rpicam-still`. Verified by
+  a live capture on 2026-07-14 (`--metadata` accepted; see OQ-10). Remaining sub-item:
+  confirm each control flag (`--awbgains`, `--shutter`, `--gain`, `--autofocus-mode`) is
+  accepted when we start passing non-auto controls — deferred until we leave the auto path.
 - **[OPEN] OQ-8 — Warm-up timeout.** Prior art hardcodes `--timeout 2000` (2 s). We intend
   to make this configurable (Spec §9 lists warm-up delay as a supported setting). Confirm a
   sensible default and that the flag name is stable across `rpicam`/`libcamera`.
@@ -49,11 +52,15 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   `--roi`; it crops in Pillow after a full-frame capture. Decision: MVP will keep the
   post-capture crop (proven). True sensor ROI is deferred (would change capture time/FOV and
   is a rewrite). Recorded so the down-select can revisit.
-- **[NEEDS-HARDWARE] OQ-10 — Default IMX708 profile values.** Spec §9 requires defaults from
-  *tested* profiles, not invented. The shipped device profiles (`bmcam001/bmcam002`) use the
-  legacy Picamera2 path and do **not** populate `image_pipeline`/`camera_controls`. We need
-  a known-good `rpicam` control set (exposure/gain/WB/focus) for the eval rig — to be
-  captured from a real run, not guessed. Blocks Phase 1 "defaults derived from tested profiles."
+- **[RESOLVED-APPROACH] OQ-10 — Default IMX708 profile values.** Decision (owner: Nick,
+  2026-07-14): the first runs use **full auto** — no `--shutter`/`--gain`/`--awb`/
+  `--autofocus-mode` flags, which is exactly the legacy default path (`camera_controls`
+  disabled → `_camera_controls_from_settings` returns no control args → libcamera auto).
+  Confirmed against the legacy source. A live auto capture on `nereus000` recorded the
+  camera's own choices as a baseline: ExposureTime≈13539µs, AnalogueGain≈1.50,
+  DigitalGain≈1.00, ColourGains≈[2.47,…], ColourTemperature≈5311K, LensPosition≈3.20
+  (AF converged), Lux≈1410. Later phases can pin these as explicit controls if a fixed
+  profile is wanted; for bring-up, auto is the tested default.
 
 ## Reference-card pipeline
 
@@ -74,8 +81,10 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 - **[OPEN] OQ-14 — HEIC in the eval rig.** Prior art produces HEIC only for BM transmission.
   For evaluation we default to JPEG (raw evidence) and treat HEIC as optional via
   `pillow_heif`. Confirm whether HEIC output is needed for any down-select metric.
-- **[NEEDS-HARDWARE] OQ-15 — Target Pi model / OS version.** Affects camera-stack commands,
-  available memory (the prior art is tuned for Pi Zero 2W memory pressure), and USB behavior.
+- **[RESOLVED] OQ-15 — Target Pi model / OS version.** `nereus000` = Raspberry Pi 5
+  (BCM2712), Debian 13 "trixie", aarch64, Python 3.13, kernel 6.18. More memory/CPU than the
+  Pi Zero 2W the prior art was tuned for, so the isolated-subprocess memory workarounds are
+  less critical here (keep them anyway — cheap insurance).
 - **[OPEN] OQ-16 — `opencv-contrib-python` on the Pi.** ArUco requires the contrib build;
   confirm it installs cleanly on the target Pi OS/arch (wheels availability).
 
