@@ -65,8 +65,9 @@ def _cmd_capture(args: argparse.Namespace) -> int:
 
     r = outcome.result
     if r.ok:
+        dims = f"{r.width}x{r.height} " if r.width and r.height else ""
         print(f"[nereus-rig] captured {outcome.output_path}")
-        print(f"             {r.width}x{r.height} {r.image_format} {r.size_bytes} bytes")
+        print(f"             {dims}{r.image_format} {r.size_bytes} bytes")
         print(f"             sha256={r.sha256}")
         print(f"             metadata={outcome.metadata_path}")
         if r.sensor_metadata:

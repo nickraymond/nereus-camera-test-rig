@@ -81,14 +81,15 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - **Exit:** Mac-side unit tests run green on an otherwise empty rig. No hardware APIs implemented yet.
 
 ### Phase 1 — IMX708 baseline
-- [ ] Pi camera discovery; detect `rpicam-still`/`rpicam-vid` (fallback `libcamera-*`), clear error if absent (§9).
-- [ ] Still + short-video capture; configurable resolution, crop, resize, JPEG quality, exposure, gain, white balance, focus, warm-up, timeout.
-- [ ] Defaults derived from tested Pi profiles (not invented); timestamped output + metadata; CLI capture command.
-- **Exit:** `./scripts/test_imx708.sh` produces a valid image + metadata; output validated (file exists, plausible size, opens, correct dimensions).
+- [x] Pi camera discovery; detect `rpicam-still`/`rpicam-vid` (fallback `libcamera-*`), clear error if absent (§9).
+- [x] Still + short-video capture; configurable resolution, JPEG quality, exposure, gain, white balance, focus, warm-up, timeout. *(Video is MJPEG @1080p on the Pi 5 — no H.264 encoder, see OQ-17. Crop/resize moved to Phase 2, where the card crop lives.)*
+- [x] Defaults derived from tested Pi profiles (full-auto exposure/WB/focus per OQ-10); timestamped output + metadata; CLI capture command.
+- **Exit:** `./scripts/test_imx708.sh` produces a valid image + metadata; output validated (file exists, plausible size, opens, correct dimensions). ✅ verified on `nereus000`.
 
 ### Phase 2 — Reference-card pipeline
 - [ ] Port AprilTag detection; report tag IDs + corners.
 - [ ] Card localization from configured tags, optional rectify, crop, annotated image, machine-readable JSON (§13).
+- [ ] Still crop/resize helper (Pillow) — moved here from Phase 1; used by the card crop and available to capture.
 - [ ] Tests against known fixture images with expected detections.
 - **Exit:** Fixture image yields correct `tags_detected`, a nonempty saved crop, and a pass/fail result matching the rule in §13.
 
