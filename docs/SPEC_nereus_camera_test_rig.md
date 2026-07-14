@@ -73,11 +73,11 @@ Inspect these before writing new code. Reuse proven capture/analysis logic; do *
 Ordered deliverables. Each phase ends with **Exit criteria** that must pass before moving on. Detailed specs are referenced per item.
 
 ### Phase 0 — Prior-art review & scaffolding
-- [ ] Inspect the three repos (§3); write `docs/prior_art_review.md` listing reusable files, hardware-specific assumptions, and code that must NOT be copied.
-- [ ] Write `docs/implementation_plan.md` naming exact modules to port / adapt / rewrite.
-- [ ] Scaffold the repo structure (§6) with placeholder interfaces and empty tests.
-- [ ] Config loader, common data models, CLI skeleton, logging, `pytest` set up (§5, §11).
-- [ ] Dev install instructions (`pyproject.toml`, `requirements-dev.txt`, `Makefile`).
+- [x] Inspect the three repos (§3); write `docs/prior_art_review.md` listing reusable files, hardware-specific assumptions, and code that must NOT be copied.
+- [x] Write `docs/implementation_plan.md` naming exact modules to port / adapt / rewrite.
+- [x] Scaffold the repo structure (§6) with placeholder interfaces and empty tests.
+- [x] Config loader, common data models, CLI skeleton, logging, `pytest` set up (§5, §11).
+- [x] Dev install instructions (`pyproject.toml`, `requirements-dev.txt`, `Makefile`).
 - **Exit:** Mac-side unit tests run green on an otherwise empty rig. No hardware APIs implemented yet.
 
 ### Phase 1 — IMX708 baseline
