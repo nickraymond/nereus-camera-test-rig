@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nereus-camera-test-rig"
+version = "0.0.0"
+description = "Evaluation rig comparing Raspberry Pi IMX708, OpenMV N6, and OpenMV AE3 cameras."
+requires-python = ">=3.10"
+readme = "README.md"
+# Core runtime deps kept minimal so the host-side unit tests install and run on a
+# Mac without heavy/native packages. Hardware- and analysis-specific dependencies
+# are optional extras, pulled in per phase (see docs/prior_art_review.md).
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Reference-card / AprilTag pipeline (Phase 2). ArUco needs the CONTRIB build.
+analysis = [
+    "opencv-contrib-python>=4.8",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "pillow-heif>=0.13",
+]
+# Pi <-> OpenMV USB transport (Phase 3+).
+serial = [
+    "pyserial>=3.5",
+]
+# Local result-review web app (Phase 6).
+web = [
+    "Flask>=3.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+nereus-rig = "nereus_camera_test_rig.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+# Hardware tests require real devices; run them explicitly, not in the default suite.
+norecursedirs = ["tests/hardware"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "host_tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

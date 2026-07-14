@@ -1,0 +1,15 @@
+# Experiment profile: object_detection — Spec §7, §13.
+# Phase 0 placeholder: defines the shape of an experiment run. The coordinator that
+# consumes this arrives in Phase 5; evaluation profiles are finalized in Phase 7.
+
+experiment:
+  type: "object_detection"
+  environment_label: "above_water"       # one major variable per experiment (CLAUDE.md §10)
+  notes: "Object-detection data collection (e.g. purple balls)."
+
+capture:
+  kind: "image"                 # image | video
+  cameras: ["imx708", "openmv_n6", "openmv_ae3"]   # subset of enabled cameras to include
+
+analysis:
+  reference_card: true          # run the AprilTag/reference-card pipeline on stills

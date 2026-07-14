@@ -1,0 +1,21 @@
+# OpenMV AE3 camera profile — Spec §8.
+#
+# PLACEHOLDER only. There is NO OpenMV prior art and every field/value here is
+# UNVERIFIED (see OQ-1..OQ-6 in docs/open_questions.md). The settings below mirror
+# the illustrative Spec §8 example and MUST be confirmed against official OpenMV
+# firmware/docs before use. Do not treat as authoritative.
+
+board: "ae3"
+device_id: null                 # assigned/discovered via USB handshake (OQ-2)
+firmware: null                  # real value once a board is in hand (OQ-5)
+
+# Illustrative capture settings from Spec §8 — verify supported values (OQ-1).
+image:
+  framesize: "native"           # UNVERIFIED
+  pixel_format: "rgb565"        # UNVERIFIED
+  jpeg_quality: 90              # UNVERIFIED
+  warmup_frames: 10             # UNVERIFIED
+
+# Video support is unknown per board (OQ-4); disabled until verified.
+video:
+  enabled: false

@@ -1,0 +1,34 @@
+# Example rig configuration — Spec §12.
+# Copy to configs/rig.yaml and edit for your rig. OpenMV devices are identified by
+# USB identity / handshake, NOT by a fixed /dev/ttyACM* path (serial_number below).
+
+rig:
+  id: "nereus-camera-rig-001"
+  results_directory: "./results"
+
+cameras:
+  imx708:
+    enabled: true
+    driver: "imx708"
+    profile: "configs/cameras/imx708.yaml"
+  openmv_n6:
+    enabled: true
+    driver: "openmv_usb"
+    board: "n6"
+    serial_number: null      # set to the board's USB serial once known (OQ-2)
+    profile: "configs/cameras/openmv_n6.yaml"
+  openmv_ae3:
+    enabled: true
+    driver: "openmv_usb"
+    board: "ae3"
+    serial_number: null      # set to the board's USB serial once known (OQ-2)
+    profile: "configs/cameras/openmv_ae3.yaml"
+
+analysis:
+  apriltag:
+    enabled: true
+    expected_tag_ids: [0, 1, 2, 3]   # confirm against the real card (OQ-11)
+
+web:
+  host: "0.0.0.0"
+  port: 8080

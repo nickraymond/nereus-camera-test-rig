@@ -1,0 +1,36 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- OS ---
+.DS_Store
+
+# --- Rig outputs: never commit generated evidence (Spec §6) ---
+# Keep the directories (via .gitkeep) but ignore their contents.
+/results/*
+!/results/.gitkeep
+/experiments/*
+!/experiments/.gitkeep
+
+# --- Generated media / diagnostics ---
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.heif
+*.mp4
+*.mov
+*.h264
+diagnostics_*.tar.gz
+
+# Test fixtures are curated evidence and ARE committed — re-include them.
+!tests/fixtures/**
