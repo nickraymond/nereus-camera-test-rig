@@ -113,6 +113,24 @@ def test_capture_image_empty_output_is_failure(tmp_path):
     assert res.error["code"] in {"empty_output", "corrupt_output"}
 
 
+def test_capture_video_success_defaults_to_mjpeg(tmp_path):
+    runner = FakeRunner()
+    cam = Imx708Camera(video_command="rpicam-vid", runner=runner)
+    dest = tmp_path / "clip.mjpeg"
+    res = cam.capture_video(str(dest), CaptureRequest(kind="video"))
+    assert res.ok and res.size_bytes > 0 and res.sha256
+    cmd = runner.calls[-1]
+    # Pi 5 has no H.264 encoder -> default codec is mjpeg at 1080p (OQ-17).
+    assert cmd[cmd.index("--codec") + 1] == "mjpeg"
+    assert "1920" in cmd and "1080" in cmd
+
+
+def test_capture_video_nonzero_returns_failed(tmp_path):
+    cam = Imx708Camera(video_command="rpicam-vid", runner=FakeRunner(returncode=1))
+    res = cam.capture_video(str(tmp_path / "clip.mjpeg"), CaptureRequest(kind="video"))
+    assert not res.ok and res.error["code"] == "capture_failed"
+
+
 def test_health_check(monkeypatch):
     runner = FakeRunner()
     cam = Imx708Camera(still_command="rpicam-still", runner=runner)

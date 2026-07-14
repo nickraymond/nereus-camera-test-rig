@@ -65,7 +65,8 @@ def capture_once(
     device = registry.create(driver, settings=profile)
 
     out_dir = Path(out_dir)
-    ext = "jpg" if kind == "image" else "mp4"
+    # Video default is MJPEG on the Pi 5 (no H.264 encoder; see OQ-17).
+    ext = "jpg" if kind == "image" else "mjpeg"
     filename = naming.capture_filename(camera_name, kind, ext)
     dest = out_dir / filename
 

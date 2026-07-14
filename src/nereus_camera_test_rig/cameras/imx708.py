@@ -31,6 +31,11 @@ DEFAULT_JPEG_QUALITY = 95
 DEFAULT_WARMUP_MS = 2000
 DEFAULT_TIMEOUT_SECONDS = 30.0
 DEFAULT_VIDEO_SECONDS = 5.0
+# Pi 5 has no hardware H.264 encoder and this rpicam build lacks libav, so the
+# dependency-free video default is MJPEG at 1080p (see OQ-17).
+DEFAULT_VIDEO_WIDTH = 1920
+DEFAULT_VIDEO_HEIGHT = 1080
+DEFAULT_VIDEO_CODEC = "mjpeg"
 
 # Sensor metadata fields worth recording from libcamera --metadata (Spec §5).
 _METADATA_FIELDS = (
@@ -184,10 +189,14 @@ class Imx708Camera(CameraDevice):
         try:
             path, _backend = select_command("video", self._video_command)
             settings = {**self._settings, **(request.settings or {})}
-            source = settings.get("source") or {}
-            width = int(_setting(source, settings, "width", DEFAULT_WIDTH))
-            height = int(_setting(source, settings, "height", DEFAULT_HEIGHT))
-            seconds = float(settings.get("duration_seconds", DEFAULT_VIDEO_SECONDS))
+            # Video has its own defaults: the Pi 5 has no H.264 encoder and this
+            # rpicam build lacks libav, so mjpeg at 1080p is the dependency-free
+            # default (OQ-17). Override via a "video" settings block.
+            video = settings.get("video") or {}
+            width = int(video.get("width", DEFAULT_VIDEO_WIDTH))
+            height = int(video.get("height", DEFAULT_VIDEO_HEIGHT))
+            seconds = float(video.get("duration_seconds", DEFAULT_VIDEO_SECONDS))
+            codec = str(video.get("codec", DEFAULT_VIDEO_CODEC))
             duration_ms = int(seconds * 1000)
             timeout = float(request.timeout_seconds or seconds + DEFAULT_TIMEOUT_SECONDS)
             cmd = [
@@ -195,6 +204,7 @@ class Imx708Camera(CameraDevice):
                 "-t", str(duration_ms),
                 "--width", str(width),
                 "--height", str(height),
+                "--codec", codec,
                 "-o", str(dest),
             ]
             self._run(cmd, timeout)

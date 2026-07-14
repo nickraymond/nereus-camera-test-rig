@@ -62,6 +62,17 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   (AF converged), Lux≈1410. Later phases can pin these as explicit controls if a fixed
   profile is wanted; for bring-up, auto is the tested default.
 
+## Video (Pi)
+
+- **[RESOLVED-CONSTRAINT] OQ-17 — Video codec on the Pi 5.** The Pi 5 has **no
+  hardware H.264 encoder**, and `nereus000`'s `rpicam-vid` was built **without libav**
+  (`--codec libav` → "Unrecognised codec"; `--codec h264` → "Unable to find an
+  appropriate H.264 codec"). Working dependency-free codecs are `mjpeg` and `yuv420`.
+  Decision (2026-07-14): Phase 1 video defaults to **MJPEG at 1080p** (verified: a 2 s
+  clip produced a valid 1920×1080 motion-JPEG). To get real H.264/MP4, install libav
+  encoder support for rpicam (needs sudo) — deferred follow-up; not an MVP blocker
+  (Spec §2: "video where practical"). Full-sensor 4608×2592 also exceeds H.264 limits.
+
 ## Reference-card pipeline
 
 - **[NEEDS-HARDWARE] OQ-11 — Nereus reference-card geometry.** The reusable code hardcodes
