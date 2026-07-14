@@ -1,0 +1,34 @@
+# IMX708 (Raspberry Pi CSI) camera profile — Spec §9.
+#
+# PLACEHOLDER structure only. The values below are NOT tested defaults — Spec §9
+# requires IMX708 defaults to come from a real, tested run, not invented numbers
+# (see OQ-10 in docs/open_questions.md). Populate camera_controls from a known-good
+# rpicam capture during Phase 1 before treating any of this as authoritative.
+#
+# Backend selection follows Spec §9: prefer rpicam-still, fall back to libcamera-still.
+
+capture_backend: "auto"        # auto | rpicam | libcamera
+
+source:
+  width: 4608                  # IMX708 native (Camera Module 3); confirm on target Pi
+  height: 2592
+  jpeg_quality: 95             # intermediate/native JPEG quality
+
+# Post-capture crop in native-JPEG coordinates (the prior art does NOT use sensor
+# --roi; see OQ-9). Null = no crop.
+crop: null
+
+# Optional downscale of the delivered image (Pillow LANCZOS). Null = keep source.
+resize: null
+
+warmup_ms: 2000                # capture warm-up/settle; confirm default (OQ-8)
+timeout_seconds: 30            # per-capture watchdog
+
+# libcamera control surface (Spec §9). All UNVERIFIED placeholders — leave disabled
+# until measured. Structure mirrors the adaptable bm_cam_legacy camera_controls block.
+camera_controls:
+  enabled: false
+  focus: { enabled: false, mode: "auto", lens_position: null, range: "normal", speed: "normal" }
+  white_balance: { enabled: false, mode: "auto", red_gain: null, blue_gain: null }
+  exposure: { enabled: false, shutter_us: null, analogue_gain: null }
+  image_processing: { enabled: false }
