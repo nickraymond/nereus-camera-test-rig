@@ -1,5 +1,5 @@
 # CLAUDE.md
-# Nereus Camera Evaluation Development Guide
+# Nereus Camera Test Rig — Development Guide
 
 ## Purpose
 
@@ -24,6 +24,8 @@ The evaluation includes:
 - above-water and underwater testing;
 - future inference experiments;
 - image-quality and hardware suitability comparisons.
+
+**The full specification is the source of truth. Read it first:** @docs/SPEC_nereus_camera_test_rig.md
 
 ---
 
@@ -581,13 +583,22 @@ If implementation reality differs:
 
 Do not silently expand scope.
 
-Start by referencing "docs/SPEC_nereus_camera_evaluation_full.md"
+Start by referencing @docs/SPEC_nereus_camera_test_rig.md
 
 ---
 
-## 28. Make Small Commits
+## 28. Use a Branch-and-PR Workflow with Small Commits
 
-Each commit should represent one clear change.
+Never commit directly to `main`.
+
+For each change:
+
+1. create a branch (e.g. `feat/imx708-adapter`, `fix/openmv-handshake`);
+2. make small, focused commits — each commit is one clear change;
+3. open a pull request describing what changed and how it was tested;
+4. leave merging to `main` to the human reviewer.
+
+Do not merge your own PRs unless explicitly told to.
 
 Good examples:
 
