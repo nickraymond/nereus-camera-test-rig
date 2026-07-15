@@ -43,14 +43,13 @@ for cap in ej["captures"]:
         print("  %-8s SKIP (not connected: %s)" % (cam, (cap.get("error") or {}).get("code")))
         continue
     ok_any = True
-    out = cap["output"]
-    img = Path(out["path"])
+    img = Path(cap["output_path"])
     assert img.is_file() and img.stat().st_size > 0, "missing/empty image for %s" % cam
     digest = hashlib.sha256(img.read_bytes()).hexdigest()
-    assert digest == out["sha256"], "checksum mismatch for %s" % cam
-    assert out["width"] and out["height"], "no dimensions for %s" % cam
+    assert digest == cap["sha256"], "checksum mismatch for %s" % cam
+    assert cap["width"] and cap["height"], "no dimensions for %s" % cam
     print("  %-8s OK  %sx%s  %s bytes  sha256 verified  fw=%s"
-          % (cam, out["width"], out["height"], out["size_bytes"], cap["camera"].get("firmware")))
+          % (cam, cap["width"], cap["height"], cap["size_bytes"], cap["camera"].get("firmware")))
 
 assert ok_any, "no camera produced a still — is the rig connected?"
 print("  experiment.json: %d captures, %d analyses, %d errors"
@@ -79,7 +78,7 @@ assert any("openmv_ae3" in e for e in ej["errors"]), "failure not recorded in ex
 # Survivors keep their images.
 for cap in ej["captures"]:
     if cap["status"] == "completed":
-        assert Path(cap["output"]["path"]).is_file(), "survivor image was lost"
+        assert Path(cap["output_path"]).is_file(), "survivor image was lost"
 print("  statuses: %s" % statuses)
 print("PASS: disconnected camera -> partial success, survivors + folder retained.")
 PY
