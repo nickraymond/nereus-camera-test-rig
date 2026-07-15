@@ -26,10 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_info = sub.add_parser("info", help="show rig version and loaded config summary")
     p_info.set_defaults(func=_cmd_info)
 
-    p_capture = sub.add_parser("capture", help="capture from one or all cameras (Phase 1+)")
-    p_capture.add_argument("--camera", help="camera name from config (default: all enabled)")
+    p_capture = sub.add_parser("capture", help="capture a still/video from a camera")
+    p_capture.add_argument("--camera", default="imx708", help="camera name from config")
     p_capture.add_argument("--kind", choices=("image", "video"), default="image")
-    p_capture.set_defaults(func=_cmd_not_implemented, _feature="capture (Phase 1)")
+    p_capture.add_argument("--out", default="results/adhoc", help="output directory")
+    p_capture.set_defaults(func=_cmd_capture)
 
     p_experiment = sub.add_parser("experiment", help="run an experiment profile (Phase 5+)")
     p_experiment.add_argument("--profile", required=True, help="path to an experiment profile YAML")
@@ -44,6 +45,37 @@ def _cmd_info(args: argparse.Namespace) -> int:
     print(f"nereus-camera-test-rig {__version__}")
     print(f"config: {args.config}")
     return 0
+
+
+def _cmd_capture(args: argparse.Namespace) -> int:
+    from . import config as config_mod
+    from .controller import capture_once
+
+    try:
+        cfg = config_mod.load_rig_config(args.config)
+    except config_mod.ConfigError as exc:
+        print(f"[nereus-rig] config error: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        outcome = capture_once(cfg, args.camera, args.kind, args.out)
+    except KeyError as exc:
+        print(f"[nereus-rig] {exc}", file=sys.stderr)
+        return 2
+
+    r = outcome.result
+    if r.ok:
+        dims = f"{r.width}x{r.height} " if r.width and r.height else ""
+        print(f"[nereus-rig] captured {outcome.output_path}")
+        print(f"             {dims}{r.image_format} {r.size_bytes} bytes")
+        print(f"             sha256={r.sha256}")
+        print(f"             metadata={outcome.metadata_path}")
+        if r.sensor_metadata:
+            print(f"             sensor={r.sensor_metadata}")
+        return 0
+    err = r.error or {}
+    print(f"[nereus-rig] capture FAILED: {err.get('code')}: {err.get('message')}", file=sys.stderr)
+    return 1
 
 
 def _cmd_not_implemented(args: argparse.Namespace) -> int:
