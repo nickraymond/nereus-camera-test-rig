@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .. import config as config_mod
-from ..analysis.result_writer import AnalysisConfig, analyze_reference_card
 from ..capture import naming
 from ..controller import build_camera, load_camera_profile
 from ..logging_config import setup_logging
@@ -45,6 +44,20 @@ from ..storage.metadata import write_capture_metadata
 CAPTURE_ORDER = ("imx708", "openmv_n6", "openmv_ae3")
 
 logger = logging.getLogger("nereus.coordinator")
+
+
+def _load_analyzer(analysis_config: Optional[dict[str, Any]]):
+    """Return ``(AnalysisConfig, analyze_fn)`` or ``None`` if the extra is absent.
+
+    The reference-card pipeline needs the optional ``analysis`` extra (OpenCV). We
+    import it lazily so a capture-only rig (no OpenCV) still runs — captures are the
+    raw evidence and must never be gated on the analysis dependency (CLAUDE.md §11).
+    """
+    try:
+        from ..analysis.result_writer import AnalysisConfig, analyze_reference_card
+    except ImportError:
+        return None
+    return AnalysisConfig.from_dict(analysis_config), analyze_reference_card
 
 
 @dataclass
@@ -124,9 +137,8 @@ def _capture_one_camera(
     name: str,
     camera_cfg: dict[str, Any],
     paths: ExperimentPaths,
-    analysis_cfg: AnalysisConfig,
+    analyzer,
     when: datetime,
-    run_analysis: bool,
 ) -> CameraOutcome:
     """Capture + (best-effort) analyze one camera. Never raises (Spec §11)."""
     cap_dir = paths.capture_dir(name)
@@ -172,9 +184,10 @@ def _capture_one_camera(
         name, result.width, result.height, result.size_bytes, result.sha256,
     )
 
-    if run_analysis and result.output_path:
+    if analyzer is not None and result.output_path:
+        analysis_cfg, analyze_fn = analyzer
         adir = paths.analysis_dir(name)
-        det = analyze_reference_card(result.output_path, adir, analysis_cfg)
+        det = analyze_fn(result.output_path, adir, analysis_cfg)
         outcome.analysis = det
         outcome.analysis_dir = str(adir)
         logger.info(
@@ -223,16 +236,23 @@ def run_experiment(
 
     cameras_cfg = config_mod.enabled_cameras(config)
     ordered = _ordered_camera_names(cameras_cfg, camera_names)
-    analysis_cfg = AnalysisConfig.from_dict(config.get("analysis"))
+
+    analyzer = None
+    if analysis:
+        analyzer = _load_analyzer(config.get("analysis"))
+        if analyzer is None:
+            msg = "analysis unavailable (install the 'analysis' extra); captures only"
+            logger.warning(msg)
+            record.warnings.append(msg)
 
     logger.info(
         "experiment %s: env=%r cameras=%s analysis=%s",
-        paths.experiment_id, environment_label, ordered, analysis,
+        paths.experiment_id, environment_label, ordered, analyzer is not None,
     )
 
     outcomes: list[CameraOutcome] = []
     for name in ordered:
-        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analysis_cfg, when, analysis)
+        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when)
         outcomes.append(outcome)
         record.cameras.append(outcome.result.camera)
         record.captures.append(outcome.result)
