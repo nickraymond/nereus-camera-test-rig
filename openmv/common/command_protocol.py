@@ -55,10 +55,15 @@ ERR_IO_ERROR = "io_error"
 
 
 class ProtocolError(Exception):
-    """A malformed or disallowed message. Carries a stable ``code`` for responses."""
+    """A malformed or disallowed message. Carries a stable ``code`` for responses.
+
+    Uses ``super().__init__`` (not ``Exception.__init__(self, ...)``) — MicroPython's
+    builtin types do not expose ``__init__``, so the explicit form raises AttributeError
+    on the board (found by the N6 hardware smoke test).
+    """
 
     def __init__(self, code, message):
-        Exception.__init__(self, message)
+        super().__init__(message)
         self.code = code
         self.message = message
 

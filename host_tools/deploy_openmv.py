@@ -22,6 +22,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -53,8 +54,20 @@ class DeployError(RuntimeError):
     pass
 
 
-def _run_mpremote(mpremote: str, port: str, *args: str) -> None:
-    cmd = [mpremote, "connect", port, *args]
+def _mpremote_base(mpremote):
+    """Resolve the mpremote invocation to a command list.
+
+    Default is ``<this python> -m mpremote`` so it works whether or not an ``mpremote``
+    console script is on PATH (it usually is not when the venv isn't activated). A
+    caller-supplied string is split with shell rules for override flexibility.
+    """
+    if mpremote is None:
+        return [sys.executable, "-m", "mpremote"]
+    return shlex.split(mpremote)
+
+
+def _run_mpremote(base, port: str, *args: str) -> None:
+    cmd = [*base, "connect", port, *args]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         tail = (result.stderr or result.stdout or "").strip().splitlines()[-3:]
@@ -63,7 +76,7 @@ def _run_mpremote(mpremote: str, port: str, *args: str) -> None:
         )
 
 
-def deploy(board: str, serial_number=None, port=None, mpremote="mpremote", reset=True):
+def deploy(board: str, serial_number=None, port=None, mpremote=None, reset=True):
     """Copy the board's file manifest and (optionally) reset it. Returns the port used."""
     manifest = BOARD_MANIFESTS.get(board)
     if manifest is None:
@@ -75,16 +88,17 @@ def deploy(board: str, serial_number=None, port=None, mpremote="mpremote", reset
             "no OpenMV board found (serial_number=%r); is it connected?" % serial_number
         )
 
+    base = _mpremote_base(mpremote)
     for rel_path, dest_name in manifest:
         src = _REPO_ROOT / rel_path
         if not src.is_file():
             raise DeployError("missing board file: %s" % src)
         print("deploy %s -> :%s" % (rel_path, dest_name))
-        _run_mpremote(mpremote, resolved, "fs", "cp", str(src), ":" + dest_name)
+        _run_mpremote(base, resolved, "fs", "cp", str(src), ":" + dest_name)
 
     if reset:
         print("reset board")
-        _run_mpremote(mpremote, resolved, "reset")
+        _run_mpremote(base, resolved, "reset")
     return resolved
 
 
@@ -95,7 +109,8 @@ def main(argv=None):
     parser.add_argument("--serial", dest="serial_number", default=None,
                         help="USB serial number of the target board (from discover_openmv)")
     parser.add_argument("--port", default=None, help="explicit device path (overrides --serial)")
-    parser.add_argument("--mpremote", default="mpremote", help="mpremote executable")
+    parser.add_argument("--mpremote", default=None,
+                        help="mpremote command (default: '<python> -m mpremote')")
     parser.add_argument("--no-reset", dest="reset", action="store_false",
                         help="do not reset the board after copying")
     args = parser.parse_args(argv)
