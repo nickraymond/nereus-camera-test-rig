@@ -47,6 +47,17 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   This is metadata only — raw frames are stored un-rotated and it does not affect capture,
   checksums, or the Phase 4 exit criteria — but the down-select side-by-side wants it right.
   Resolve with a known-orientation reference capture; do **not** assume it matches the N6.
+- **[DEFERRED] OQ-19 — Firmware update to v5.0.0 + `sensor`→`csi` migration.** Both boards run
+  pre-v5.0.0 firmware (N6 MicroPython `1.26.0`; AE3 `1.25.0-preview`). OpenMV **v5.0.0** (2026-07-02)
+  takes the N6/AE3 out of beta and lists "Fix Apriltags on the AE3", but bundles MicroPython 1.28
+  with API changes: the legacy `sensor` module (used by `openmv/common/capture_service.py`) is
+  **deprecated** in favor of a new class-based `csi` module. Decision (owner: Nick, 2026-07-15):
+  **defer** — bring-up works today on the current firmware via the legacy `sensor` path, and the
+  AE3 flash needs OpenMV IDE + physical access (done on a Windows PC later). When scheduled: flash
+  **both** boards to v5.0.0 together, then migrate the shared capture path to `csi` in one
+  coordinated PR (re-verify both boards' framesizes/pixformats on the new API — do not assume the
+  legacy allowlist carries over). Note the Alif AE3 has **no `pyb`** on any firmware, so the
+  `sys.stdin/stdout` USB shim in `openmv/ae3/main.py` stays regardless of firmware.
 
 ## IMX708 / Pi capture
 

@@ -102,8 +102,8 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - *Bonus (§2 "video where practical"):* live browser focus stream (`host_tools/focus_stream.py`) for manual M12 lens adjustment — HD MJPEG + a sharpness readout, validated in use. `capture_video`-to-file (OQ-4) remains deferred.
 
 ### Phase 4 — OpenMV AE3
-- [ ] Equivalent AE3 behavior, board-specific code isolated (no shared `if board == ...` branching).
-- **Exit:** Same as Phase 3, for the AE3.
+- [x] Equivalent AE3 behavior, board-specific code isolated (no shared `if board == ...` branching). *(Reuses the Phase 3 shared protocol, `capture_service`, `device_info`, and host adapter unchanged; AE3-specifics live only in `openmv/ae3/`. The AE3 carries the same PAG7936 sensor as the N6 but on an **Alif** SoC with **no `pyb` module** — so `pyb.USB_VCP()` is replaced by a `sys.stdin/stdout` + `select.poll` USB shim in `openmv/ae3/main.py`, the one board-specific difference. `deploy_openmv` now chains file copies into one `mpremote` connection to dodge the Alif firmware's flaky raw-paste re-entry.)*
+- **Exit:** Same as Phase 3, for the AE3. ✅ verified on hardware (AE3 serial `0829c14000000000`, firmware `1.25.0-preview`): discovery by USB identity, 3 back-to-back captures each retrieved with a matching SHA-256, and clean rejection of a bad command (`./scripts/test_openmv_ae3.sh`). *Firmware note: OpenMV v5.0.0 (out-of-beta, "Fix Apriltags on the AE3") is available; updating both boards to it — plus migrating the shared capture path from the deprecated `sensor` module to the new `csi` module — is deferred as a follow-up (OQ-19). The Alif has no `pyb` on any firmware, so the USB shim stays regardless.*
 
 ### Phase 5 — Three-camera coordination
 - [ ] Sequential capture across all connected cameras into one experiment folder (§12).
