@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from . import config as config_mod
 from .cameras import registry
+from .cameras.base import CameraDevice
 from .cameras.builtin import register_builtin
 from .capture import naming
 from .models import CaptureRequest, CaptureResult
@@ -34,12 +35,34 @@ class CaptureOutcome:
         return self.result.ok
 
 
-def _load_camera_profile(camera_cfg: dict[str, Any]) -> dict[str, Any]:
+def load_camera_profile(camera_cfg: dict[str, Any]) -> dict[str, Any]:
     """Load a camera's profile YAML if the entry points at one; else {}."""
     profile_path = camera_cfg.get("profile")
     if not profile_path or not Path(profile_path).is_file():
         return {}
     return config_mod.load_yaml(profile_path)
+
+
+def build_camera(
+    camera_cfg: dict[str, Any], profile: Optional[dict[str, Any]] = None
+) -> CameraDevice:
+    """Build the ``CameraDevice`` for a rig config entry.
+
+    Single place that maps a config entry to adapter kwargs (CLAUDE.md §6 — the
+    driver switch lives here, not scattered). Crucially, an ``openmv_usb`` entry is
+    addressed by its **USB serial number** (§12): with both the N6 and AE3 enumerated
+    a null serial is ambiguous, so we always forward ``serial_number``/``board`` from
+    config rather than letting the adapter guess a ``/dev/ttyACM*``.
+    """
+    register_builtin()
+    if profile is None:
+        profile = load_camera_profile(camera_cfg)
+    driver = camera_cfg["driver"]
+    kwargs: dict[str, Any] = {"settings": profile}
+    if driver == "openmv_usb":
+        kwargs["serial_number"] = camera_cfg.get("serial_number")
+        kwargs["board"] = camera_cfg.get("board")
+    return registry.create(driver, **kwargs)
 
 
 def capture_once(
@@ -54,15 +77,13 @@ def capture_once(
     capture failure — returns a ``CaptureOutcome`` whose ``result.status`` is
     "failed" so callers can report partial success (Spec §11, CLAUDE.md §17).
     """
-    register_builtin()
     cameras = config.get("cameras", {})
     if camera_name not in cameras:
         raise KeyError(f"camera {camera_name!r} not in config; known: {sorted(cameras)}")
     camera_cfg = cameras[camera_name]
-    driver = camera_cfg["driver"]
-    profile = _load_camera_profile(camera_cfg)
+    profile = load_camera_profile(camera_cfg)
 
-    device = registry.create(driver, settings=profile)
+    device = build_camera(camera_cfg, profile=profile)
 
     out_dir = Path(out_dir)
     # Video default is MJPEG on the Pi 5 (no H.264 encoder; see OQ-17).

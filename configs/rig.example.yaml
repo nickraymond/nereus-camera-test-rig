@@ -15,13 +15,13 @@ cameras:
     enabled: true
     driver: "openmv_usb"
     board: "n6"
-    serial_number: null      # set to the board's USB serial once known (OQ-2)
+    serial_number: "005537493543"   # USB serial (verified on nereus000); NOT /dev/ttyACM* (§12)
     profile: "configs/cameras/openmv_n6.yaml"
   openmv_ae3:
     enabled: true
     driver: "openmv_usb"
     board: "ae3"
-    serial_number: null      # set to the board's USB serial once known (OQ-2)
+    serial_number: "0829c14000000000"   # USB serial (verified on nereus000); NOT /dev/ttyACM* (§12)
     profile: "configs/cameras/openmv_ae3.yaml"
 
 analysis:
