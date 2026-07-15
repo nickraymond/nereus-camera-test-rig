@@ -40,7 +40,9 @@ import json
 PROTOCOL_VERSION = 1
 
 #: The complete command allowlist (§8). Anything else is rejected.
-ALLOWED_ACTIONS = ("get_device_info", "capture_image", "get_file")
+#: ``start_stream`` puts the board into a continuous framed-JPEG focus stream (for
+#: manual M12 lens adjustment) until any byte arrives from the host or a safety timeout.
+ALLOWED_ACTIONS = ("get_device_info", "capture_image", "get_file", "start_stream")
 
 LINE_TERMINATOR = b"\n"
 
@@ -123,6 +125,26 @@ def sending_response(command_id, filename, size_bytes, sha256, version=PROTOCOL_
         "command_id": command_id,
         "status": "sending",
         "transfer": {"filename": filename, "size_bytes": size_bytes, "sha256": sha256},
+    }
+
+
+def frame_response(command_id, seq, size_bytes, sharpness, width, height,
+                   version=PROTOCOL_VERSION):
+    """Header line that precedes one JPEG frame in a focus stream.
+
+    ``sharpness`` is a relative focus proxy (JPEG byte count at fixed quality): it rises
+    as the lens comes into focus on a fixed scene. No per-frame checksum — a dropped or
+    corrupt focus frame is cosmetic, and framing (exact ``size_bytes``) keeps the stream
+    in sync.
+    """
+    return {
+        "version": version,
+        "command_id": command_id,
+        "status": "frame",
+        "frame": {
+            "seq": seq, "size_bytes": size_bytes, "sharpness": sharpness,
+            "width": width, "height": height,
+        },
     }
 
 

@@ -17,6 +17,7 @@ and sufficient on OPENMV_N6 firmware 1.26.0).
 import binascii
 import hashlib
 import os
+import time
 
 import command_protocol as cp
 import sensor
@@ -41,8 +42,8 @@ def _safe_basename(name):
     return name
 
 
-def _resolve_framesize(board_config, settings):
-    fs = settings.get("framesize", board_config.DEFAULT_FRAMESIZE)
+def _resolve_framesize(board_config, settings, default=None):
+    fs = settings.get("framesize", default or board_config.DEFAULT_FRAMESIZE)
     attr = board_config.FRAMESIZES.get(fs)
     if attr is None:
         raise cp.ProtocolError(
@@ -135,3 +136,50 @@ def send_file(usb, command_id, filename):
     usb.write(cp.encode_message(
         cp.completed_response(command_id, {"filename": name, "size_bytes": size, "sha256": sha})
     ))
+
+
+def stream_frames(usb, command_id, board_config, settings):
+    """Continuously stream framed JPEG frames for manual lens focusing (§2 "where practical").
+
+    Each frame: a ``frame`` header line (seq, size, sharpness proxy, dims) then exactly
+    ``size_bytes`` of JPEG. Sharpness is the JPEG byte count at fixed quality — it rises
+    as the lens comes into focus on a fixed scene. Ends on any inbound byte from the host
+    (the stop signal) or a safety timeout, then sends a single ``completed`` line.
+
+    Not request/response: the board stays in this loop, so no other command is served
+    until the stream stops. The host owns the port exclusively while streaming.
+    """
+    fs_const, _fs_name = _resolve_framesize(
+        board_config, settings, default=board_config.STREAM_DEFAULT_FRAMESIZE
+    )
+    quality = int(settings.get("jpeg_quality", board_config.STREAM_DEFAULT_QUALITY))
+    max_seconds = int(settings.get("max_seconds", board_config.STREAM_MAX_SECONDS))
+
+    sensor.reset()
+    sensor.set_pixformat(sensor.RGB565)
+    sensor.set_framesize(fs_const)
+    sensor.skip_frames(time=300)
+
+    seq = 0
+    deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
+    while True:
+        # Any inbound byte is the host's stop signal; drain it and exit.
+        if usb.any():
+            try:
+                usb.read(usb.any())
+            except Exception:
+                pass
+            break
+        if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
+            break
+        img = sensor.snapshot()
+        img.compress(quality=quality)
+        data = img.bytearray()
+        n = len(data)
+        usb.write(cp.encode_message(
+            cp.frame_response(command_id, seq, n, n, img.width(), img.height())
+        ))
+        usb.write(data)
+        seq += 1
+
+    usb.write(cp.encode_message(cp.completed_response(command_id, {"frames": seq})))

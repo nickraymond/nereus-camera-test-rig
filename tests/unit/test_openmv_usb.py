@@ -173,3 +173,37 @@ def test_only_allowlisted_actions_are_sent(tmp_path):
     cam.capture_image(str(tmp_path / "i.jpg"), CaptureRequest(kind="image"))
     assert set(board.seen_actions) <= set(cp.ALLOWED_ACTIONS)
     assert board.seen_actions == ["capture_image", "get_file"]
+
+
+class _Canned:
+    """Read-only transport preloaded with a byte stream (for frame-parse tests)."""
+
+    def __init__(self, data):
+        self._buf = bytearray(data)
+
+    def read(self, n):
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
+
+    def write(self, data):
+        pass
+
+
+def test_serial_io_parses_framed_focus_stream():
+    # The focus stream relies on _SerialIO alternating read_line (JSON) / read_exact
+    # (binary) without losing bytes at the boundary — pin that here.
+    from nereus_camera_test_rig.cameras.openmv_usb import _SerialIO
+
+    payload = b"\xff\xd8jpeg-frame-bytes\xff\xd9"
+    stream = (
+        cp.encode_message(cp.frame_response("s", 0, len(payload), len(payload), 640, 400))
+        + payload
+        + cp.encode_message(cp.completed_response("s", {"frames": 1}))
+    )
+    io = _SerialIO(_Canned(stream))
+    header = cp.decode_message(io.read_line())
+    assert header["status"] == "frame"
+    assert header["frame"]["size_bytes"] == len(payload)
+    assert io.read_exact(len(payload)) == payload
+    assert cp.decode_message(io.read_line())["status"] == "completed"

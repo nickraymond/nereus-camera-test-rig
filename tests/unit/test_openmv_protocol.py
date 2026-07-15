@@ -102,3 +102,19 @@ def test_response_builders_shape():
     sending = cp.sending_response("cid", "a.jpg", 10, "deadbeef")
     assert sending["status"] == "sending"
     assert sending["transfer"] == {"filename": "a.jpg", "size_bytes": 10, "sha256": "deadbeef"}
+
+
+def test_start_stream_is_allowlisted():
+    assert cp.is_allowed("start_stream")
+    action, cid, settings = cp.validate_request(
+        cp.make_request("start_stream", "cid", {"framesize": "VGA", "jpeg_quality": 70})
+    )
+    assert action == "start_stream"
+
+
+def test_frame_response_shape():
+    fr = cp.frame_response("cid", seq=3, size_bytes=2048, sharpness=2048, width=640, height=400)
+    assert fr["status"] == "frame"
+    assert fr["frame"] == {
+        "seq": 3, "size_bytes": 2048, "sharpness": 2048, "width": 640, "height": 400,
+    }

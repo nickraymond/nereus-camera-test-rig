@@ -44,6 +44,9 @@ def _handle_line(usb, line):
         elif action == "get_file":
             # send_file emits its own framed response(s).
             capture_service.send_file(usb, command_id, settings.get("filename"))
+        elif action == "start_stream":
+            # Blocks in a focus-stream loop until the host sends any byte (§ focus stream).
+            capture_service.stream_frames(usb, command_id, board_config, settings)
         else:  # pragma: no cover - validate_request already gates the allowlist
             _send(usb, cp.failed_response(command_id, cp.ERR_UNKNOWN_ACTION, action))
     except cp.ProtocolError as exc:

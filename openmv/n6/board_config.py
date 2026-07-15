@@ -37,6 +37,12 @@ DEFAULT_PIXEL_FORMAT = "RGB565"
 DEFAULT_JPEG_QUALITY = 90
 DEFAULT_WARMUP_MS = 2000          # let auto-exposure settle before the snapshot
 
+# Live focus stream (manual M12 lens adjustment). VGA is a good balance of detail vs.
+# framerate over USB; lower quality keeps frames small so the stream stays responsive.
+STREAM_DEFAULT_FRAMESIZE = "VGA"
+STREAM_DEFAULT_QUALITY = 70
+STREAM_MAX_SECONDS = 300          # safety cap so a dead host can't stream forever
+
 # The sensor is physically mounted rotated relative to "upright". Recorded as metadata
 # so raw frames stay un-rotated (raw evidence, §11) and the host/analysis layer applies
 # the correction. Convention: degrees to rotate the raw frame COUNTER-CLOCKWISE for
