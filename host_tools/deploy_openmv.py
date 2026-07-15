@@ -93,17 +93,26 @@ def deploy(board: str, serial_number=None, port=None, mpremote=None, reset=True)
             "no OpenMV board found (serial_number=%r); is it connected?" % serial_number
         )
 
+    # Copy every file (and the optional reset) in ONE mpremote connection, chaining
+    # commands with mpremote's ``+`` separator. Each separate ``mpremote connect`` re-enters
+    # the raw REPL, and on the AE3's Alif firmware that re-entry intermittently fails
+    # ("could not complete raw paste"); a single connection sidesteps it. The N6 is
+    # unaffected (one connection does the same six copies). main.py is still copied LAST so a
+    # mid-deploy interruption never launches a new main against stale modules.
     base = _mpremote_base(mpremote)
+    chain: list[str] = []
     for rel_path, dest_name in manifest:
         src = _REPO_ROOT / rel_path
         if not src.is_file():
             raise DeployError("missing board file: %s" % src)
         print("deploy %s -> :%s" % (rel_path, dest_name))
-        _run_mpremote(base, resolved, "fs", "cp", str(src), ":" + dest_name)
-
+        if chain:
+            chain.append("+")
+        chain += ["fs", "cp", str(src), ":" + dest_name]
     if reset:
         print("reset board")
-        _run_mpremote(base, resolved, "reset")
+        chain += ["+", "reset"]
+    _run_mpremote(base, resolved, *chain)
     return resolved
 
 
