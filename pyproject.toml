@@ -16,9 +16,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Reference-card / AprilTag pipeline (Phase 2). ArUco needs the CONTRIB build.
+# Reference-card / AprilTag pipeline (Phase 2). ArUco needs the CONTRIB build; the
+# HEADLESS variant drops the GUI deps (libGL/X11) so it imports on a headless Pi
+# coordinator without apt-installed system libs. The rig never opens a window.
 analysis = [
-    "opencv-contrib-python>=4.8",
+    "opencv-contrib-python-headless>=4.8",
     "numpy>=1.24",
     "Pillow>=10.0",
     "pillow-heif>=0.13",
