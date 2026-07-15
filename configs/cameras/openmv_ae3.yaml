@@ -1,21 +1,23 @@
 # OpenMV AE3 camera profile — Spec §8.
 #
-# PLACEHOLDER only. There is NO OpenMV prior art and every field/value here is
-# UNVERIFIED (see OQ-1..OQ-6 in docs/open_questions.md). The settings below mirror
-# the illustrative Spec §8 example and MUST be confirmed against official OpenMV
-# firmware/docs before use. Do not treat as authoritative.
+# Verified on real hardware on 2026-07-15 (AE3 bring-up recon, serial 0829c14000000000):
+# MicroPython 1.25.0-preview (sysname "alif"), machine "OpenMV-AE3 with AE302F80F55D5AE",
+# sensor PAG7936 (sensor.get_id() == 0x7936 — the same sensor as the N6, re-probed on the
+# AE3's firmware). The authoritative values live in openmv/ae3/board_config.py (the board
+# validates settings against that allowlist); this profile mirrors the host-facing defaults.
 
 board: "ae3"
-device_id: null                 # assigned/discovered via USB handshake (OQ-2)
-firmware: null                  # real value once a board is in hand (OQ-5)
+device_id: "openmv-ae3-001"     # stable logical label; hardware identity is the USB serial
+firmware: "1.25.0-preview"      # os.uname().release, verified 2026-07-15
 
-# Illustrative capture settings from Spec §8 — verify supported values (OQ-1).
+# Capture settings — verified supported on the AE3/PAG7936 firmware (recon 2026-07-15).
 image:
-  framesize: "native"           # UNVERIFIED
-  pixel_format: "rgb565"        # UNVERIFIED
-  jpeg_quality: 90              # UNVERIFIED
-  warmup_frames: 10             # UNVERIFIED
+  framesize: "HD"               # 1280x800 (max); also supported: VGA (640x400), QVGA (320x200)
+  pixel_format: "RGB565"        # also supported: GRAYSCALE
+  jpeg_quality: 90
+  warmup_ms: 2000               # let auto-exposure settle before the snapshot
 
-# Video support is unknown per board (OQ-4); disabled until verified.
+# Short-clip video not yet verified on the AE3 (OQ-4); disabled until confirmed. Live
+# focus streaming (start_stream) is available via the shared capture service.
 video:
   enabled: false

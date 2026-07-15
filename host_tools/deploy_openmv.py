@@ -47,6 +47,11 @@ BOARD_MANIFESTS = {
         ("openmv/n6/boot.py", "boot.py"),
         ("openmv/n6/main.py", "main.py"),
     ],
+    "ae3": _COMMON + [
+        ("openmv/ae3/board_config.py", "board_config.py"),
+        ("openmv/ae3/boot.py", "boot.py"),
+        ("openmv/ae3/main.py", "main.py"),
+    ],
 }
 
 
