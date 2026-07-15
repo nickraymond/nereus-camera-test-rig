@@ -13,25 +13,30 @@ Status: `OPEN` · `NEEDS-HARDWARE` · `NEEDS-DOCS` · `RESOLVED`
 These block Phases 3–4. **No OpenMV API below is verified.** Do not write OpenMV code until
 the relevant item is resolved against official OpenMV docs or a working board example.
 
-- **[NEEDS-DOCS] OQ-1 — MicroPython camera/snapshot API on N6 and AE3.** Exact
-  `sensor`/`csi`/`camera` module and snapshot call, supported `framesize`/`pixel_format`
-  values, and whether the two boards share one API. The spec's §8 example fields
-  (`framesize:"native"`, `pixel_format:"rgb565"`, `jpeg_quality`, `warmup_frames`) are
-  *illustrative* and must be checked against the real firmware.
-- **[NEEDS-DOCS] OQ-2 — USB serial transport.** Whether the boards expose a USB CDC serial
-  port for newline-delimited JSON, and how the host enumerates them by identity (USB
-  serial number / VID:PID) rather than `/dev/ttyACM*` (Spec §12). Handshake design depends
-  on this.
-- **[NEEDS-DOCS] OQ-3 — File transfer mechanism (Spec §10, decide in priority order).**
-  Which of (1) capture-to-storage + file access, (2) framed USB binary transfer,
-  (3) official OpenMV tooling, (4) raw serial binary is actually reliable per board. Unknown
-  until tested. Framing format (`JSON header → length → bytes → JSON completion`) only
-  applies if (2)/(4) is chosen.
-- **[NEEDS-HARDWARE] OQ-4 — Video capture support on N6 / AE3.** Whether short-clip video is
-  practical on each board, in what container/codec. Spec §2 says "video where practical" —
-  treat as unknown per board.
-- **[NEEDS-HARDWARE] OQ-5 — Board firmware versions in hand.** The `firmware` field in the
-  device-info response (§8) needs real values; also whether current firmware matches the docs.
+- **[RESOLVED-N6] OQ-1 — MicroPython camera/snapshot API.** N6 (verified 2026-07-14):
+  legacy `sensor` API works (`sensor.reset()` → `set_pixformat` → `set_framesize` →
+  `skip_frames` → `snapshot()` → `img.save()`); `csi` (modern OO API) is also present.
+  Sensor **PAG7936**; supported framesizes QVGA=320×200, VGA=640×400, **HD=1280×800 (max)**,
+  `B320X320` unsupported. The §8 example fields (`framesize:"native"`, `pixel_format:"rgb565"`)
+  were illustrative — real values are in `openmv/n6/board_config.py`. *AE3 API to confirm in
+  Phase 4.*
+- **[RESOLVED-N6] OQ-2 — USB serial transport.** N6 exposes a USB CDC-ACM port (VID:PID
+  `37c5:1206`, serial `005537493543`); the host enumerates by VID + serial number, never a
+  fixed `ttyACM*` (`host_tools/discover_openmv.py`). The board reads/writes via
+  `pyb.USB_VCP`. The AE3 also enumerates (`37c5:16e3`) — both under VID `0x37C5`, so discovery
+  requires an explicit serial.
+- **[RESOLVED-N6] OQ-3 — File transfer mechanism.** Chose priority-order (1): capture to
+  `/flash`, then stream the bytes back over the same CDC serial, length-framed
+  (`JSON header → N bytes → JSON completion`, §10). SHA-256 computed on-board and verified
+  host-side — round-trips exactly. USB mass-storage is **not** mounted (avoids concurrent-FS
+  corruption).
+- **[PARTIAL] OQ-4 — Video capture on N6 / AE3.** N6 (2026-07-14): a live JPEG **focus stream**
+  is practical (`start_stream` → framed MJPEG, ~29 fps VGA / ~6.5 fps HD; `host_tools/focus_stream.py`).
+  Short-clip **video-to-file** is still deferred; the host adapter reports `capture_video` as
+  `not_supported`. AE3 unknown (Phase 4).
+- **[RESOLVED-N6] OQ-5 — Board firmware versions in hand.** N6: MicroPython **1.26.0**
+  (`v1.26.0-77`, 2025-12-22), build `OPENMV_N6`, STM32N657X0. AE3: `OpenMV-AE3`, MicroPython
+  **1.25.0-preview** (reported at discovery; full validation in Phase 4).
 - **[NEEDS-DOCS] OQ-6 — On-board AprilTag capability.** Whether N6/AE3 can/should run any
   detection on-device, or whether all analysis stays host-side (Pi). Affects nothing in the
   MVP (analysis is host-side) but relevant to the down-select (Spec §17–18).
