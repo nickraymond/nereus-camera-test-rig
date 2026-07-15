@@ -152,6 +152,14 @@ def _capture_one_camera(
         write_capture_metadata(cap_dir / "capture.json", result)
         return CameraOutcome(camera_name=name, result=result)
 
+    # Handshake first so the recorded identity carries the device-reported board +
+    # firmware (Spec §5 requires firmware in every experiment record; §12 identity).
+    # Best-effort: a board that can't answer info can still attempt a capture.
+    try:
+        device.get_device_info()
+    except Exception as exc:  # non-fatal: capture still proceeds
+        logger.debug("camera %s: get_device_info failed (non-fatal): %s", name, exc)
+
     image_name = naming.capture_filename(name, "image", "jpg", when)
     dest = cap_dir / image_name
     request = CaptureRequest(kind="image", settings=dict(profile))
