@@ -1,0 +1,269 @@
+{
+  "template_name": "nereus_reef_reference_card_v2",
+  "template_version": "v2_11x17_rgb_vector_crop_bleed",
+  "template_width_px": 3000,
+  "template_height_px": 1000,
+  "canonical_warp_method": "AprilTag centers tl:0,tr:1,bl:2,br:3 expanded with card_expand_x=1.25 and card_expand_y=2.0",
+  "notes": [
+    "Patch coordinates are in the 3000x1000 canonical rectified card template generated from Nereus_Reef_Reference_Card_V2_11x17_RGB_vector_crop_bleed.pdf.",
+    "target_srgb values are sampled from the vector PDF render/template and should be replaced later with measured printed-card values if available.",
+    "White and black gray patches are measured for QA but excluded from default gray balance."
+  ],
+  "patches": [
+    {
+      "id": "gray_white",
+      "type": "gray",
+      "label": "white_reference",
+      "x": 204,
+      "y": 367,
+      "w": 202,
+      "h": 272,
+      "target_srgb": [
+        255,
+        255,
+        255
+      ],
+      "use_for_gray_balance": false
+    },
+    {
+      "id": "gray_light",
+      "type": "gray",
+      "label": "neutral_gray_light",
+      "x": 416,
+      "y": 288,
+      "w": 201,
+      "h": 351,
+      "target_srgb": [
+        200,
+        200,
+        200
+      ],
+      "use_for_gray_balance": true
+    },
+    {
+      "id": "gray_mid",
+      "type": "gray",
+      "label": "neutral_gray_mid",
+      "x": 626,
+      "y": 288,
+      "w": 202,
+      "h": 351,
+      "target_srgb": [
+        128,
+        128,
+        128
+      ],
+      "use_for_gray_balance": true
+    },
+    {
+      "id": "gray_dark",
+      "type": "gray",
+      "label": "neutral_gray_dark",
+      "x": 838,
+      "y": 288,
+      "w": 201,
+      "h": 351,
+      "target_srgb": [
+        73,
+        73,
+        73
+      ],
+      "use_for_gray_balance": true
+    },
+    {
+      "id": "gray_black",
+      "type": "gray",
+      "label": "black_reference",
+      "x": 1050,
+      "y": 289,
+      "w": 199,
+      "h": 349,
+      "target_srgb": [
+        0,
+        0,
+        0
+      ],
+      "use_for_gray_balance": false
+    },
+    {
+      "id": "cream",
+      "type": "color",
+      "label": "cream_low_saturation",
+      "x": 1635,
+      "y": 292,
+      "w": 136,
+      "h": 174,
+      "target_srgb": [
+        255,
+        249,
+        230
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "tan",
+      "type": "color",
+      "label": "tan",
+      "x": 1790,
+      "y": 293,
+      "w": 135,
+      "h": 173,
+      "target_srgb": [
+        239,
+        212,
+        167
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "ochre",
+      "type": "color",
+      "label": "ochre",
+      "x": 1944,
+      "y": 292,
+      "w": 136,
+      "h": 174,
+      "target_srgb": [
+        216,
+        168,
+        109
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "orange",
+      "type": "color",
+      "label": "orange",
+      "x": 2098,
+      "y": 292,
+      "w": 136,
+      "h": 175,
+      "target_srgb": [
+        216,
+        145,
+        54
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "brown",
+      "type": "color",
+      "label": "brown",
+      "x": 2252,
+      "y": 292,
+      "w": 136,
+      "h": 175,
+      "target_srgb": [
+        184,
+        109,
+        42
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "dark_brown",
+      "type": "color",
+      "label": "dark_brown",
+      "x": 2407,
+      "y": 292,
+      "w": 135,
+      "h": 174,
+      "target_srgb": [
+        98,
+        54,
+        24
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "red_orange",
+      "type": "color",
+      "label": "red_orange",
+      "x": 1635,
+      "y": 481,
+      "w": 136,
+      "h": 174,
+      "target_srgb": [
+        239,
+        73,
+        23
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "yellow",
+      "type": "color",
+      "label": "yellow",
+      "x": 1790,
+      "y": 481,
+      "w": 135,
+      "h": 174,
+      "target_srgb": [
+        246,
+        184,
+        29
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "green",
+      "type": "color",
+      "label": "green",
+      "x": 1944,
+      "y": 481,
+      "w": 136,
+      "h": 174,
+      "target_srgb": [
+        107,
+        175,
+        80
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "cyan",
+      "type": "color",
+      "label": "cyan",
+      "x": 2098,
+      "y": 481,
+      "w": 136,
+      "h": 174,
+      "target_srgb": [
+        91,
+        200,
+        207
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "blue",
+      "type": "color",
+      "label": "blue",
+      "x": 2252,
+      "y": 481,
+      "w": 136,
+      "h": 174,
+      "target_srgb": [
+        11,
+        102,
+        198
+      ],
+      "use_for_matrix": true
+    },
+    {
+      "id": "magenta",
+      "type": "color",
+      "label": "magenta",
+      "x": 2407,
+      "y": 481,
+      "w": 135,
+      "h": 174,
+      "target_srgb": [
+        179,
+        70,
+        163
+      ],
+      "use_for_matrix": true
+    }
+  ]
+}
