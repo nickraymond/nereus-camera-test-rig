@@ -34,3 +34,6 @@ diagnostics_*.tar.gz
 
 # Test fixtures are curated evidence and ARE committed — re-include them.
 !tests/fixtures/**
+
+# The reference-card design asset is committed on purpose (overrides *.png above).
+!docs/reference_card/**

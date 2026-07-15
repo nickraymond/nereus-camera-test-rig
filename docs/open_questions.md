@@ -75,11 +75,16 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 
 ## Reference-card pipeline
 
-- **[NEEDS-HARDWARE] OQ-11 — Nereus reference-card geometry.** The reusable code hardcodes
-  tag IDs `1,2,3` (+optional `0`) → TR/BL/BR/TL, `expand_quad` factors `x=1.25,y=2.0`, and
-  rectified size `1000×420`. Spec §12 config uses `expected_tag_ids:[0,1,2,3]`. Confirm the
-  actual card's tag IDs, layout, and physical aspect ratio, then set these as config — do
-  not inherit the legacy constants blindly. Blocks Phase 2 correctness on real cards.
+- **[RESOLVED] OQ-11 — Nereus reference-card geometry.** The card design file is now in the
+  repo (`docs/reference_card/`, the "Reef Reference Card V1" 11×17 PDF + render). Tag IDs
+  **confirmed by detection** on the render: family `DICT_APRILTAG_36h11`, **0=top-left,
+  1=top-right, 2=bottom-left, 3=bottom-right** — matches the config default
+  `expected_tag_ids:[0,1,2,3]`. So the legacy `DEFAULT_CORNER_MAP` (which inferred TL from 3
+  tags) is **wrong for this card** — use the full 4-tag map `tl:0,tr:1,bl:2,br:3`.
+  Card features: grayscale ramp, centre focus/WB target, colour patches, 400 mm scale bar.
+  Remaining tuning (not blocking): the `expand_quad` factors and rectified crop size should
+  be set from this card's tag-box-to-card ratio, measured during Phase 2 against the render
+  and real captures — do not inherit the legacy `1.25/2.0` / `1000×420` blindly.
 - **[OPEN] OQ-12 — Tag-size pass thresholds.** Legacy thresholds are `10 px` (fail) /
   `18 px` (warn), empirically tuned for the IMX708 rig. Re-validate per camera (the OpenMV
   boards have different sensors/resolutions) before using them as a down-select metric.
