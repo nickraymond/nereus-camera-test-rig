@@ -335,3 +335,20 @@ Support evidence-based comparison across: image quality, AprilTag detectability,
 ## 18. Future Inference (post-MVP, extension points only)
 
 Create interfaces/folders now; do not make inference part of rig acceptance. Candidate workflows: YOLO-family on Pi/Mac, OpenMV-compatible models on N6/AE3, purple-ball / fish / biofouling / robot detection, coral color/bleaching. Do not assume one model binary runs on all three boards. Evaluate models on: size, latency, memory, power, precision/recall, minimum object size, supported operators, deployment complexity.
+
+---
+
+## 19. Backlog — Future Capabilities (not yet scheduled)
+
+Requested capabilities beyond the current Build Plan (§4). Each is filed as a **GitHub
+issue** (the traceable source of truth for discussion + status); this list exists only for
+scope visibility. When an item is scheduled, promote it into §4 as a phase or sub-item and
+reference its issue there.
+
+- **Live multi-camera comparison view** — [#9](https://github.com/nickraymond/nereus-camera-test-rig/issues/9).
+  3-up simultaneous live video (IMX708 + OpenMV N6 + AE3) in the browser, with native /
+  on-device AprilTag detection overlaid per device and per-camera **accuracy + latency**
+  metrics for head-to-head comparison. Extends Phase 6 (web) + on-device detection (OQ-6) +
+  §17 down-select. Beyond MVP (current analysis is still-based). Needs refinement: precise
+  "accuracy" definition, cross-camera frame-sync tolerance, on-device vs host detection per
+  platform (candidate ADR).
