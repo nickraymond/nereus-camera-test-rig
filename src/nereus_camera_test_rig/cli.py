@@ -1,9 +1,9 @@
 """Command-line entry point — Spec §9, §15.
 
-Phase 0 skeleton: the argument surface exists and is importable/testable, but the
-capture/experiment subcommands are not yet wired to hardware. They exit with a
-clear "not implemented" message (CLAUDE.md §17) so the CLI never appears to succeed
-while doing nothing. Fleshed out starting in Phase 1.
+Subcommands: ``info`` (config summary), ``capture`` (single still/video from one
+camera, Phase 1), and ``experiment`` (sequential multi-camera capture set into one
+Spec §13 experiment folder, Phase 5). Each returns a nonzero exit only on real
+failure (CLAUDE.md §17) — never a false success.
 """
 
 from __future__ import annotations
@@ -32,9 +32,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_capture.add_argument("--out", default="results/adhoc", help="output directory")
     p_capture.set_defaults(func=_cmd_capture)
 
-    p_experiment = sub.add_parser("experiment", help="run an experiment profile (Phase 5+)")
-    p_experiment.add_argument("--profile", required=True, help="path to an experiment profile YAML")
-    p_experiment.set_defaults(func=_cmd_not_implemented, _feature="experiment (Phase 5)")
+    p_experiment = sub.add_parser(
+        "experiment", help="run a multi-camera capture set into one experiment folder"
+    )
+    p_experiment.add_argument(
+        "--type", default="reference_card", help="experiment type/slug (folder name)"
+    )
+    p_experiment.add_argument("--env", default="", help="environment label, e.g. bench")
+    p_experiment.add_argument("--notes", default="", help="operator notes for experiment.json")
+    p_experiment.add_argument(
+        "--cameras", default=None, help="comma-separated camera subset (default: all enabled)"
+    )
+    p_experiment.add_argument(
+        "--no-analysis", action="store_true", help="skip the reference-card analysis pass"
+    )
+    p_experiment.set_defaults(func=_cmd_experiment)
 
     return parser
 
@@ -78,10 +90,44 @@ def _cmd_capture(args: argparse.Namespace) -> int:
     return 1
 
 
-def _cmd_not_implemented(args: argparse.Namespace) -> int:
-    feature = getattr(args, "_feature", "this command")
-    print(f"[nereus-rig] {feature} is not implemented yet (Phase 0 scaffold).", file=sys.stderr)
-    return 2
+def _cmd_experiment(args: argparse.Namespace) -> int:
+    from . import config as config_mod
+    from .capture.coordinator import run_experiment
+
+    try:
+        cfg = config_mod.load_rig_config(args.config)
+    except config_mod.ConfigError as exc:
+        print(f"[nereus-rig] config error: {exc}", file=sys.stderr)
+        return 2
+
+    subset = [c.strip() for c in args.cameras.split(",") if c.strip()] if args.cameras else None
+    outcome = run_experiment(
+        cfg,
+        args.type,
+        environment_label=args.env,
+        operator_notes=args.notes,
+        camera_names=subset,
+        analysis=not args.no_analysis,
+    )
+
+    print(f"[nereus-rig] experiment {outcome.record.experiment_id}")
+    print(f"             folder: {outcome.paths.root}")
+    for c in outcome.camera_outcomes:
+        if c.ok:
+            r = c.result
+            dims = f"{r.width}x{r.height} " if r.width and r.height else ""
+            note = ""
+            if c.analysis is not None:
+                note = f" · analysis={c.analysis.status} tags={c.analysis.tags_detected}"
+            print(f"  [ok]   {c.camera_name}: {dims}{r.size_bytes} bytes{note}")
+        else:
+            err = c.result.error or {}
+            print(f"  [FAIL] {c.camera_name}: {err.get('code')}: {err.get('message')}")
+    print(f"[nereus-rig] status: {outcome.status}")
+
+    # Exit 0 only when every included camera captured. Analysis finding no card does
+    # NOT fail the run (expected during mechanical bring-up).
+    return 0 if outcome.status == "completed" else 1
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
