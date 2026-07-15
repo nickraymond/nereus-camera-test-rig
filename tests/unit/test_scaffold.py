@@ -55,13 +55,13 @@ def test_camera_adapters_expose_driver():
     assert OpenMvUsbCamera.driver == "openmv_usb"
 
 
-def test_placeholder_camera_methods_raise():
-    # Not-yet-implemented adapters must fail loudly, not silently no-op.
-    # (imx708 is implemented in Phase 1; openmv_usb remains a placeholder.)
-    from nereus_camera_test_rig.cameras.openmv_usb import OpenMvUsbCamera
+def test_openmv_adapter_fails_loudly_without_device():
+    # openmv_usb is implemented in Phase 3. With no board reachable it must fail loudly
+    # with a structured OpenMvError, never silently no-op.
+    from nereus_camera_test_rig.cameras.openmv_usb import OpenMvError, OpenMvUsbCamera
 
-    with pytest.raises(NotImplementedError):
-        OpenMvUsbCamera().get_device_info()
+    with pytest.raises(OpenMvError):
+        OpenMvUsbCamera(serial_number="does-not-exist").get_device_info()
 
 
 @pytest.mark.parametrize("yaml_path", sorted(str(p) for p in Path("configs").rglob("*.yaml")))
