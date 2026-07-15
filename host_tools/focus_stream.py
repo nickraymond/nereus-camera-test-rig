@@ -75,26 +75,36 @@ class StreamState:
             self.peak = self.sharpness
 
 
-def _reader_loop(io: _SerialIO, command_id: str, state: StreamState):
-    """Read framed JPEG frames off the serial port until the stream ends or errors."""
+def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamState):
+    """Read framed JPEG frames off the serial port, re-requesting the stream as needed.
+
+    The board caps each stream segment at a safety timeout (so a dead host can't stream
+    forever). To keep the browser feed continuous across that cap, the reader re-sends
+    ``start_stream`` whenever a segment ends — invisible to the viewer beyond a brief hold
+    on the last frame. Stops for good once ``state.running`` is cleared (host shutdown).
+    """
     last_t = time.monotonic()
     fps = 0.0
     try:
         while state.running:
-            header = cp.decode_message(io.read_line(timeout=10.0))
-            status = header.get("status")
-            if status == "frame":
-                meta = header.get("frame") or {}
-                size = int(meta.get("size_bytes", 0))
-                data = io.read_exact(size, timeout=10.0)
-                now = time.monotonic()
-                dt = now - last_t
-                last_t = now
-                if dt > 0:
-                    fps = 0.8 * fps + 0.2 * (1.0 / dt)  # smoothed
-                state.update(data, int(meta.get("seq", 0)), int(meta.get("sharpness", size)), fps)
-            elif status in ("completed", "failed"):
-                break
+            io.write_message(cp.make_request("start_stream", command_id, settings))
+            while state.running:
+                header = cp.decode_message(io.read_line(timeout=10.0))
+                status = header.get("status")
+                if status == "frame":
+                    meta = header.get("frame") or {}
+                    size = int(meta.get("size_bytes", 0))
+                    data = io.read_exact(size, timeout=10.0)
+                    now = time.monotonic()
+                    dt = now - last_t
+                    last_t = now
+                    if dt > 0:
+                        fps = 0.8 * fps + 0.2 * (1.0 / dt)  # smoothed
+                    state.update(
+                        data, int(meta.get("seq", 0)), int(meta.get("sharpness", size)), fps
+                    )
+                elif status in ("completed", "failed"):
+                    break  # segment ended; outer loop re-requests if still running
     except Exception as exc:  # stream stalled / port closed — stop cleanly
         sys.stderr.write("focus stream reader stopped: %s\n" % exc)
     finally:
@@ -208,7 +218,7 @@ def _tailscale_host():
         return "<pi-host>"
 
 
-def run(serial_number=None, port=None, framesize="VGA", quality=70,
+def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
         http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT):
     import serial
 
@@ -219,11 +229,13 @@ def run(serial_number=None, port=None, framesize="VGA", quality=70,
     ser = serial.Serial(dev, DEFAULT_BAUD, timeout=0.2)
     io = _SerialIO(ser, default_timeout=10.0)
     command_id = "focus-stream"
-    settings = {"framesize": framesize, "jpeg_quality": quality}
-    io.write_message(cp.make_request("start_stream", command_id, settings))
+    # max_seconds caps each board-side stream segment; the reader re-requests to stay live.
+    settings = {"framesize": framesize, "jpeg_quality": quality, "max_seconds": max_seconds}
 
     state = StreamState()
-    reader = threading.Thread(target=_reader_loop, args=(io, command_id, state), daemon=True)
+    reader = threading.Thread(
+        target=_reader_loop, args=(io, command_id, settings, state), daemon=True
+    )
     reader.start()
 
     httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state))
@@ -254,12 +266,15 @@ def main(argv=None):
     parser.add_argument("--port", default=None, help="explicit device path (overrides --serial)")
     parser.add_argument("--framesize", default="VGA", help="QVGA | VGA | HD (default VGA)")
     parser.add_argument("--quality", type=int, default=70, help="JPEG quality (default 70)")
+    parser.add_argument("--max-seconds", type=int, default=3600,
+                        help="per-segment board stream cap; reader re-requests to stay live")
     parser.add_argument("--http-host", default="0.0.0.0")
     parser.add_argument("--http-port", type=int, default=DEFAULT_HTTP_PORT)
     args = parser.parse_args(argv)
     try:
         run(serial_number=args.serial_number, port=args.port, framesize=args.framesize,
-            quality=args.quality, http_host=args.http_host, http_port=args.http_port)
+            quality=args.quality, max_seconds=args.max_seconds,
+            http_host=args.http_host, http_port=args.http_port)
     except RuntimeError as exc:
         print("focus stream failed: %s" % exc, file=sys.stderr)
         return 1
