@@ -94,11 +94,12 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - **Exit:** Fixture image yields correct `tags_detected`, a nonempty saved crop, and a pass/fail result matching the rule in §13. ✅ verified on the V2 fixture (tags `[0,1,2,3]`, 3000×1000 crop, status `pass`).
 
 ### Phase 3 — OpenMV N6
-- [ ] N6 MicroPython service: boots, identifies board+firmware, listens for newline-delimited JSON commands (§10), validates against an allowlist.
-- [ ] USB discovery + handshake (identify by USB identity/handshake, **not** fixed `/dev/ttyACM*`).
-- [ ] Still capture + file retrieval (§10) + metadata; checksum verified.
-- [ ] Repeated-capture and invalid-command-rejection tests.
-- **Exit:** Pi discovers the N6, captures N stills in a row, retrieves each with a matching checksum, and rejects a bad command cleanly.
+- [x] N6 MicroPython service: boots, identifies board+firmware, listens for newline-delimited JSON commands (§10), validates against an allowlist. *(Verified 2026-07-14: MicroPython 1.26.0, sensor PAG7936, legacy `sensor` API — resolved OQ-1/5.)*
+- [x] USB discovery + handshake (identify by USB identity/handshake, **not** fixed `/dev/ttyACM*`). *(By USB serial number; VID `0x37C5` — resolved OQ-2. N6 + AE3 both enumerate, so discovery requires an explicit serial.)*
+- [x] Still capture + file retrieval (§10) + metadata; checksum verified. *(Capture to `/flash` + length-framed serial retrieval, SHA-256 verified end to end — resolved OQ-3.)*
+- [x] Repeated-capture and invalid-command-rejection tests. *(`scripts/test_openmv_n6.sh` + `tests/hardware/test_openmv_n6.py`; unit tests via a fake-loopback board.)*
+- **Exit:** Pi discovers the N6, captures N stills in a row, retrieves each with a matching checksum, and rejects a bad command cleanly. ✅ verified on `nereus000` (serial `005537493543`).
+- *Bonus (§2 "video where practical"):* live browser focus stream (`host_tools/focus_stream.py`) for manual M12 lens adjustment — HD MJPEG + a sharpness readout, validated in use. `capture_video`-to-file (OQ-4) remains deferred.
 
 ### Phase 4 — OpenMV AE3
 - [ ] Equivalent AE3 behavior, board-specific code isolated (no shared `if board == ...` branching).
