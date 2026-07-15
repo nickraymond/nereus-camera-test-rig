@@ -87,11 +87,11 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - **Exit:** `./scripts/test_imx708.sh` produces a valid image + metadata; output validated (file exists, plausible size, opens, correct dimensions). ✅ verified on `nereus000`.
 
 ### Phase 2 — Reference-card pipeline
-- [ ] Port AprilTag detection; report tag IDs + corners.
-- [ ] Card localization from configured tags, optional rectify, crop, annotated image, machine-readable JSON (§13).
-- [ ] Still crop/resize helper (Pillow) — moved here from Phase 1; used by the card crop and available to capture.
-- [ ] Tests against known fixture images with expected detections.
-- **Exit:** Fixture image yields correct `tags_detected`, a nonempty saved crop, and a pass/fail result matching the rule in §13.
+- [x] Port AprilTag detection; report tag IDs + corners. *(OpenCV ArUco `DICT_APRILTAG_36h11`, multi-scale.)*
+- [x] Card localization from configured tags, optional rectify, crop, annotated image, machine-readable JSON (§13). *(V2 geometry: tag map `tl:0,tr:1,bl:2,br:3`, expand 1.25/2.0, canonical rectify 3000×1000.)*
+- [ ] Still crop/resize helper (Pillow) — capture-side helper (not the card crop, which is done via OpenCV in `analysis/crop.py`). Remains for the capture owner; not an analysis exit blocker.
+- [x] Tests against known fixture images with expected detections. *(Real V2 card fixture in `tests/fixtures/reference_card/`.)*
+- **Exit:** Fixture image yields correct `tags_detected`, a nonempty saved crop, and a pass/fail result matching the rule in §13. ✅ verified on the V2 fixture (tags `[0,1,2,3]`, 3000×1000 crop, status `pass`).
 
 ### Phase 3 — OpenMV N6
 - [ ] N6 MicroPython service: boots, identifies board+firmware, listens for newline-delimited JSON commands (§10), validates against an allowlist.
