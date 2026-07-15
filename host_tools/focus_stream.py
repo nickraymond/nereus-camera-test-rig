@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import socket
 import sys
 import threading
@@ -218,6 +219,11 @@ def _tailscale_host():
         return "<pi-host>"
 
 
+def _raise_keyboard_interrupt(signum, frame):
+    """SIGTERM handler: raise KeyboardInterrupt so run()'s clean shutdown path runs."""
+    raise KeyboardInterrupt
+
+
 def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
         http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT):
     import serial
@@ -239,10 +245,16 @@ def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=
     reader.start()
 
     httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state))
+
+    # Treat SIGTERM like Ctrl-C so `kill <pid>` also shuts down cleanly. Without this, a
+    # SIGTERM mid-stream skips the finally block below — the board never gets its stop byte
+    # and can wedge its USB stack (observed 2026-07-14). Only works in the main thread.
+    signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
+
     url = "http://%s:%d/" % (_tailscale_host(), http_port)
     print("focus stream on %s (serial=%s, %s q%d)"
           % (url, serial_number or dev, framesize, quality))
-    print("adjust the M12 lens until 'sharpness' peaks. Ctrl-C to stop.")
+    print("adjust the M12 lens until 'sharpness' peaks. Ctrl-C (or SIGTERM) to stop.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
