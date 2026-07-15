@@ -1,9 +1,14 @@
-"""OpenMV MicroPython module — Spec §8/§10 (Phase 3/4).
+"""OpenMV AE3 boot hook — Spec §7.
 
-Phase 0 placeholder. NO prior art exists for the OpenMV side; every API here
-is UNVERIFIED. Do not implement until the relevant open question (OQ-1..OQ-6
-in docs/open_questions.md) is resolved against official OpenMV docs.
+Runs once before ``main.py``. Intentionally minimal: USB mode is left at the firmware
+default (CDC serial + mass-storage composite) so the board stays recoverable via the USB
+drive if ``main.py`` ever fails to start. We never *mount* the mass-storage device from
+the host during operation — file transfer is serial-only (§10) — so leaving it enabled
+is safe and costs nothing.
 
-MicroPython constraints apply (CLAUDE.md §23): small allocations, streaming,
-compact messages, no assumption that CPython code copies unchanged.
+Board-agnostic and identical to the N6's ``n6/boot.py``; kept as a per-board copy so the
+AE3 deploys independently (CLAUDE.md §6/§36). Keep board bring-up logic out of here; the
+capture service lives in ``main.py``.
 """
+
+# No-op boot: nothing to configure before the service starts.
