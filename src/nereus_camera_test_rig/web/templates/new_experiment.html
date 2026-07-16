@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}New Experiment — Nereus Camera Test Rig{% endblock %}
+{% block content %}
+<h1>New Experiment</h1>
+<p class="subtitle">Triggers one sequential capture set (IMX708 → N6 → AE3) with checksums and reference-card analysis.</p>
+
+<form class="panel newexp" method="post" id="newexp-form">
+  <div class="field">
+    <label for="f-type">Experiment type</label>
+    <select id="f-type" name="experiment_type">
+      <option>reference_card_above_water</option>
+      <option>reference_card_below_water</option>
+      <option>low_light</option>
+      <option>object_detection</option>
+      <option>reference_card</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-env">Environment label <span class="hint">— free text, recorded in experiment.json</span></label>
+    <input id="f-env" name="environment" type="text" placeholder="bench, artificial light, 40 cm" />
+  </div>
+  <div class="field">
+    <label for="f-notes">Operator notes</label>
+    <textarea id="f-notes" name="notes" placeholder="Anything a future reviewer should know about this run."></textarea>
+  </div>
+  <div class="field">
+    <label>Cameras</label>
+    <div class="checks">
+      {% for name in camera_names %}
+      <label><input type="checkbox" name="cameras" value="{{ name }}" checked /> {{ camera_label(name) }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="field">
+    <label>Analysis</label>
+    <div class="checks">
+      <label><input type="checkbox" name="analysis" checked /> Run reference-card analysis after capture</label>
+    </div>
+  </div>
+  <div style="display: flex; align-items: center; gap: 14px;">
+    <button class="btn" type="submit" id="run-btn">Run experiment</button>
+    <span class="run-note" id="run-note">Runs synchronously — the page returns when all cameras finish (~10–20 s).</span>
+  </div>
+</form>
+
+<script>
+  document.getElementById("newexp-form").addEventListener("submit", function () {
+    var btn = document.getElementById("run-btn");
+    btn.disabled = true;
+    btn.textContent = "Capturing…";
+    document.getElementById("run-note").textContent =
+      "Capture in progress — leave this page open.";
+  });
+</script>
+{% endblock %}

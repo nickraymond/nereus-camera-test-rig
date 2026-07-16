@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{% block title %}Nereus Camera Test Rig{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="name">Nereus Vision</div>
+        <div class="sub">Camera Test Rig · <span class="mono">{{ rig_id }}</span></div>
+      </div>
+      <nav class="tabs">
+        <a href="{{ url_for('rig_status') }}"
+           class="{{ 'active' if request.endpoint == 'rig_status' }}">Rig Status</a>
+        <a href="{{ url_for('experiments_index') }}"
+           class="{{ 'active' if request.endpoint in ('experiments_index', 'experiment_detail') }}">Experiments</a>
+        <a href="{{ url_for('new_experiment') }}"
+           class="{{ 'active' if request.endpoint == 'new_experiment' }}">New Experiment</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
