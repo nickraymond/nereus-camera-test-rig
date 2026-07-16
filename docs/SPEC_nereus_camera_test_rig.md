@@ -112,9 +112,9 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - **Exit:** One command produces one experiment dir with one output+metadata+analysis per available camera; a disconnected camera yields a clear partial-success result. ✅ verified on `nereus000` with all three cameras (N6 fw 1.26.0, AE3 fw 1.25.0-preview): full set → one §13 folder, every still checksum-verified end to end, analysis run per still; disconnected camera (bogus serial) → `partial`, survivors + folder retained. Repeatable via `./scripts/test_experiment.sh`.
 
 ### Phase 6 — Web interface
-- [ ] Local web app (§14): Rig Status, New Experiment, Experiment Results, Downloads.
-- [ ] Side-by-side outputs, AprilTag pass/fail, annotated + cropped images, per-file and full-ZIP download.
-- **Exit:** A capture can be triggered and reviewed in the browser and downloaded as a ZIP.
+- [x] Local web app (§14): Rig Status, New Experiment, Experiment Results, Downloads. *(Flask, server-rendered, styled to the nereus-vision-dev dashboard brand; binds to `web.host`/`web.port` from config so it serves over Tailscale. New Experiment calls the Phase 5 coordinator unchanged.)*
+- [x] Side-by-side outputs, AprilTag pass/fail, annotated + cropped images, per-file and full-ZIP download. *(Plus, at owner request: a view-time color-patch check — grey-ramp/color ΔE + color cast vs the V2 card design values sampled through the real rectification pipeline — and a shareable cut-sheet export as PNG/PDF.)*
+- [~] **Exit:** A capture can be triggered and reviewed in the browser and downloaded as a ZIP. *(Verified on Mac end to end via Flask test client + browser against real §13 folders produced by fake cameras — 13 web tests green; live verification on nereus000 over Tailscale pending rig time.)*
 
 ### Phase 7 — Evaluation experiments
 - [ ] Repeatable experiment profiles: above-water card, below-water card, artificial + ambient light, low light, turbidity, fixed-distance resolution, purple-ball dataset collection, static video clips.
