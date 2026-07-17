@@ -19,6 +19,7 @@ a fake loopback exercises the whole adapter on the host with no hardware.
 
 from __future__ import annotations
 
+import logging
 import sys
 import time
 import uuid
@@ -46,6 +47,8 @@ TRANSFER_TIMEOUT = 30.0
 # Hard reset + USB re-enumeration + service boot measured ~3.5 s on the AE3; allow slack.
 RESET_TIMEOUT = 20.0
 _READ_CHUNK = 4096
+
+logger = logging.getLogger(__name__)
 
 
 class OpenMvError(RuntimeError):
@@ -298,6 +301,10 @@ class OpenMvUsbCamera(CameraDevice):
             "board": info.get("board"),
             "firmware": info.get("firmware"),
             "sensor": info.get("sensor"),
+            # A filling /flash is a failure-in-waiting (io_error on capture) — surface it
+            # in health checks. None on firmware that doesn't report it.
+            "flash_free_bytes": info.get("flash_free_bytes"),
+            "flash_total_bytes": info.get("flash_total_bytes"),
         }
 
     # -- helpers -------------------------------------------------------------
@@ -335,6 +342,22 @@ class OpenMvUsbCamera(CameraDevice):
             raise OpenMvError("checksum_mismatch",
                               "retrieved sha %s != capture sha %s" % (actual_sha, cap_sha))
         dest.write_bytes(data)
+        # The flash copy is only a transfer buffer; the verified copy on disk is the raw
+        # evidence (§11). Delete it so captures can't fill /flash (the N6 hit 0 bytes
+        # free on 2026-07-17 and every capture failed with io_error). Best-effort: a
+        # failed delete (e.g. pre-delete_file firmware) must not fail the capture.
+        self._delete_remote_file(filename)
+
+    def _delete_remote_file(self, filename: str) -> None:
+        """Best-effort ``delete_file`` after a verified retrieval; warn, never raise."""
+        try:
+            self._command("delete_file", {"filename": filename})
+        except OpenMvError as exc:
+            logger.warning(
+                "delete_file %r failed on board serial=%r (%s: %s) — flash will "
+                "accumulate captures until the board firmware is redeployed",
+                filename, self._serial_number, exc.code, exc.message,
+            )
 
     def _validate(
         self, identity, request, dest: Path, output: dict, duration: float
