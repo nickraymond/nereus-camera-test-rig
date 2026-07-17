@@ -33,6 +33,7 @@ class FakeBoard:
     DEVICE_INFO = {
         "platform": "openmv", "board": "n6", "device_id": "openmv-n6-001",
         "sensor": "PAG7936", "firmware": "1.26.0", "mount_rotation_deg": 90,
+        "flash_free_bytes": 30 * 1024 * 1024, "flash_total_bytes": 32 * 1024 * 1024,
     }
 
     def __init__(self, captured_bytes=b"\xff\xd8fake-jpeg-body\xff\xd9", corrupt_sha=False):
@@ -75,6 +76,8 @@ class FakeBoard:
                 self._do_capture(command_id, settings)
             elif action == "get_file":
                 self._do_get_file(command_id, settings.get("filename"))
+            elif action == "delete_file":
+                self._do_delete_file(command_id, settings.get("filename"))
             elif action == "reset_board":
                 # Real board acks then machine.reset()s; the loopback just acks.
                 self._emit(cp.completed_response(command_id, {"resetting": True}))
@@ -107,6 +110,14 @@ class FakeBoard:
         self._emit(cp.completed_response(command_id, {
             "filename": filename, "size_bytes": len(data), "sha256": _sha(data)}))
 
+    def _do_delete_file(self, command_id, filename):
+        data = self.files.pop(filename, None)
+        if data is None:
+            self._emit(cp.failed_response(command_id, cp.ERR_FILE_NOT_FOUND, "no such file"))
+            return
+        self._emit(cp.completed_response(command_id, {
+            "filename": filename, "deleted": True, "size_bytes": len(data)}))
+
 
 def test_get_device_info_populates_identity():
     cam = OpenMvUsbCamera(serial_number="005537493543", transport=FakeBoard())
@@ -128,8 +139,11 @@ def test_capture_image_round_trips_bytes_and_checksum(tmp_path):
     assert result.sha256 == _sha(board.captured)
     assert result.width == 1280 and result.height == 800
     assert result.sensor_metadata["mount_rotation_deg"] == 90
-    # The host set the filename from the destination basename.
-    assert "image.jpg" in board.files
+    # The host set the filename from the destination basename; after the verified
+    # retrieval the flash copy (a transfer buffer, not evidence) was deleted so
+    # captures can't fill /flash.
+    assert "image.jpg" not in board.files
+    assert board.seen_actions == ["capture_image", "get_file", "delete_file"]
 
 
 def test_capture_detects_checksum_mismatch(tmp_path):
@@ -168,6 +182,40 @@ def test_health_check_ok():
     health = cam.health_check()
     assert health["healthy"] is True
     assert health["board"] == "n6"
+    # A filling /flash is surfaced before captures start failing with io_error.
+    assert health["flash_free_bytes"] == 30 * 1024 * 1024
+    assert health["flash_total_bytes"] == 32 * 1024 * 1024
+
+
+def test_failed_delete_does_not_fail_capture(tmp_path):
+    # A board on pre-delete_file firmware rejects via the allowlist; cleanup is
+    # best-effort so the capture itself must still succeed (§ CLAUDE.md 17 — a cleanup
+    # failure must not discard a good capture).
+    class OldFirmwareBoard(FakeBoard):
+        def _do_delete_file(self, command_id, filename):
+            self._emit(cp.failed_response(command_id, cp.ERR_UNKNOWN_ACTION, "not allowed"))
+
+    board = OldFirmwareBoard()
+    cam = OpenMvUsbCamera(serial_number="s", transport=board)
+    dest = tmp_path / "image.jpg"
+    result = cam.capture_image(str(dest), CaptureRequest(kind="image"))
+    assert result.ok, result.error
+    assert dest.read_bytes() == board.captured
+    # The flash copy remains (delete was rejected) — accumulation, not data loss.
+    assert "image.jpg" in board.files
+
+
+def test_delete_of_missing_file_is_structured_and_nonfatal(tmp_path):
+    # get_file leaves the file, but something else already removed it before delete_file
+    # (e.g. manual cleanup): the board answers file_not_found; the capture still passes.
+    class VanishingFileBoard(FakeBoard):
+        def _do_get_file(self, command_id, filename):
+            super()._do_get_file(command_id, filename)
+            self.files.pop(filename, None)
+
+    cam = OpenMvUsbCamera(serial_number="s", transport=VanishingFileBoard())
+    result = cam.capture_image(str(tmp_path / "image.jpg"), CaptureRequest(kind="image"))
+    assert result.ok, result.error
 
 
 def test_only_allowlisted_actions_are_sent(tmp_path):
@@ -175,7 +223,7 @@ def test_only_allowlisted_actions_are_sent(tmp_path):
     cam = OpenMvUsbCamera(serial_number="s", transport=board)
     cam.capture_image(str(tmp_path / "i.jpg"), CaptureRequest(kind="image"))
     assert set(board.seen_actions) <= set(cp.ALLOWED_ACTIONS)
-    assert board.seen_actions == ["capture_image", "get_file"]
+    assert board.seen_actions == ["capture_image", "get_file", "delete_file"]
 
 
 def test_reset_board_acks_and_rehandshakes():

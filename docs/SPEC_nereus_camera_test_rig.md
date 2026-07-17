@@ -233,6 +233,21 @@ Newline-delimited JSON over USB serial. Command allowlist only — **no arbitrar
 {"version":1,"command_id":"abc-004","status":"completed","output":{"resetting":true}}
 ```
 
+```json
+// delete_file — remove one file from board storage (same basename guard as get_file).
+// The flash copy is only a transfer buffer; the authoritative raw evidence is the
+// checksum-verified copy on the Pi (§10, §11). The host sends this best-effort after
+// each verified retrieval — without it captures accumulate until the filesystem is full
+// (the N6 hit 0 bytes free on 2026-07-17 and every capture failed with io_error).
+// A missing file is a structured file_not_found failure; a failed delete never fails
+// the capture. get_device_info additionally reports flash_free_bytes/flash_total_bytes
+// so a filling flash is visible in health checks before captures start failing.
+{"version":1,"command_id":"abc-005","action":"delete_file",
+ "settings":{"filename":"capture_20260714T180000Z.jpg"}}
+{"version":1,"command_id":"abc-005","status":"completed",
+ "output":{"filename":"capture_20260714T180000Z.jpg","deleted":true,"size_bytes":123456}}
+```
+
 ---
 
 ## 9. Pi Capture Behavior

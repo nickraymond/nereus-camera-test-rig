@@ -100,6 +100,36 @@ def test_reset_board_returns_to_service(tmp_path):
         cam.close()
 
 
+def test_flash_free_space_stable_across_captures(tmp_path):
+    """Captures must not accumulate on /flash (2026-07-17: the N6 filled its flash and
+    every capture failed with io_error "Write failed").
+
+    The host deletes each flash copy after the checksum-verified retrieval, so free
+    space after N captures must return to (at least) the starting level, within a small
+    filesystem-bookkeeping slack — far below one VGA JPEG (~30-90 KB), so a leak of even
+    a single retained capture fails the test.
+    """
+    _n6_port()
+    cam = OpenMvUsbCamera(serial_number=N6_SERIAL, board="n6")
+    try:
+        free_before = cam.get_device_info().get("flash_free_bytes")
+        assert free_before is not None, "firmware does not report flash_free_bytes"
+        for i in range(3):
+            dest = tmp_path / ("n6_flash_%d.jpg" % i)
+            result = cam.capture_image(
+                str(dest),
+                CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800}),
+            )
+            assert result.ok, result.error
+        free_after = cam.get_device_info().get("flash_free_bytes")
+    finally:
+        cam.close()
+    assert free_after >= free_before - 8192, (
+        "flash leaked %d bytes over 3 captures — on-board cleanup not working"
+        % (free_before - free_after)
+    )
+
+
 def test_rejects_unknown_action():
     port = _n6_port()
     bad = {"version": 1, "command_id": "bad", "action": "exec_python"}
