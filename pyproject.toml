@@ -29,9 +29,11 @@ analysis = [
 serial = [
     "pyserial>=3.5",
 ]
-# Local result-review web app (Phase 6).
+# Local result-review web app (Phase 6). Pillow: cut-sheet export + view-time
+# color-patch check (also already present via the analysis extra on the Pi).
 web = [
     "Flask>=3.0",
+    "Pillow>=10.0",
 ]
 dev = [
     "pytest>=8.0",

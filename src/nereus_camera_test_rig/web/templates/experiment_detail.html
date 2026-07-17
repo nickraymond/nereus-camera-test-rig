@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ exp.experiment_id }} — Nereus Camera Test Rig{% endblock %}
+
+{% macro file_url(rel, dl=false) -%}
+{{ url_for('experiment_file', date=exp.date, exp_id=exp.experiment_id, relpath=rel, dl='1' if dl else none) }}
+{%- endmacro %}
+
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('experiments_index') }}">← Experiments</a></div>
+
+<div class="detail-head">
+  <div>
+    <h1 class="mono" style="font-size: 17px;">{{ exp.experiment_id }}</h1>
+    <div class="detail-meta">
+      <span><b>Status</b>
+        <span class="pill {{ 'good' if exp.status == 'completed' else ('warn' if exp.status == 'partial' else 'bad') }}">{{ exp.status }}</span>
+      </span>
+      <span><b>When</b> {{ exp.record.get('timestamp', '—') }}</span>
+      <span><b>Environment</b> {{ exp.record.get('environment_label') or '—' }}</span>
+      {% if exp.record.get('operator_notes') %}<span><b>Notes</b> {{ exp.record['operator_notes'] }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="head-actions">
+    <a class="btn secondary" href="{{ file_url('experiment.json') }}" target="_blank">experiment.json</a>
+    <a class="btn secondary" href="{{ url_for('experiment_cutsheet', date=exp.date, exp_id=exp.experiment_id, fmt='png') }}">Cut sheet PNG</a>
+    <a class="btn secondary" href="{{ url_for('experiment_cutsheet', date=exp.date, exp_id=exp.experiment_id, fmt='pdf') }}">Cut sheet PDF</a>
+    <a class="btn" href="{{ url_for('experiment_zip', date=exp.date, exp_id=exp.experiment_id) }}">Download ZIP</a>
+  </div>
+</div>
+
+{% for warning in exp.record.get('warnings', []) %}
+  <div class="flash error" style="background: var(--warn-soft, #faf3df); color: #8a6410; border-color: #ecd9a8;">{{ warning }}</div>
+{% endfor %}
+
+<div class="compare-wrap">
+  <div class="compare" style="--cols: {{ exp.cameras | length }};">
+    <div></div>
+    {% for cam in exp.cameras %}
+    <div class="cam-col-head">
+      <span class="t">{{ camera_label(cam.name) }}</span>
+      <span class="fw mono">
+        {% set ident = (cam.capture or {}).get('camera') or {} %}
+        {% if ident.get('firmware') %}fw {{ ident['firmware'] }}{% elif ident.get('sensor') %}{{ ident['sensor'] }}{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+
+    <div class="rowlabel">Annotated</div>
+    {% for cam in exp.cameras %}
+    <div>
+      {% if cam.annotated_rel %}
+        <a class="imgbox" href="{{ file_url(cam.image_rel or cam.annotated_rel) }}" target="_blank" title="Open full-resolution raw capture">
+          <img src="{{ file_url(cam.annotated_rel) }}" alt="{{ cam.name }} annotated capture" loading="lazy" />
+        </a>
+        <div class="imgcap">
+          <span class="mono">
+            {% if cam.output.get('width') %}{{ cam.output['width'] }}×{{ cam.output['height'] }}{% endif %}
+            {% if cam.output.get('size_bytes') %} · {{ cam.output['size_bytes'] | fmt_bytes }}{% endif %}
+          </span>
+          <span>
+            {% if cam.image_rel %}<a href="{{ file_url(cam.image_rel) }}" target="_blank">raw</a>{% endif %}
+            <a href="{{ file_url(cam.annotated_rel) }}" target="_blank">annotated</a>
+          </span>
+        </div>
+      {% elif cam.image_rel %}
+        <a class="imgbox" href="{{ file_url(cam.image_rel) }}" target="_blank">
+          <img src="{{ file_url(cam.image_rel) }}" alt="{{ cam.name }} raw capture" loading="lazy" />
+        </a>
+        <div class="imgcap"><span>no annotation</span><span><a href="{{ file_url(cam.image_rel) }}" target="_blank">raw</a></span></div>
+      {% else %}
+        <div class="placeholder-fail">no capture{% if cam.error %} — {{ cam.error.get('code', 'failed') }}{% endif %}</div>
+      {% endif %}
+      {% if cam.error %}
+        <div class="errbox mono">{{ cam.name }}: {{ cam.error.get('code') }}: {{ cam.error.get('message') }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="rowlabel">Card crop</div>
+    {% for cam in exp.cameras %}
+    <div>
+      {% if cam.crop_rel %}
+        <a class="imgbox" href="{{ file_url(cam.crop_rel) }}" target="_blank" title="Open full-resolution crop">
+          <img src="{{ file_url(cam.crop_rel) }}" alt="{{ cam.name }} card crop" loading="lazy" />
+        </a>
+        <div class="imgcap">
+          <span class="mono">{{ (cam.detection or {}).get('crop_width', '—') }}×{{ (cam.detection or {}).get('crop_height', '—') }} rectified</span>
+          <span><a href="{{ file_url(cam.crop_rel) }}" target="_blank">card_crop.jpg</a></span>
+        </div>
+      {% else %}
+        <div class="placeholder-fail" style="aspect-ratio: 3 / 1;">
+          {% if cam.detection %}no card detected ({{ (cam.detection.get('tags_detected') or []) | length }}/{{ (cam.detection.get('expected_tags') or []) | length }} tags){% else %}no analysis{% endif %}
+        </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="rowlabel">Color check</div>
+    {% for cam in exp.cameras %}
+    <div>
+      {% set cc = color_checks.get(cam.name) %}
+      {% if cc %}
+        <div class="swatches">
+          {% for p in cc.patches %}
+          <span class="swatch" title="{{ p.name }} — expected {{ p.expected_rgb }} / measured {{ p.measured_rgb }} · ΔE {{ p.delta_e }}{% if p.group == 'grey' %} · Δluma {{ p.delta_luma }}{% endif %}">
+            <i style="background: {{ p.expected_css }};"></i><i style="background: {{ p.measured_css }};"></i>
+          </span>
+          {% endfor %}
+        </div>
+        <div class="swatch-note">
+          left = expected, right = measured ·
+          grey ΔE <b class="mono">{{ cc.grey_mean_delta_e }}</b> ·
+          color ΔE <b class="mono">{{ cc.color_mean_delta_e }}</b> ·
+          cast (R−B) <b class="mono">{{ cc.grey_cast_r_minus_b }}</b>
+        </div>
+      {% else %}
+        <div class="placeholder-fail" style="min-height: 40px;">no crop to sample</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<h2>Quantitative comparison <span style="font-weight: 400; color: var(--muted); text-transform: none;">— best value per row highlighted</span></h2>
+<div class="panel" style="overflow-x: auto;">
+  <table class="metrics" style="min-width: 720px;">
+    <thead>
+      <tr>
+        <th class="rowname"></th>
+        {% for cam in exp.cameras %}<th>{{ camera_label(cam.name) }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th class="rowname">Card detection</th>
+        {% for cam in exp.cameras %}
+        <td>
+          {% if cam.analysis_pass is none %}<span class="pill offline">n/a</span>
+          {% elif cam.analysis_pass %}<span class="pill good">pass</span>
+          {% else %}<span class="pill bad">fail</span>{% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% for row in comparison %}
+      <tr>
+        <th class="rowname">{{ row.label }}</th>
+        {% for value in row['values'] %}
+        <td class="{{ 'best' if loop.index0 in row.best }}">{{ value if value is not none else '—' }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      <tr>
+        <th class="rowname">SHA-256 verified</th>
+        {% for cam in exp.cameras %}
+        <td>{% if cam.output.get('sha256') %}✓{% else %}—{% endif %}</td>
+        {% endfor %}
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Downloads</h2>
+<div class="panel">
+  {% for f in files %}
+  <div class="dl-row">
+    <span class="mono">{{ f.rel }}</span>
+    <span class="dl-actions">
+      <span class="size mono">{{ f.size | fmt_bytes }}</span>
+      <a class="btn secondary small" href="{{ file_url(f.rel, dl=true) }}">Download</a>
+    </span>
+  </div>
+  {% endfor %}
+  <div class="dl-row" style="background: var(--surface-2);">
+    <span style="font-weight: 700;">Full experiment folder (ZIP)</span>
+    <a class="btn small" href="{{ url_for('experiment_zip', date=exp.date, exp_id=exp.experiment_id) }}">Download ZIP</a>
+  </div>
+</div>
+{% endblock %}

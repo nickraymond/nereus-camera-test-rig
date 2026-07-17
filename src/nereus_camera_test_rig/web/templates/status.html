@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Rig Status — Nereus Camera Test Rig{% endblock %}
+{% block content %}
+<h1>Rig Status</h1>
+<p class="subtitle">Connected cameras, health, and storage. Health checks run on page load.</p>
+
+<div class="panel summary-strip">
+  <div class="stat">
+    <div class="val mono">{{ checks | selectattr('health.healthy') | list | length }} / {{ checks | length }}</div>
+    <div class="lbl">cameras healthy</div>
+  </div>
+  <div class="stat">
+    <div class="val mono">{{ experiments_count }}</div>
+    <div class="lbl">experiments stored</div>
+  </div>
+  <div class="stat">
+    <div class="val mono">{{ disk_free }}</div>
+    <div class="lbl">disk free</div>
+  </div>
+  <div class="stat">
+    {% if last_experiment %}
+      <div class="val mono">{{ last_experiment.record.get('timestamp', last_experiment.experiment_id) }}</div>
+      <div class="lbl">last experiment ·
+        <span class="pill {{ 'good' if last_experiment.status == 'completed' else ('warn' if last_experiment.status == 'partial' else 'bad') }}">{{ last_experiment.status }}</span>
+      </div>
+    {% else %}
+      <div class="val mono">—</div>
+      <div class="lbl">no experiments yet</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="cam-grid">
+  {% for entry in checks %}
+  <div class="panel cam-card">
+    <div class="cam-head">
+      <span class="cam-name">{{ entry.label }}</span>
+      <span class="pill {{ 'good' if entry.health.healthy else 'bad' }}">
+        <span class="status-dot {{ 'good' if entry.health.healthy else 'bad' }}"></span>
+        {{ 'healthy' if entry.health.healthy else 'unavailable' }}
+      </span>
+    </div>
+    <dl>
+      <dt>Driver</dt><dd class="mono">{{ entry.config.get('driver', '—') }}</dd>
+      {% if entry.config.get('board') %}<dt>Board</dt><dd class="mono">{{ entry.config['board'] }}</dd>{% endif %}
+      {% if entry.health.get('serial_number') or entry.config.get('serial_number') %}
+        <dt>Serial</dt><dd class="mono">{{ entry.health.get('serial_number') or entry.config.get('serial_number') }}</dd>
+      {% endif %}
+      {% if entry.health.get('firmware') %}<dt>Firmware</dt><dd class="mono">{{ entry.health['firmware'] }}</dd>{% endif %}
+      {% if entry.health.get('port') %}<dt>Port</dt><dd class="mono">{{ entry.health['port'] }}</dd>{% endif %}
+      {% if entry.health.get('command') %}<dt>Command</dt><dd class="mono">{{ entry.health['command'] }}</dd>{% endif %}
+      {% if entry.health.get('cameras_detected') is not none and entry.health.get('cameras_detected') is defined %}
+        <dt>Detected</dt><dd class="mono">{{ entry.health.get('cameras_detected') }}</dd>
+      {% endif %}
+      {% if entry.health.get('error') %}<dt>Error</dt><dd class="mono" style="color: var(--bad)">{{ entry.health['error'] }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

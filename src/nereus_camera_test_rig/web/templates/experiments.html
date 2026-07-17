@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Experiments — Nereus Camera Test Rig{% endblock %}
+{% block content %}
+<h1>Experiments</h1>
+<p class="subtitle">All runs under <span class="mono">results/</span>, newest first. Click a row for the side-by-side comparison.</p>
+
+<div class="panel" style="overflow-x: auto;">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Experiment</th>
+        <th>Type</th>
+        <th>Environment</th>
+        <th>Cameras</th>
+        <th>Tags pass</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for exp in experiments %}
+      <tr class="rowlink"
+          onclick="window.location='{{ url_for('experiment_detail', date=exp.date, exp_id=exp.experiment_id) }}'">
+        <td>
+          <a class="exp-link mono" href="{{ url_for('experiment_detail', date=exp.date, exp_id=exp.experiment_id) }}">{{ exp.experiment_id }}</a><br>
+          <span style="font-size: 12px; color: var(--muted);">{{ exp.record.get('timestamp', '') }}</span>
+        </td>
+        <td>{{ exp.record.get('experiment_type', '—') }}</td>
+        <td>{{ exp.record.get('environment_label') or '—' }}</td>
+        <td class="mono">{{ exp.cameras_ok }} / {{ exp.cameras | length }}</td>
+        <td class="mono">{% if exp.analyses_total %}{{ exp.analyses_pass }} / {{ exp.analyses_total }}{% else %}—{% endif %}</td>
+        <td>
+          <span class="pill {{ 'good' if exp.status == 'completed' else ('warn' if exp.status == 'partial' else 'bad') }}">{{ exp.status }}</span>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="color: var(--muted); text-align: center; padding: 28px;">
+        No experiments yet — run one from the <a class="exp-link" href="{{ url_for('new_experiment') }}">New Experiment</a> page.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
