@@ -152,6 +152,26 @@ def _capture_one_camera(
         write_capture_metadata(cap_dir / "capture.json", result)
         return CameraOutcome(camera_name=name, result=result)
 
+    # Stale-state hygiene (CLAUDE.md §10 — one variable at a time): boards stay powered
+    # between experiments and firmware AWB state can survive the per-capture
+    # ``sensor.reset()`` (AE3 green cast after lights-off runs, 2026-07-16). When the
+    # camera profile asks for it, hard-reset the board so this experiment starts from
+    # fresh firmware state. Best-effort: a board that can't reset (older deployed board
+    # code, transient USB trouble) still gets its capture attempt.
+    if profile.get("reset_before_capture"):
+        reset = getattr(device, "reset_board", None)
+        if callable(reset):
+            try:
+                r = reset()
+                logger.info(
+                    "camera %s: board hard-reset before capture (%.1fs to ready)",
+                    name, r.get("duration_seconds", 0.0),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "camera %s: reset_before_capture failed (continuing): %s", name, exc
+                )
+
     # Handshake first so the recorded identity carries the device-reported board +
     # firmware (Spec §5 requires firmware in every experiment record; §12 identity).
     # Best-effort: a board that can't answer info can still attempt a capture.

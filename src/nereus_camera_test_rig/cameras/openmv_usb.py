@@ -43,6 +43,8 @@ DEFAULT_BAUD = 115200
 DEFAULT_TIMEOUT = 5.0
 CAPTURE_TIMEOUT = 30.0
 TRANSFER_TIMEOUT = 30.0
+# Hard reset + USB re-enumeration + service boot measured ~3.5 s on the AE3; allow slack.
+RESET_TIMEOUT = 20.0
 _READ_CHUNK = 4096
 
 
@@ -238,6 +240,48 @@ class OpenMvUsbCamera(CameraDevice):
         return self._failed(
             identity, request, "not_supported",
             "capture_video not implemented for OpenMV yet (OQ-4)", 0.0,
+        )
+
+    def reset_board(self, timeout: float = RESET_TIMEOUT) -> dict[str, Any]:
+        """Hard-reset the board and wait until its capture service answers again.
+
+        Clears firmware 3A state that survives the board's per-capture ``sensor.reset()``
+        (stale AWB observed on the AE3 after lights-off runs, 2026-07-16 — only a hard
+        reset recovered neutral color). The board acks, then ``machine.reset()``s; the
+        USB CDC device drops and re-enumerates, possibly under a *different*
+        ``/dev/ttyACM*`` number, so the port is re-resolved by USB serial (§12).
+
+        Returns ``{"duration_seconds": ..., "info": <device info>}`` on success. Raises
+        ``OpenMvError`` if the board rejects the command (e.g. pre-reset_board firmware)
+        or does not come back within ``timeout``.
+        """
+        started = time.monotonic()
+        self._command("reset_board")
+        if not self._owns_transport:
+            # Injected transport (tests/loopback): no real USB to re-enumerate — just
+            # re-handshake over the same transport.
+            return {
+                "duration_seconds": time.monotonic() - started,
+                "info": self.get_device_info(),
+            }
+        deadline = started + timeout
+        last_error: Optional[Exception] = None
+        while time.monotonic() < deadline:
+            self.close()
+            self._port = None  # ttyACM numbering can change across re-enumeration
+            time.sleep(0.5)
+            try:
+                return {
+                    "duration_seconds": time.monotonic() - started,
+                    "info": self.get_device_info(),
+                }
+            except Exception as exc:  # not back yet (port gone / mid-boot) — retry
+                last_error = exc
+        self.close()
+        raise OpenMvError(
+            "reset_timeout",
+            "board did not return within %.0fs of reset_board (serial=%r): %s"
+            % (timeout, self._serial_number, last_error),
         )
 
     def health_check(self) -> dict[str, Any]:

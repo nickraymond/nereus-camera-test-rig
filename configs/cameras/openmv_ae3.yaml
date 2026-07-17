@@ -10,6 +10,13 @@ board: "ae3"
 device_id: "openmv-ae3-001"     # stable logical label; hardware identity is the USB serial
 firmware: "1.25.0-preview"      # os.uname().release, verified 2026-07-15
 
+# Hard-reset the board before each coordinated capture (~4 s). The board stays powered
+# between experiments and this firmware's AWB state can survive sensor.reset(): after
+# lights-off runs on 2026-07-16 every capture had a strong green cast (grey dE 39.7)
+# until a hard reset. This firmware exposes no AWB control for the PAG7936, so a hard
+# reset is the only in-band cure. Cheap insurance for experiment discipline (§10).
+reset_before_capture: true
+
 # Capture settings — verified supported on the AE3/PAG7936 firmware (recon 2026-07-15).
 image:
   framesize: "HD"               # 1280x800 (max); also supported: VGA (640x400), QVGA (320x200)
