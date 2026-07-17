@@ -17,7 +17,7 @@ def build(board_config):
     and add the MicroPython/machine strings that recon found useful for the down-select.
     """
     u = os.uname()
-    return {
+    info = {
         "platform": "openmv",
         "board": board_config.BOARD,
         "device_id": board_config.DEVICE_ID,
@@ -28,3 +28,14 @@ def build(board_config):
         "machine": u.machine,       # e.g. "OpenMV N6 with STM32N657X0"
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
     }
+    # Free/total bytes on the capture transfer buffer (/flash). Cheap (one statvfs) and
+    # makes a filling filesystem visible in health checks *before* captures start failing
+    # with io_error (the N6 hit 0 bytes free on 2026-07-17). Capability-probed so a
+    # firmware without statvfs simply omits the fields.
+    try:
+        st = os.statvfs("/flash")
+        info["flash_free_bytes"] = st[1] * st[3]   # f_frsize * f_bfree
+        info["flash_total_bytes"] = st[1] * st[2]  # f_frsize * f_blocks
+    except (OSError, AttributeError):
+        pass
+    return info
