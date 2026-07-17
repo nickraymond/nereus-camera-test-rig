@@ -75,6 +75,34 @@ def test_repeated_capture_with_checksums(tmp_path):
     assert len(set(shas)) == 3
 
 
+def test_reset_board_returns_to_service(tmp_path):
+    """reset_board hard-resets the MCU; the service must come back and capture cleanly.
+
+    On this board the hard reset is the *only* in-band cure for stale firmware AWB
+    state: fw 1.25.0-preview exposes no AWB control for the PAG7936, and after the
+    2026-07-16 lights-off runs every capture kept a strong green cast (grey dE 39.7)
+    across per-capture ``sensor.reset()`` calls until a manual ``mpremote reset``.
+    """
+    _ae3_port()
+    cam = OpenMvUsbCamera(serial_number=AE3_SERIAL, board="ae3")
+    try:
+        out = cam.reset_board()
+        assert out["info"]["board"] == "ae3"
+        assert 0 < out["duration_seconds"] < 20
+        dest = tmp_path / "after_reset.jpg"
+        result = cam.capture_image(
+            str(dest),
+            CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800}),
+        )
+        assert result.ok, result.error
+        assert dest.is_file() and dest.stat().st_size > 1000
+        # The settled 3A state is recorded so a stale-state capture is diagnosable (§12).
+        assert result.sensor_metadata.get("exposure_us") is not None
+        assert result.sensor_metadata.get("gain_db") is not None
+    finally:
+        cam.close()
+
+
 def test_rejects_unknown_action():
     port = _ae3_port()
     bad = {"version": 1, "command_id": "bad", "action": "exec_python"}
