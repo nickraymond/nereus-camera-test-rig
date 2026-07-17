@@ -149,6 +149,27 @@ def reset_board(usb, command_id):
     machine.reset()
 
 
+def delete_file(filename):
+    """Delete one stored file from STORAGE_DIR, returning output metadata.
+
+    The flash copy is only a transfer buffer — the authoritative raw evidence is the
+    checksum-verified copy on the Pi (§10, §11 raw-data rule). Without cleanup every
+    uniquely-named capture accumulates until the filesystem is full (the N6 hit 0 bytes
+    free on 2026-07-17 and every capture failed with io_error "Write failed"). Same
+    ``_safe_basename`` guard as ``get_file`` so a request can never reach outside
+    STORAGE_DIR. A missing file is a structured ``file_not_found`` failure — the host
+    treats deletion as best-effort and never fails a capture over it.
+    """
+    name = _safe_basename(filename)
+    path = STORAGE_DIR + "/" + name
+    try:
+        size = os.stat(path)[6]
+        os.remove(path)
+    except OSError:
+        raise cp.ProtocolError(cp.ERR_FILE_NOT_FOUND, "no such file: " + name)
+    return {"filename": name, "deleted": True, "size_bytes": size}
+
+
 def send_file(usb, command_id, filename):
     """Stream a stored file to the host, length-framed per §10.
 

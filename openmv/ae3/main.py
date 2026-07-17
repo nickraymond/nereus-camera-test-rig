@@ -94,6 +94,10 @@ def _handle_line(usb, line):
         elif action == "get_file":
             # send_file emits its own framed response(s).
             capture_service.send_file(usb, command_id, settings.get("filename"))
+        elif action == "delete_file":
+            # Post-retrieval cleanup — the flash copy is only a transfer buffer.
+            output = capture_service.delete_file(settings.get("filename"))
+            _send(usb, cp.completed_response(command_id, output))
         elif action == "start_stream":
             # Blocks in a focus-stream loop until the host sends any byte (§ focus stream).
             capture_service.stream_frames(usb, command_id, board_config, settings)
