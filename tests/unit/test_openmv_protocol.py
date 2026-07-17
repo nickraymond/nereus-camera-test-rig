@@ -118,3 +118,12 @@ def test_frame_response_shape():
     assert fr["frame"] == {
         "seq": 3, "size_bytes": 2048, "sharpness": 2048, "width": 640, "height": 400,
     }
+
+
+def test_reset_board_is_allowlisted():
+    # reset_board acks then machine.reset()s — the in-band cure for firmware 3A state
+    # that survives sensor.reset() (stale AWB after lights-off runs, 2026-07-16).
+    assert cp.is_allowed("reset_board")
+    action, cid, settings = cp.validate_request(cp.make_request("reset_board", "cid"))
+    assert action == "reset_board"
+    assert settings == {}
