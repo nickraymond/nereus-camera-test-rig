@@ -365,6 +365,10 @@ class OpenMvUsbCamera(CameraDevice):
                 "pixel_format": output.get("pixel_format"),
                 "jpeg_quality": output.get("jpeg_quality"),
                 "mount_rotation_deg": output.get("mount_rotation_deg"),
+                # Settled 3A state at snapshot time (§12): a normal scene captured at
+                # extreme exposure/gain is the stale-sensor-state signature.
+                "exposure_us": output.get("exposure_us"),
+                "gain_db": output.get("gain_db"),
             },
         )
 
