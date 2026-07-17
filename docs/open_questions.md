@@ -58,6 +58,24 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   coordinated PR (re-verify both boards' framesizes/pixformats on the new API — do not assume the
   legacy allowlist carries over). Note the Alif AE3 has **no `pyb`** on any firmware, so the
   `sys.stdin/stdout` USB shim in `openmv/ae3/main.py` stays regardless of firmware.
+- **[NEEDS-HARDWARE] OQ-20 — AE3 stale-AWB green cast: physical lights-off re-verification.**
+  Observed 2026-07-16: after lights-off runs the AE3 produced a strong green cast (grey ΔE
+  39.7, green-excess ~35 vs normal ~3) on *every* subsequent capture until a manual
+  `mpremote reset`; the N6 recovered on its own. Hardware recon (2026-07-17): the PAG7936 is
+  corrected by a **firmware software AWB** — the N6 (fw 1.26.0) exposes its gains
+  (`get_rgb_gain_db()` ≈ R +4.9 dB / G 0 / B +4.8 dB, i.e. compensating native Bayer green
+  dominance) and reconverges per frame, while the AE3 (fw 1.25.0-preview) exposes **no AWB
+  control at all** (`set_auto_whitebal`/`get_rgb_gain_db` → "not supported"), so when its AWB
+  state goes stale nothing callable from MicroPython can fix it short of `machine.reset()`.
+  The fix (`reset_board` command + coordinator `reset_before_capture`) automates the exact
+  manual remedy that cured the field failure, and was verified end-to-end against a
+  software-poisoned sensor (stuck auto-exposure surviving autos+2 s settle; post-reset
+  green-excess 0.2–2.8, well under the <8 gate). The *true* lights-off green cast could not
+  be reproduced remotely (needs physically dark scene for minutes) — re-run the real
+  scenario once someone is at the rig: lights-off experiment → lights-on experiment, confirm
+  the lights-on captures have green-excess < 8 with no manual reset. Also note the OQ-19
+  v5.0.0 firmware exposes AWB controls on the AE3 line and may make it self-recover like the
+  N6 — re-test after that update.
 
 ## IMX708 / Pi capture
 

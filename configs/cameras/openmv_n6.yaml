@@ -9,6 +9,12 @@ board: "n6"
 device_id: null                 # assigned/discovered via USB handshake (OQ-2)
 firmware: null                  # real value once a board is in hand (OQ-5)
 
+# Hard-reset the board before each coordinated capture (~4 s), clearing any firmware 3A
+# state left by a previous experiment (stale-AWB hazard observed on the AE3 2026-07-16;
+# the N6's firmware recovered on its own, but the reset keeps every experiment starting
+# from the same known state — one variable at a time, CLAUDE.md §10).
+reset_before_capture: true
+
 # Illustrative capture settings from Spec §8 — verify supported values (OQ-1).
 image:
   framesize: "native"           # UNVERIFIED

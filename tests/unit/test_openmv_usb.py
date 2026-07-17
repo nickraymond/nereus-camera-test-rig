@@ -75,6 +75,9 @@ class FakeBoard:
                 self._do_capture(command_id, settings)
             elif action == "get_file":
                 self._do_get_file(command_id, settings.get("filename"))
+            elif action == "reset_board":
+                # Real board acks then machine.reset()s; the loopback just acks.
+                self._emit(cp.completed_response(command_id, {"resetting": True}))
         except cp.ProtocolError as exc:
             self._emit(cp.failed_response(command_id, exc.code, exc.message))
 
@@ -173,6 +176,37 @@ def test_only_allowlisted_actions_are_sent(tmp_path):
     cam.capture_image(str(tmp_path / "i.jpg"), CaptureRequest(kind="image"))
     assert set(board.seen_actions) <= set(cp.ALLOWED_ACTIONS)
     assert board.seen_actions == ["capture_image", "get_file"]
+
+
+def test_reset_board_acks_and_rehandshakes():
+    # Loopback path: command is acked, then the adapter re-handshakes and returns the
+    # fresh device info (real serial additionally re-resolves the port by USB serial).
+    board = FakeBoard()
+    cam = OpenMvUsbCamera(serial_number="s", transport=board)
+    out = cam.reset_board()
+    assert out["info"]["board"] == "n6"
+    assert out["duration_seconds"] >= 0
+    assert board.seen_actions == ["reset_board", "get_device_info"]
+
+
+def test_reset_board_rejected_by_old_firmware():
+    # A board still running pre-reset_board code rejects via the allowlist; the adapter
+    # must surface the structured error (the coordinator treats it as best-effort).
+    class OldFirmwareBoard(FakeBoard):
+        def _handle(self, line):
+            req = cp.decode_message(line)
+            cid = req.get("command_id")
+            if req.get("action") == "reset_board":
+                self._emit(cp.failed_response(cid, cp.ERR_UNKNOWN_ACTION, "not allowed"))
+            else:
+                super()._handle(line)
+
+    cam = OpenMvUsbCamera(serial_number="s", transport=OldFirmwareBoard())
+    try:
+        cam.reset_board()
+        assert False, "expected OpenMvError"
+    except Exception as exc:
+        assert getattr(exc, "code", None) == cp.ERR_UNKNOWN_ACTION
 
 
 class _Canned:

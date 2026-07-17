@@ -97,6 +97,10 @@ def _handle_line(usb, line):
         elif action == "start_stream":
             # Blocks in a focus-stream loop until the host sends any byte (§ focus stream).
             capture_service.stream_frames(usb, command_id, board_config, settings)
+        elif action == "reset_board":
+            # Acks then machine.reset()s — never returns; the board reboots into this
+            # service with fresh firmware 3A state (stale-AWB hazard, capture_service).
+            capture_service.reset_board(usb, command_id)
         else:  # pragma: no cover - validate_request already gates the allowlist
             _send(usb, cp.failed_response(command_id, cp.ERR_UNKNOWN_ACTION, action))
     except cp.ProtocolError as exc:

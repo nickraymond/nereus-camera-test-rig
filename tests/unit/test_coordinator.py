@@ -197,3 +197,54 @@ def test_camera_subset_and_no_analysis(tmp_path):
     assert out.status == "completed"
     assert out.camera_outcomes[0].analysis is None
     assert not out.paths.analysis_root.exists()
+
+
+def test_reset_before_capture_profile_flag(tmp_path):
+    """A profile with reset_before_capture triggers a board hard-reset ahead of the
+    capture; a reset failure is best-effort and never blocks the capture (§11)."""
+    blank = _blank_jpeg()
+
+    class ResettableCamera(FakeCamera):
+        reset_calls = 0
+        fail_reset = False
+
+        def reset_board(self):
+            type(self).reset_calls += 1
+            if type(self).fail_reset:
+                raise RuntimeError("board did not come back")
+            return {"duration_seconds": 0.1, "info": {"board": "n6"}}
+
+    registry.clear()
+    registry.register(
+        "openmv_usb", lambda **kw: ResettableCamera(source_bytes=blank)
+    )
+
+    profile = tmp_path / "n6_profile.yaml"
+    profile.write_text("reset_before_capture: true\nimage:\n  framesize: HD\n")
+    config = {
+        "rig": {"id": "test-rig", "results_directory": "unused"},
+        "cameras": {
+            "openmv_n6": {"enabled": True, "driver": "openmv_usb", "board": "n6",
+                          "serial_number": N6_SERIAL, "profile": str(profile)},
+        },
+    }
+
+    out = run_experiment(config, "reference_card", results_root=tmp_path / "a",
+                         when=WHEN, analysis=False)
+    assert ResettableCamera.reset_calls == 1
+    assert out.status == "completed"
+
+    # Reset failure -> logged, capture still succeeds (best-effort hygiene).
+    ResettableCamera.fail_reset = True
+    out = run_experiment(config, "reference_card", results_root=tmp_path / "b",
+                         when=WHEN, analysis=False)
+    assert ResettableCamera.reset_calls == 2
+    assert out.status == "completed"
+
+    # Without the profile flag no reset is attempted.
+    profile.write_text("image:\n  framesize: HD\n")
+    ResettableCamera.fail_reset = False
+    out = run_experiment(config, "reference_card", results_root=tmp_path / "c",
+                         when=WHEN, analysis=False)
+    assert ResettableCamera.reset_calls == 2
+    assert out.status == "completed"

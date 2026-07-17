@@ -73,6 +73,33 @@ def test_repeated_capture_with_checksums(tmp_path):
     assert len(set(shas)) == 3
 
 
+def test_reset_board_returns_to_service(tmp_path):
+    """reset_board hard-resets the MCU; the service must come back and capture cleanly.
+
+    This is the automated form of the manual ``mpremote reset`` that cleared the AE3's
+    stuck-AWB green cast on 2026-07-16 (firmware 3A state survives ``sensor.reset()``).
+    Measured ~3.2-3.7 s to service-ready on both boards.
+    """
+    _n6_port()
+    cam = OpenMvUsbCamera(serial_number=N6_SERIAL, board="n6")
+    try:
+        out = cam.reset_board()
+        assert out["info"]["board"] == "n6"
+        assert 0 < out["duration_seconds"] < 20
+        dest = tmp_path / "after_reset.jpg"
+        result = cam.capture_image(
+            str(dest),
+            CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800}),
+        )
+        assert result.ok, result.error
+        assert dest.is_file() and dest.stat().st_size > 1000
+        # The settled 3A state is recorded so a stale-state capture is diagnosable (§12).
+        assert result.sensor_metadata.get("exposure_us") is not None
+        assert result.sensor_metadata.get("gain_db") is not None
+    finally:
+        cam.close()
+
+
 def test_rejects_unknown_action():
     port = _n6_port()
     bad = {"version": 1, "command_id": "bad", "action": "exec_python"}

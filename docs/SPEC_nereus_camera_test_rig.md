@@ -224,6 +224,15 @@ Newline-delimited JSON over USB serial. Command allowlist only — **no arbitrar
  "error":{"code":"capture_failed","message":"Sensor snapshot failed"}}
 ```
 
+```json
+// reset_board — ack then hard MCU reset (machine.reset); the board re-enumerates and the
+// service returns in ~3.5 s. Clears firmware 3A (AWB) state that survives sensor.reset()
+// (stale-AWB green cast on the AE3 after lights-off runs, 2026-07-16 — see OQ-20). The
+// coordinator sends it before capture when the camera profile sets reset_before_capture.
+{"version":1,"command_id":"abc-004","action":"reset_board"}
+{"version":1,"command_id":"abc-004","status":"completed","output":{"resetting":true}}
+```
+
 ---
 
 ## 9. Pi Capture Behavior
@@ -249,6 +258,8 @@ Validate: expected byte count, checksum, timeout behavior, interrupted-transfer 
 ## 11. Capture Coordination (Phase 5 detail)
 
 Three-camera still capture: create experiment record → timestamped capture-set dir → capture IMX708 → request N6 → request AE3 → collect outputs → checksums → write raw metadata → run reference-card analysis → write analysis results → update web UI.
+
+OpenMV boards are hard-reset (`reset_board`, §8) before their capture when the camera profile sets `reset_before_capture` (~3.5 s/board) — boards stay powered between experiments and firmware AWB state can survive the per-capture `sensor.reset()`, so one extreme-lighting run could otherwise poison the next (OQ-20; CLAUDE.md §10). Best-effort: a board that can't reset still gets its capture attempt.
 
 **Failure behavior:** if one camera fails, continue with the rest, mark the failed device in metadata, retain successful files, return partial success, and never delete the experiment folder.
 

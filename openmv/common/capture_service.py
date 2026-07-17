@@ -12,6 +12,18 @@ verify the round-trip (§10, §19: trust artifacts, not exit codes).
 
 Runs on the board under MicroPython. Uses the legacy ``sensor`` API (verified present
 and sufficient on OPENMV_N6 firmware 1.26.0).
+
+Stale-3A-state hazard (observed on hardware 2026-07-16): the boards stay powered between
+experiments, and firmware auto-white-balance state can outlive ``sensor.reset()``. After
+lights-off runs the AE3 (fw 1.25.0-preview) produced a strong green cast on *every* later
+capture — its firmware exposes no AWB control (``set_auto_whitebal`` /
+``get_rgb_gain_db`` report "not supported" for the PAG7936) so nothing callable from
+MicroPython could clear it; only a hard MCU reset did. The N6 (fw 1.26.0) exposes working
+AWB gains and reconverges per frame, so it recovered on its own. Hence ``reset_board``
+below: an allowlisted command that acks then ``machine.reset()``s — the coordinator sends
+it before capture so one extreme-lighting run can't poison the next (CLAUDE.md §10, one
+variable at a time). ``capture_image`` additionally reports the settled exposure/gain so
+a poisoned capture is diagnosable from its metadata alone (§12).
 """
 
 import binascii
@@ -95,7 +107,7 @@ def capture_image(board_config, settings):
     path = STORAGE_DIR + "/" + name
     img.save(path, quality=quality)
     size = os.stat(path)[6]
-    return {
+    out = {
         "filename": name,
         "width": img.width(),
         "height": img.height(),
@@ -107,6 +119,34 @@ def capture_image(board_config, settings):
         "sha256": _sha256_file(path),
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
     }
+    # Settled 3A state at snapshot time (§12 exposure settings where available). Makes a
+    # stuck auto-exposure/AWB episode diagnosable from capture.json alone: a "normal"
+    # scene captured at extreme exposure/gain is the stale-state signature. Capability-
+    # probed, not board-branched — unsupported controls just omit the fields.
+    try:
+        out["exposure_us"] = sensor.get_exposure_us()
+        out["gain_db"] = sensor.get_gain_db()
+    except Exception:
+        pass
+    return out
+
+
+def reset_board(usb, command_id):
+    """Ack the command, then hard-reset the MCU (never returns).
+
+    ``machine.reset()`` is the verified remedy for firmware 3A state that survives
+    ``sensor.reset()`` (the manual ``mpremote reset`` that cleared the AE3's stuck-AWB
+    green cast on 2026-07-16 — see module docstring). The ack is written first and given
+    a moment to drain over USB CDC so the host sees a structured completion before the
+    port drops and re-enumerates (~3.5 s to service-ready, measured on the AE3).
+    """
+    usb.write(cp.encode_message(
+        cp.completed_response(command_id, {"resetting": True})
+    ))
+    time.sleep_ms(250)  # let the CDC buffer flush before the port disappears
+    import machine
+
+    machine.reset()
 
 
 def send_file(usb, command_id, filename):
