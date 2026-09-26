@@ -35,9 +35,25 @@ web = [
     "Flask>=3.0",
     "Pillow>=10.0",
 ]
+# Phase 8 edge color correction (SPEC §20). Lists its own deps — never pulls in
+# [analysis], whose pillow-heif carries a GPL classifier. Every package in base + [color]
+# must be reviewed in configs/licenses.yaml (`make license-check`). The PyPI OpenCV wheel
+# is dev_only: it bundles FFmpeg + GPL codecs, so shipped installs need a GPL-free build
+# (OQ-36, `make license-check-shipped`).
+color = [
+    "numpy>=1.24",
+    "opencv-contrib-python-headless>=4.8",
+    "tifffile>=2023.1",
+]
+# Mac-only TG-7 analysis tools (host_tools/tg7/). rawpy bundles LGPL LibRaw: internal use
+# only, never imported from src/ (SPEC §20).
+tg7 = [
+    "rawpy>=0.19",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
+    "packaging>=23.0",   # host_tools/license_check.py parses requirement markers
 ]
 
 [project.scripts]
