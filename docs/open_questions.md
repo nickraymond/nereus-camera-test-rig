@@ -133,6 +133,10 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 - **[OPEN] OQ-14 — HEIC in the eval rig.** Prior art produces HEIC only for BM transmission.
   For evaluation we default to JPEG (raw evidence) and treat HEIC as optional via
   `pillow_heif`. Confirm whether HEIC output is needed for any down-select metric.
+  *Update 2026-09-26:* `pillow-heif` was dropped from the `[analysis]` extra — nothing
+  imported it (the planned HEIC-encode port was never built) and its wheels carry a GPLv2
+  classifier (SPEC §20 licence policy). If HEIC is needed later, add it to an internal-only
+  extra with a `configs/licenses.yaml` review; it must not enter the shipped closure.
 - **[RESOLVED] OQ-15 — Target Pi model / OS version.** `nereus000` = Raspberry Pi 5
   (BCM2712), Debian 13 "trixie", aarch64, Python 3.13, kernel 6.18. More memory/CPU than the
   Pi Zero 2W the prior art was tuned for, so the isolated-subprocess memory workarounds are
