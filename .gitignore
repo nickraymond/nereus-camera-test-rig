@@ -34,3 +34,13 @@ diagnostics_*.tar.gz
 
 # Test fixtures are curated evidence and ARE committed — re-include them.
 !tests/fixtures/**
+
+# --- Source datasets (large RAW camera files): keep local, never commit ---
+/data/*
+!/data/.gitkeep
+*.orf
+*.ORF
+*.dng
+*.DNG
+*.raw
+*.bayer
