@@ -50,7 +50,7 @@ Build a rig where a Raspberry Pi is the central coordinator and:
 - Mac-hosted test/analysis tools.
 
 ### In scope (Phase 8 — added 2026-09-26)
-- **Automatic underwater color correction** ("Nereus physics v0"), as Phase 8 (§4, §20). Built first as a Mac-side, re-runnable tool on the TG-7 Channel Islands RAW dataset; rig work (RAW capture, calibration, pool sweep, soak) follows **only if** the S2 decision gate says go. It lives in its own `color/` module and must not destabilize the Phase 0–6 capture path.
+- **Automatic underwater color correction** ("Nereus physics v0"), as Phase 8 (§4, §20). Built first as a Mac-side, re-runnable tool on the TG-7 Channel Islands RAW dataset; rig work (RAW capture, calibration, pool sweep, soak) follows **only if** the S2a decision gate says go. Goal: realistic, colorimetric color for all customers, not a site look. It lives in its own `color/` module and must not destabilize the Phase 0–6 capture path.
 - The Phase 8 pool soak (P5) runs as a **simple foreground experiment loop** (`nereus-rig soak`: capture → correct → append metrics, sleep, repeat). It is **not** a daemon: no service unit, watchdog, auto-restart or production scheduler.
 
 ### Out of scope (do not build)
@@ -70,7 +70,7 @@ Inspect these before writing new code. Reuse proven capture/analysis logic; do *
 | `github.com/nickraymond/bm_rpi_camera_module` | Modular camera handlers, image/video command patterns, adapter concepts, status responses | BM daemon architecture |
 | `github.com/appliedoceansciences/borealis_sbc` | *Lessons only:* separating acquisition from processing, clear interface boundaries, testable modules | BM serial functionality |
 | `bm_cam_legacy/device_profiles/bmcam001/camera_schedule.yaml` | *Phase 8:* the `bmcam001` field recipe, replicated as Arm A of the rig A/B (design brief §9) | — |
-| `nereus-vision-dev` `backend/app/services/processing/grvi.py` | *Phase 8:* the current backend correction (GRVI, processor `cheeca_v3`) as the **S2 baseline**, called unmodified from a local checkout on the Mac (OQ-31) | Do not vendor, port or re-tune it here |
+| `nereus-vision-dev` `backend/app/services/processing/grvi.py` | *Phase 8:* the current backend correction (GRVI, processor `cheeca_v3`) as an **S2a baseline**, called unmodified from a local checkout on the Mac (OQ-31) | Do not vendor, port or re-tune it here |
 
 ---
 
@@ -127,42 +127,53 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - **Exit:** Each profile runs from a config file and produces a self-contained, comparable result folder.
 
 ### Phase 8 — Edge color correction
-Detail: [`docs/DESIGN_edge_color_correction.md`](DESIGN_edge_color_correction.md) (v0.3, "the brief") + §20 below. Phase 8 does not depend on Phase 7; S0–S2 run on the Mac with no rig hardware.
+Detail: [`docs/DESIGN_edge_color_correction.md`](DESIGN_edge_color_correction.md) (v0.3, "the brief") + §20 below (§20 wins where they differ). Phase 8 does not depend on Phase 7; S0–S2 run on the Mac with no rig hardware.
 
-**Main deliverable (brief §1a):** a tool that re-runs on a new dataset with **no code changes** — card and camera as config files, one saved-output command per stage (`ingest → locate → qc → fit → correct → report`), one standard HTML report per run. The TG-7 Channel Islands set is its first input. **S2 ends in a go/no-go decision gate**; S3–S8 (rig work) wait for it.
+**Product intent (Nick, 2026-09-26):** realistic, colorimetric color correction for every customer — as close to the true scene color as possible. Not a site "look": the Cheeca Reef GRVI rendering was a proof of concept and is not a target to imitate or beat on style.
+
+**Main deliverable (brief §1a):** a tool that re-runs on a new dataset with **no code changes** — card and camera as config files, one saved-output stage per step (`ingest → locate → qc → fit → correct → report`), one standard HTML report per run. The TG-7 Channel Islands set is its first input. **S2a ends in the go/no-go decision gate**; S3–S8 (rig work) wait for it. S2b (after the TG-7 reshoot) measures how much better calibration data improves the result.
+
+Plan reviewed 2026-09-26 by three independent reviewers (color science, architecture, fact-check); their verified findings are folded into the items below and §20.
 
 #### S0 — Foundations (Mac)
-- [~] SPEC amendment: Phase 8 in the Build Plan, §2 scope, §20, open questions OQ-21…OQ-35. *(this PR)*
-- [ ] `color/` package scaffold, import-isolated from the capture path (no `web`/`cameras`/`capture`/`controller`/serial imports — test-enforced).
-- [ ] Card as config: `configs/cards/nereus_v2.yaml` (tag map, expand factors, canonical size, patch boxes, design truth with `source: design_values`), loaded by `color/card.py`. A test pins it to `template_layout.json` / `web/color_check.py` so the values can't drift. Physical dimensions left `null` until measured (OQ-32).
-- [ ] Dependency split + license check: `[color]` runtime extra (MIT/BSD/Apache-2.0 only, OQ-33), `[tg7]` Mac-only extra (`rawpy`). `make license-check` walks the runtime dependency closure and fails on anything off the allowlist; a test fails if anything under `src/` imports `rawpy`.
-- [ ] `color/raw_io.py`: the `RawFrame` contract (CFA mosaic, CFA pattern, black/white level, as-shot WB, exposure, ISO, source metadata) + L0 decode (black subtract, white normalize, clip mask, 2×2 superpixel binning, bilinear demosaic), all four Bayer patterns. DNG reader via `tifffile`.
-- [ ] Mac-only ORF reader in `host_tools/tg7/` (`rawpy` + `exiftool`) → the same `RawFrame`, plus EXIF: `WaterDepth`, `DateTimeUTC`, exposure, ISO, f-number, focal length, flash fired.
-- [ ] `inspect` stage command (`python -m host_tools.color inspect <file>`).
-- **Exit:** `inspect` on a TG-7 ORF and on an IMX708 DNG each prints dimensions, CFA pattern, black/white level, exposure/ISO (+ depth and UTC time for the ORF), per-channel linear means and clip %, and writes a linear preview PNG under `results/`. License check and unit tests green. *(The DNG half needs one IMX708 DNG sample — OQ-24.)*
+- [~] SPEC amendment: Phase 8 in the Build Plan, §2 scope, §20, open questions OQ-21…OQ-38. *(this PR)*
+- [ ] `color/` package scaffold. Import boundary checked **at runtime**: a test imports `nereus_camera_test_rig.color` in a subprocess and fails if `web`, `cameras`, `capture`, `controller`, `serial` or `rawpy` is in `sys.modules`. Worktree-safe tests: pytest `pythonpath = ["src", "."]` and `make test VENV=…`, so a branch's tests run the branch's code (today the shared venv's editable install points at the main checkout).
+- [ ] Card as config: `configs/cards/nereus_v2.yaml` is the **single source of truth** for the V2 card (§20): patch boxes from `tests/fixtures/reference_card/template_layout.json`; truth values from the backend's SVG design fills (`source: design_svg_2026-09-01`); tag IDs + tag centres/edge length in canonical coordinates; sub-patch boxes (grey 128 left/right) for the damage map; `physical_mm` fields `null` until measured (OQ-32). Loaded by `color/card.py`. A test pins the geometry to `template_layout.json`. `web/color_check.py` is not changed; its known differences (±1–2 counts, shifted colour names, centres up to ~19 px off) are recorded in the YAML header.
+- [ ] Licence policy + check (§20): `configs/licenses.yaml` — a reviewed table (package, declared licence, bundled native libraries, decision). A test reads the base + `[color]` dependencies from `pyproject.toml`, walks their installed requirements, and fails on any package not in the table or with a GPL/AGPL classifier. `[color]` = numpy, OpenCV (**built without FFmpeg / GPL codecs**, OQ-36), tifffile — it lists its own deps and does not pull in `[analysis]`. Mac-only `[tg7]` = rawpy, matplotlib. `make install-color` / `make install-tg7`; exiftool + rawpy setup in `docs/hardware_setup.md`.
+- [ ] Separate small PR: drop the unused `pillow-heif` from `[analysis]` (GPL classifier; nothing in `src/`, `host_tools/` or `tests/` imports it).
+- [ ] `color/raw_io.py`: the `RawFrame` contract (CFA mosaic, CFA pattern, **per-frame, per-channel** black level, white level, valid crop, as-shot WB, embedded colour matrix if any, exposure time, ISO, f-number, source metadata) + L0 decode (black subtract, white normalize, clip mask, 2×2 superpixel binning, bilinear demosaic), all four Bayer patterns (the TG-7 is GRBG). Exposure normalization by `t · ISO / N²`. DNG reader via `tifffile`.
+- [ ] Mac-only ORF reader in `host_tools/tg7/` (`rawpy` + `exiftool`) → the same `RawFrame`, plus EXIF: `WaterDepth`, `DateTimeOriginal` + `OffsetTimeOriginal` (cross-checked against Olympus `DateTimeUTC`), exposure, ISO, f-number, focal length, EXIF `Flash`, Olympus `BlackLevel2`, `ColorMatrix`, `WB_RBLevels*`.
+- [ ] Stage framework + `inspect`: stage functions live in `color/stages.py` (rawpy-free; the file reader is chosen by extension from a small registry). `host_tools/color.py` is a thin argparse shell that registers the ORF reader and calls the stages. Every stage writes `stage.json` (git SHA + dirty flag, config file hashes, upstream `stage.json` hash); a downstream stage fails loudly if its input is stale. First stage: `inspect`.
+- **Exit:** `python -m host_tools.color inspect <P9150344.orf>` prints dimensions, CFA pattern, per-channel black level, white level, exposure/ISO/f-number, depth and UTC time, per-channel linear means and clip %, and writes a linear preview PNG plus `stage.json` under `results/`. Licence check, import-boundary test and unit tests green. The ORF half may pass via DNG Converter if LibRaw can't decode the TG-7 (OQ-34). *Non-blocking:* the same on an IMX708 DNG once the OQ-24 sample exists.
 
 #### S1 — TG-7 dataset prep + metrics (Mac) — brief §7 P1.1
-- [ ] `ingest <dataset_dir>`: build the tool manifest from EXIF with the fixed columns (file, camera, category, depth_m, time_utc, exposure_s, iso, fnumber, flash_fired, notes), category from the subfolder name, plus `dive_id` (time gaps, OQ-35) and `sweep_id` (consecutive frames < 90 s apart, depth within ±1.5 m). Written to `results/`, never into the dataset folder (§20).
-- [ ] `locate`: card corners per frame with fallback — (a) AprilTag homography from ≥ 3 tags; (b) search window from the nearest located frame in the same sweep, then the card edge; (c) a small manual 4-corner click tool saving `card_corners.json` (~1 h of Nick's clicking for the leftovers). Every frame records its `locate_method` or an `unlocated` reason.
-- [ ] Distance per frame: `z` from the card pose (PnP on the 4 corners) using the card's physical size (OQ-32) and TG-7 intrinsics (spec values now; refined from the P1.4 checkerboards in S2).
-- [ ] `color/patches.py`: sample each patch in RAW coordinates — canonical patch boxes mapped through the homography onto the binned RAW, central 60 % — reporting pixel count, mean, std and per-channel clip fraction. Exposure-normalized.
-- [ ] `qc`: frame filter (any grey patch < 30×30 RAW px, clipping, extreme blur, flash fired, diver torch) and patch-level card-damage QC (within-patch std/mean well above the same patch on a clean dive-1 frame at similar distance; mean drift vs neighbouring patches over time). Per-frame, per-patch `usable` flag + reason; nothing silently dropped. **Exclude only — never repair** (§20).
-- [ ] `color/metrics.py`: ψ (grey-patch angular error), ΔE2000 (median, p90), red SNR, clipping fraction. ΔE2000 unit-tested against published reference pairs.
-- [ ] `report` v1: standard HTML — dataset summary, QC exclusion table, scored contact sheet per sweep.
-- **Exit:** on the TG-7 set, every `1_reference_A_iso100` frame has `dive_id`, `sweep_id`, card corners with method, and `z` — or an explicit reason why not; ~37 sweeps are found; the report shows per-sweep "before" scores and the QC split (dive 1 clean vs Sep 16 damaged). Re-running `report` alone does not redo `locate`. The whole chain also runs on a tiny synthetic dataset in the unit tests (proves "no code changes for a new dataset").
+- [ ] `ingest <dataset_dir> --config <dataset.yaml>`: build the tool manifest from EXIF with the fixed columns (file, camera, category, depth_m, time_utc, exposure_s, iso, fnumber, flash_fired, black_level, has_raw, notes), category from the subfolder name. The dataset config holds the site latitude/longitude (no GPS in the files, OQ-38) and optional `dive_id` overrides. `dive_id` from time gaps (OQ-35). `sweep_id`: chain each `1_reference` frame to the previous reference frame if < 90 s apart and depth within ±1.5 m (reproduces 37 sweeps, 4 of them single frames). JPG-only shots (P9160568) are kept with `has_raw = false`. Sun elevation per frame from UTC time + site. Written to `results/`, never into the dataset folder (§20).
+- [ ] `locate`, for **every card-bearing frame** (`0_`–`3_`): (a) AprilTag homography from ≥ 3 tags — the 3-tag case uses bm_cam_legacy's `infer_card_corners_from_tags`, ported additively into `analysis/reference_card.py` with `min_tags=4` as the default so existing behaviour is unchanged (approved, Nick 2026-09-26); (b) search window from the nearest located frame in the same sweep; (c) manual clicks on the **tag centres** with a small matplotlib tool (`[tg7]`), saved to `locate/manual_corners.json`, which `locate` only reads and never overwrites. Budget: ~115 reference frames have < 3 tags, plus 7 off-center and 5 preset frames. Stored quad = tag-centre quad with `quad_type` and `locate_method`. JPEG↔RAW offset (8 px crop) applied when moving homographies between them.
+- [ ] Distance per frame: `z` by PnP on the tag-centre quad (nominal ≈ 365 × 92 mm until measured, OQ-32), in-air focal length from EXIF, × 1.33 underwater (flat port) until the P1.4 checkerboards. `z_provisional = true` while either is nominal.
+- [ ] `color/patches.py`: sample each patch (and sub-patch) in RAW coordinates — canonical boxes mapped through the homography onto the binned RAW, central 60 % — reporting pixel count, mean, std, per-channel clip fraction and a 3×3 cell-mean grid. Exposure-normalized.
+- [ ] `qc`, exclude only (§20): frame filter (patch too small for its blur, clipping, flash fired, diver torch) and card-damage QC — (i) the known damage map: white, grey 200 and grey 128-left excluded from P9150409 onward; (ii) every other patch flagged if its 3×3 cell-mean max/min ratio in any channel exceeds the 99th percentile measured on the clean frames P9150343–P9150360; (iii) patches too small for the cell test get `damage_unknown`, never `clean`. Per-frame, per-patch `usable` + reason.
+- [ ] `color/metrics.py` per the §20 scoring protocol: ψ on held-out greys after white balance + colour matrix, in linear sRGB; ΔE2000 after an L*-only match on grey 128, plus ΔC\*/ΔH\*; red SNR; clipping; channels gated on SNR; `n(frame, patch)` reported per method. ΔE2000 unit-tested against published reference pairs.
+- [ ] `report` v1: standard HTML — dataset summary, QC exclusion table, and per-sweep "before" contact sheets scored on the as-shot camera JPEG.
+- **Exit:** every card-bearing frame in `0_`–`3_` has a located tag-centre quad (auto or manual) or a stated reason it is unusable; every located frame has a `z` (flagged provisional while nominal); 37 sweeps with `dive_id`; the report shows "before" scores split **clean card (≤ P9150408) / damaged card**, with the count of usable patches per split. Re-running `report` alone does not redo `locate`, and a stale input fails loudly. The whole chain also runs on a tiny synthetic dataset in the unit tests.
 
-#### S2 — Physics v0 on TG-7 + decision gate (Mac) — brief §5, §7 P1.2–P1.5
-Needs the P1.4 TG-7 above-water / checkerboard reshoot (Nick, OQ-29).
-- [ ] `calibrate` (L1): black/white level, CCM (linear and root-polynomial, ≥ 2 illuminants) and `card_reference_daylight` from the reshoot → `configs/calibration/tg7.yaml`; intrinsics in air and in water from the checkerboards; `z` validated against the taped pool distances.
-- [ ] `fit` (L2): per sweep, backscatter (`B∞`, `βB`) from black and view-path attenuation (`βD`) from QC-passing grey/colour patches normalized by their clean dive-1 reflectance; per dive, downwelling `K`. Confidence intervals, residuals vs depth and distance; the dusk dive flagged.
-- [ ] `correct`: card mode and table mode (card ignored, parameters from the fitted curves vs `d`, `z`), L3 output (grey 128 to target, sRGB, JPEG), correction parameters in a JSON sidecar per image.
-- [ ] Validation: leave-one-sweep-out (view path) and leave-one-dive-out (table mode), scored on the card.
-- [ ] Baselines on the same frames: **(a)** backend GRVI `cheeca_v3`, unmodified, on the TG-7 camera JPEGs (OQ-31); **(b)** the Olympus underwater-preset JPEG from the same exposure (`2_underwater_preset`; the 4 flash-fired frames reported separately).
-- [ ] Decision report (one HTML): Nereus v0 card + table mode vs GRVI vs Olympus — ψ/ΔE tables split clean card (dive 1) / damaged card (Sep 16); leave-card-out scores on `3_scene_card_offcenter`; before/after sheets for off-center and `4_no_card` (torch frames skipped); a "needs V3 dataset" list.
-- **Exit (decision gate, brief §1a):** the report is produced by running the stage commands end to end with no code edits. Nick records **Go** (new dive with card V3, re-run the tool) or **No-go** (stop, write up why) in this spec with the reason. "Marked improvement" = a clear drop in grey-patch ψ on usable card frames vs both baselines, plus visibly better off-center and no-card sheets. Provisional targets (card ψ ≤ 3°, table ψ ≤ 6°) are revised after S2, not used as the gate.
+#### S2a — Physics v0 + decision gate, before the reshoot (Mac) — brief §5, §7 P1.2–P1.5
+Runs on data that exists today (Nick, 2026-09-26): shows how good v0 is before better reference data, and is the baseline S2b is measured against.
+- [ ] `calibrate` (provisional L1): per-frame black level from the ORF, the TG-7's embedded `ColorMatrix` (rows sum to 256, so neutral stays neutral) and its daylight WB preset, nominal focal length × 1.33, nominal card size → `configs/calibration/tg7_provisional.yaml`.
+- [ ] `fit` (L2), per dive, jointly over all usable patches: βD and βB shared per dive, B∞ per sweep, black-patch reflectance as a nuisance term, per-frame `d`. The black patch enters the backscatter fit only above a minimum pixel width. K fitted from dives 3–4 only, or with sun elevation as a covariate; dives 1 **and** 2 flagged (both ascend steadily while the light changes; dives numbered as in OQ-35). Intensity fits restricted to patches within ~0.6 of the image half-diagonal until a flat-field exists. Report confidence intervals and how many sweeps are identifiable (review estimate: ~11 of 37).
+- [ ] `correct`: **card mode** (neutralize on grey 128; the other greys held out for scoring, or parameters from the other frames in the sweep) and **table mode** (card ignored; parameters from the fitted curves vs `d`, `z`), each table-mode frame run with the card's `z` ("oracle") and with the default scene `z` used for no-card frames. L3 output (grey 128 to target, sRGB, JPEG); parameters in a JSON sidecar per image.
+- [ ] Validation: leave-one-sweep-out and leave-one-dive-out, reported per held-out dive, never pooled (only dives 3↔4 are a like-for-like light test).
+- [ ] Baselines on the same frames, scored with the same protocol: **(a)** backend GRVI `cheeca_v3`, unmodified, on the TG-7 camera JPEGs, run in the backend's own environment (OQ-31); **(b)** the Olympus underwater-preset JPEG from the same exposure (flash-fired 4 reported separately), plus the nearest A-mode sweep frame at the same site; **(c)** the as-shot A-mode JPEG ("no correction" — also what GRVI outputs when it can't find the card).
+- [ ] Decision report (one HTML): Nereus v0 vs baselines in two classes — card-anchored (Nereus card mode vs GRVI) and card-free (Nereus table mode vs Olympus preset vs as-shot) — with frame counts per method × dive and per card condition, blind side-randomized before/after sheets (off-center, no-card with torch frames skipped, and a sample of reference frames), and a "needs V3 dataset" list.
+- **Exit (decision gate, §20):** the report is produced by running the stages end to end with no code edits. **Nick's blind visual review decides first; the pre-registered numeric rule supports it.** Nick records **Go** (new dive with card V3, re-run the tool) or **No-go** (stop, write up why) here with the reason.
 
-#### S3–S8 — Rig work (outline, gated on the S2 decision)
-Not started until S2 is **Go**; a no-go changes what the rig should test. Each gets full checklist items + exit criteria when scheduled.
+#### S2b — Recalibrate with the TG-7 reshoot (Mac) — brief §7 P1.4
+Needs the reshoot (OQ-29). Not a gate: it quantifies what better calibration buys, and can run alongside S3+ after a Go.
+- [ ] Full `calibrate`: CCM (linear and root-polynomial, ≥ 2 illuminants), dark frames + noise model, flat-field, intrinsics in air and in water from the checkerboards; `z` validated against the taped pool distances → `configs/calibration/tg7.yaml`. The reshoot photographs the **water-damaged** V2 card, so the daylight card reference uses only patches that pass QC against P9150343; an X-Rite chart (OQ-27) gives better truth where available.
+- [ ] Re-run the tool with the new calibration; the report shows S2b vs S2a per metric and per class.
+- **Exit:** the S2b report quantifies the change from the reshoot calibration with the same frames and protocol as S2a.
+
+#### S3–S8 — Rig work (outline, gated on the S2a decision)
+Not started until S2a is **Go**; a no-go changes what the rig should test. Each gets full checklist items + exit criteria when scheduled.
 - **S3 — RAW capture on the rig** (brief P0): IMX708 `rpicam-still --raw` (DNG + JPEG, one exposure); OpenMV allowlisted `capture_raw` (Bayer + width/height/CFA/bit depth/black level + read-back exposure/gain/WB); locked recipes; lock check; OQ-19 firmware decision (OQ-21…24). Capture changes behind `raw: true` flags. *Demo:* one command → 3 cameras × RAW + ISP JPEG + metadata.
 - **S4 — Above-water calibration** (P2) + card truth v1 → `configs/calibration/<camera_id>.yaml`, CCM residuals (OQ-27).
 - **S5 — `bmcam001` recipe + arms A / A′ / B / C** in the coordinator (P3) — bench A/B/C sheet on the card (OQ-28).
@@ -208,21 +219,22 @@ nereus-camera-test-rig/
 │   ├── experiments/{reference_card_above_water,reference_card_below_water,low_light,object_detection}.yaml
 │   ├── cameras/{imx708,openmv_n6,openmv_ae3}.yaml
 │   ├── cards/nereus_v2.yaml                  # Phase 8: card layout + truth (config, not code)
-│   └── calibration/<camera_id>.yaml          # Phase 8: per-camera L1 calibration
+│   ├── calibration/<camera_id>.yaml          # Phase 8: per-camera L1 calibration
+│   └── licenses.yaml                         # Phase 8: reviewed licence table (§20)
 ├── src/nereus_camera_test_rig/
 │   ├── cli.py  controller.py  models.py  config.py  logging_config.py
 │   ├── cameras/{base,imx708,openmv_usb,registry}.py
 │   ├── capture/{coordinator,image_capture,video_capture,naming}.py
 │   ├── storage/{experiment_store,metadata,checksums}.py
 │   ├── analysis/{apriltag_detector,reference_card,crop,image_metrics,result_writer}.py
-│   ├── color/{card,raw_io,patches,metrics,calib,water_model,output,pipeline}.py   # Phase 8, §20
+│   ├── color/{card,raw_io,patches,metrics,calib,water_model,output,pipeline,stages}.py   # Phase 8, §20
 │   └── web/{app.py, templates/, static/}
 ├── openmv/
 │   ├── common/{command_protocol,capture_service,device_info}.py
 │   ├── n6/{boot,main,board_config}.py
 │   └── ae3/{boot,main,board_config}.py
 ├── host_tools/{discover_openmv,deploy_openmv,verify_rig,run_experiment,collect_results,compare_cameras,generate_report}.py
-├── host_tools/color.py  host_tools/tg7/     # Phase 8 Mac-side stage CLI; rawpy/exiftool live only here
+├── host_tools/color.py  host_tools/tg7/     # Phase 8: thin Mac CLI over color/stages.py; rawpy/exiftool live only here
 ├── scripts/{install_pi.sh,configure_pi_camera.sh,start_web.sh,test_imx708.sh,test_openmv_n6.sh,test_openmv_ae3.sh,collect_diagnostics.sh}
 ├── tests/{unit/, integration/, hardware/, fixtures/{reference_card_images,expected_detections}/, conftest.py}
 ├── experiments/.gitkeep
@@ -439,25 +451,52 @@ reference its issue there.
 
 ## 20. Edge Color Correction (Phase 8 detail)
 
-The design brief ([`docs/DESIGN_edge_color_correction.md`](DESIGN_edge_color_correction.md), v0.3) holds the algorithm, experiment plan and dataset notes. This section records only the rules and decisions the build must follow. Where the two differ, this section wins.
+The design brief ([`docs/DESIGN_edge_color_correction.md`](DESIGN_edge_color_correction.md), v0.3) holds the algorithm, experiment plan and dataset notes. This section records the rules and decisions the build must follow. **Where the two differ, this section wins.**
+
+**Product intent.** Realistic, colorimetric correction for all customers: the goal is the true scene color, as accurately as possible. No site-specific "look" (GRVI's reef rendering was a proof of concept).
 
 **Module boundaries**
-- `src/nereus_camera_test_rig/color/` is pure numpy / OpenCV (+ `tifffile` for DNG). It may import `analysis/` (card geometry, AprilTags) but never `web`, `cameras`, `capture`, `controller` or the serial stack. It must import on both the Mac and the Pi. A unit test enforces the import rule.
-- `analysis/` and `web/color_check.py` are **not** changed by S0–S2. Where Phase 8 needs different behaviour (e.g. card localization from 3 of 4 tags, which `analysis/reference_card.localize_card` does not allow), it lives in `color/`.
-- **Mac-side stage CLI:** `python -m host_tools.color <stage>` (`inspect`, `ingest`, `locate`, `qc`, `fit`, `correct`, `report`, `calibrate`). *Deviation from the brief's `nereus-rig color ingest`:* ORF decoding needs `rawpy` (LGPL), which must stay out of `src/`, so the TG-7 stage commands live in `host_tools/` with the ORF reader in `host_tools/tg7/`. The Pi-side commands (`nereus-rig correct`, `nereus-rig soak`) arrive in S3+ and use only `color/` with DNG / Bayer input.
+- `src/nereus_camera_test_rig/color/` is pure numpy / OpenCV (+ `tifffile` for DNG) and holds all stage logic (`color/stages.py`), so the backend and the Pi can reuse it. It may import `analysis/` but never `web`, `cameras`, `capture`, `controller`, the serial stack or `rawpy` — checked at runtime by a test. It must import on the Mac and the Pi.
+- `host_tools/color.py` is a thin Mac CLI (`python -m host_tools.color <stage>`) that registers the Mac-only ORF reader from `host_tools/tg7/` (rawpy + exiftool) and calls the stages. The Pi commands (`nereus-rig correct`, `nereus-rig soak`, S3+) are a second thin CLI over the same stages with DNG / Bayer input. *(Deviation from the brief's `nereus-rig color ingest`, to keep rawpy out of `src/`.)*
+- `analysis/reference_card.py` gains 3-of-4-tag card inference (ported from bm_cam_legacy) behind `min_tags`, default 4 — no behaviour change for Phases 2–6. `web/color_check.py` is not changed.
 - Rig integration (S3+) goes into `cameras/` and `capture/coordinator.py` behind `raw: true` profile flags so the existing capture path is unchanged when the flag is off.
 
-**Licensing.** Runtime dependencies (base + the `[color]` extra, i.e. anything that ships to the Pi or the backend) must be MIT, BSD or Apache-2.0 (edge cases — Pillow's MIT-CMU, numpy's compound SPDX expression — in OQ-33). The `[color]` extra lists its own dependencies and does not pull in `[analysis]`, whose `pillow-heif` carries a GPL classifier. `rawpy` goes only in the Mac-only `[tg7]` extra; `exiftool` is an external Mac-side CLI, never shipped. `make license-check` enforces the allowlist over the installed runtime closure; there is no CI in the repo yet, so it runs from `make test` and the PR checklist until one exists.
+**Licensing policy (Nick, 2026-09-26; not legal advice — counsel review before the first commercial device ships).** GPL/LGPL obligations are triggered by *distribution*; AGPL also by network use.
 
-**Config, not code.** The card is `configs/cards/<card>.yaml` (tag map, geometry, patch boxes, physical size, truth values with a `source:` field). The camera is `configs/calibration/<camera_id>.yaml` (black/white level, CCM per illuminant, daylight card reference, intrinsics, noise, flat-field), written by `calibrate`. Card V3 is a new YAML file, not a code change.
+| Where the code runs | Rule |
+|---|---|
+| **Shipped** — `color/`, anything on the Pi, customer devices, anything that could be distributed | MIT / BSD / Apache-2.0 and equivalent permissive licences (e.g. Pillow's MIT-CMU) only. No GPL, LGPL or AGPL — including native libraries bundled inside wheels. |
+| **Hosted service** (backend correction) | Same as shipped, so the code can move to devices. AGPL is always banned. |
+| **Internal Mac tools** (`host_tools/tg7/`, analysis) | May use LGPL tools that never leave Nereus (rawpy/LibRaw, exiftool). Never imported from `src/`. |
+
+- Package metadata is not enough: rawpy declares MIT (its LGPL part is the bundled LibRaw), and the PyPI OpenCV wheels declare Apache-2.0 while bundling FFmpeg (LGPL) and x264 / x265 / libpostproc (GPL). So the check is a reviewed table, `configs/licenses.yaml` (package, declared licence, bundled native libraries, decision), enforced by a test over the base + `[color]` dependencies.
+- Shipped installs use an OpenCV build **without FFmpeg / video codecs** (the color pipeline needs no video; OQ-36). `pillow-heif` is dropped from `[analysis]`.
+- There is no CI yet; the licence test runs under `make test`. A CI workflow is a separate, later PR.
+
+**Config, not code.**
+- The card is `configs/cards/<card>.yaml`, the single source of truth: tag IDs, tag centres + edge length (canonical and, once measured, mm), expand factors, canonical size, patch and sub-patch boxes, truth values with a `source:` field. V2 truth = the backend's SVG design fills (`nereus-vision-dev/.../profiles/template_layout_v2.json`, 2026-09-01), the same truth GRVI uses; the rig's raster-sampled fixture values are ~1 count off on 11 of 17 patches. Card V3 is a new YAML file.
+- The camera is `configs/calibration/<camera_id>.yaml` (black/white level, colour matrix per illuminant, daylight card reference, intrinsics, noise, flat-field, `provisional:` flag), written by `calibrate`.
+- A dataset config (`<dataset>.yaml`, kept with the results, not in the dataset) holds the site location, dive overrides and default scene distance.
 
 **Datasets are read-only.**
-- A dataset is a folder of RAW (+ optional JPEG) files, sorted into category subfolders. Tools read it and **never move, rename, edit or delete** anything in it. `data/` is git-ignored, so it exists only in the primary checkout: tools take the dataset path as an argument and never assume `./data` relative to a worktree.
-- The tool builds its **own** manifest in `results/`. A hand-made `manifest.csv` inside the dataset (the TG-7 one has local-time `datetime`, no UTC column, no camera column) is optional input for cross-checking only.
-- Outputs: `results/color/<dataset_id>/<stage>/…` (`manifest.csv`, `locate/card_corners.json`, `qc/qc.csv`, `fit/params.json`, `correct/<stem>/…`, `report/index.html`). Each stage reads the previous stage's saved outputs, so re-running one stage does not redo the others. Every output records the git SHA and config paths used.
+- A dataset is a folder of RAW (+ optional JPEG) files in category subfolders. Tools read it and **never move, rename, edit or delete** anything in it. `data/` is git-ignored, so it exists only in the primary checkout: tools take the dataset path as an argument and never assume `./data` relative to a worktree.
+- The tool builds its **own** manifest. A hand-made `manifest.csv` in the dataset is optional input for cross-checking only.
+- Outputs: `results/color/<dataset_id>/<stage>/…`, where `dataset_id` = dataset folder name + a short hash of its file list. Each stage writes `stage.json` (git SHA + dirty flag, config hashes, upstream `stage.json` hash) and reads only the previous stage's saved outputs; stale inputs fail loudly. Manual work (`locate/manual_corners.json`) is never overwritten by a re-run.
 
-**TG-7 EXIF facts (verified 2026-09-26 with exiftool 13.55 on `P9150344.orf`).** `WaterDepth` is the **standard EXIF tag** (ExifIFD), not an Olympus maker note. `DateTimeUTC` is in the Olympus maker note and is the only correct clock (the camera was set to UTC−8). CFA pattern is **GRBG**, black level 257 per channel, ORF 4040×3016. Flash fired comes from EXIF `Flash`, not the Olympus `InternalFlash` field (it reads "On" on this no-flash frame). Re-check these on a sample from each folder during `ingest`. **Dates:** the brief's "Sep 15 / Sep 16" dive labels are local (PDT) dates — in UTC the Sep 15 evening dive is already Sep 16 (P9150344 = `2026:09:16 01:45 UTC`). So `dive_id` is assigned from time gaps between shots, never from the UTC calendar date.
+**TG-7 facts (verified 2026-09-26 with exiftool 13.55 across all 308 ORFs / 309 JPGs).**
+- `WaterDepth` is the **standard EXIF tag** (ExifIFD) in every file. Focal length 4.5 mm on every shot; every A-mode shot is f/2.0.
+- Time: UTC = `DateTimeOriginal` + `OffsetTimeOriginal` (standard EXIF, −08:00 on every file), which matches the Olympus `DateTimeUTC` on 308/308. The camera clock was UTC−8 (PST), one hour behind true local time (PDT); the brief's "Sep 15 / Sep 16" labels are camera-local dates. `dive_id` is assigned from time gaps, never from calendar dates.
+- RAW: 4040×3016, CFA **GRBG** in every ORF, 12-bit (`ValidBits 12`). The JPEG is the RAW cropped to 4000×3000 at (8, 8).
+- **Black level varies per frame and per channel** (Olympus `BlackLevel2`, 256–260, ISO-dependent; 257×4 on 240 of 308): read it from each file, never use a constant.
+- The ORF carries a colour matrix (`ColorMatrix`, rows sum to 256, so neutral maps to neutral) and WB presets (`WB_RBLevels…`). No GPS tags.
+- Flash fired comes from EXIF `Flash` (5 fired, 4 of them preset card frames); the Olympus `InternalFlash` field reads "On" on every file and is useless.
 
-**Card water damage — exclude, never repair (brief §7 P1.0).** The V2 card leaked from the end of dive 1 (Sep 15); every Sep 16 frame is affected, mostly white / grey 200 / left of grey 128. `qc` flags a patch as damaged by a simple rule (within-patch std/mean vs a clean dive-1 frame at similar distance; mean drift vs neighbours) and excludes it with a reason. No staining model, no repair, no clever workaround. If a fit or metric needs the excluded patches, the report says **"needs V3 dataset"** and work moves on. All metrics are reported split by card condition (dive 1 clean / Sep 16 damaged).
+**Card water damage — exclude, never repair (brief §7 P1.0).** Damage starts **inside dive 1** (~P9150409); every later frame is affected, mostly white / grey 200 / left of grey 128. The **clean-card subset is frames ≤ P9150408** (~14 frames with ≥ 3 tags — this is thin, and every report says so). `qc` excludes by the known damage map plus a within-patch 3×3 cell-ratio test (§4 S1); patches too small to test are `damage_unknown`, not clean. No staining model, no repair. If a result needs excluded data, the report says **"needs V3 dataset"** and work moves on. All metrics are reported split clean / damaged.
 
-**Decision gate (end of S2).** Compare Nereus physics v0 (card + table mode) against the backend GRVI correction (OQ-31) and the Olympus underwater preset, on the same frames. Go = a clear drop in grey-patch ψ on usable card frames plus visibly better off-center and no-card sheets → new dive with card V3, re-run the tool. No-go → stop and write up why. The outcome and reason are recorded in §4 Phase 8 S2.
+**Scoring protocol (all methods, S1 onward).**
+- Every method is scored on its **final 8-bit sRGB output**, decoded with the sRGB transfer function, with the same patch boxes and the same frame set. Internal diagnostics on RAW use white balance + colour matrix first (ψ in raw camera RGB is meaningless).
+- ψ (primary) on grey patches **not used for neutralization**; ΔE2000 after an L*-only match on grey 128, plus ΔC\* / ΔH\*. Channels gated on SNR. Every table states `n` (frames, patches) per method, per dive, per card condition.
+- Two comparison classes, never mixed: **card-anchored** (Nereus card mode vs GRVI) and **card-free** (Nereus table mode vs Olympus preset vs as-shot JPEG). Table mode is reported with oracle `z` and default `z`.
+- Frames within a sweep are correlated: confidence intervals come from a sweep-level bootstrap.
+
+**Decision gate (end of S2a).** Nick's **blind, side-randomized visual review decides first**; the numbers support it. Pre-registered numeric rule (kept as a guide): within each class, Nereus median ψ ≥ 3° **and** ≥ 30 % lower than the best baseline, the sweep-bootstrap 95 % CI of the difference excludes 0, the paired per-frame win rate ≥ 70 %, and the blind A/B prefers Nereus in ≥ 70 % of pairs. Go → new dive with card V3, re-run the tool. No-go → stop and write up why. Outcome and reason are recorded in §4 Phase 8 S2a.
