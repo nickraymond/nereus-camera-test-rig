@@ -140,6 +140,125 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 - **[OPEN] OQ-16 — `opencv-contrib-python` on the Pi.** ArUco requires the contrib build;
   confirm it installs cleanly on the target Pi OS/arch (wheels availability).
 
+## Phase 8 — Edge color correction
+
+From the design brief §11 (`docs/DESIGN_edge_color_correction.md`) plus gaps found while
+planning (2026-09-26). "Blocks" names the Phase 8 sprint (SPEC §4) that needs the answer.
+Items for Nick are marked **(Nick)**.
+
+- **[PARTIAL] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.* What the
+  repo already tells us:
+  - **AE3:** `sensor.BAYER` was accepted by `set_pixformat` during the 2026-07-15 bring-up
+    probe (fw 1.25.0-preview), recorded in the `PIXEL_FORMATS` comment in
+    `openmv/ae3/board_config.py`. It was left out of the allowlist; no Bayer frame content
+    was inspected.
+  - **N6:** never probed. `openmv/n6/board_config.py` allowlists only RGB565/GRAYSCALE and
+    records no BAYER test.
+  - **No existing command can return Bayer.** `capture_service.capture_image` always writes
+    with `img.save(path, quality=...)` (JPEG) and reports `"format": "jpeg"`. Bayer needs a
+    new allowlisted `capture_raw` that writes raw bytes.
+  - **Storage:** an HD (1280×800) Bayer frame is 1,024,000 B at 8 bit/px, 2,048,000 B in a
+    16-bit container. The N6 flash is only ~4.2 MB in total (PR #16), so one raw frame fits
+    only because `delete_file` cleans up after each retrieval. Streaming from RAM instead of
+    via `/flash` may be needed.
+  - Still unknown (needs hardware): Bayer bit depth, Bayer resolutions, whether N6 AWB gains
+    apply to Bayer output or can be set neutral, and whether any of this needs the OQ-19
+    v5.0.0 / `csi` migration. Decide together with OQ-19 in S3.
+- **[NEEDS-HARDWARE] OQ-22 — N6 RAW + ISP JPEG from the same exposure.** *Blocks S3.* Not
+  answerable from code: the current path configures one pixformat and takes one
+  `snapshot()`. If one exposure can't give both, capture back-to-back and record it
+  (brief §7 P0).
+- **[NEEDS-HARDWARE] OQ-23 — USB transfer time for a raw frame.** *Blocks S3 (soak cadence
+  in S7).* No throughput has been measured on either board (nothing in the repo records
+  transfer timing). Expected payload is 1.0 MB (8-bit) or 2.0 MB (16-bit) per HD frame over
+  the existing length-framed path (512 B board-side chunks, SHA-256 verified). Measure on
+  both boards; log it in `capture.json`.
+- **[NEEDS-HARDWARE] OQ-24 — `rpicam-still --raw` on the Pi 5.** *Blocks S3; the S0 DNG
+  demo needs one sample.* Does it write a DNG from the same frame as the JPEG, and do the
+  DNG's tags match the exposure/gains in `--metadata`? The adapter never passes `--raw`
+  today (`cameras/imx708.py` builds `--width/--height/--metadata` + optional controls), but
+  it already records ExposureTime / AnalogueGain / ColourGains from `--metadata` (OQ-10),
+  so there is a ready comparison. Also unverified: that `tifffile` reads the rpicam DNG.
+  For S0: one manual `rpicam-still --raw` capture on `nereus000` (no code change) gives the
+  sample; the full answer is S3.
+- **[NEEDS-HARDWARE] OQ-25 — Pi 5 processing time for full-res IMX708 RAW through physics
+  v0.** *Informational, S3+.* Measure once `color/pipeline.py` exists. Fallback if too slow:
+  the 2304×1296 binned sensor mode (brief §10).
+- **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
+  or cameras housed and cabled to a dry poolside Pi?
+- **[OPEN] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *Nice-to-have for S2
+  (P1.4 row 6) and S4.* Enables card-truth Option B (brief §5.3). Not a blocker: design
+  values (Option A) are used until then, and the water layer uses camera-relative
+  normalization.
+- **[OPEN] OQ-28 — `bmcam001` field JPEG quality rung + retained metadata (Nick).**
+  *Blocks S5.* Which rung of the 90…9 ladder do field images usually land on (backend logs)?
+  Is any EXIF (colour gains, exposure) kept on the stored originals?
+- **[OPEN] OQ-29 — TG-7 above-water / checkerboard reshoot (Nick).** *Blocks S2.* When can
+  the brief §7 P1.4 reshoot happen (~1 h)? Was the flat front glass the only port on the
+  trip (no dome / wet lens)? New shots go in new folders
+  (`raw/5_above_water_calibration/`, `raw/6_pool_distance_check/`) — the tool picks them up
+  by folder; nothing already in the dataset is touched.
+- **[OPEN] OQ-30 — Leak sensor for the soak? (Nick).** *Blocks S7.*
+- **[RESOLVED-LOCATION] OQ-31 — Backend color correction as the S2 baseline.** *Blocks S2.*
+  (The brief §1a cites "OQ 6" for this, but its §11 item 6 is the pool-housing question; this
+  item replaces that reference.) Found by reading `nereus-vision-dev` (local checkout on
+  `staging`, 2026-09-26): the backend's only image filter is **GRVI**, processor
+  `cheeca_v3`, in `backend/app/services/processing/grvi.py`.
+  `correct(image_rgb, profile, layout)` takes an RGB uint8 frame and returns the corrected
+  frame plus a sidecar, or `None` when no card is found. It wraps a byte-identical vendored
+  copy of `bm_cam_legacy` (commit `8b7cf97`) with profile `profiles/cheeca_v3.json`. Deps:
+  cv2, numpy, scipy, Pillow. Production detects AprilTags at native scale only and needs
+  ≥ 3 of 4 tags. **Plan for S2:** call it unmodified from a local checkout (path in config,
+  Mac-side only, commit SHA pinned in the report) on the TG-7 camera JPEGs. Consequences to
+  report, not work around: GRVI is card-anchored with no table mode, so on no-card or
+  unlocated frames the baseline is "no correction"; its water prior is a display prior, not
+  colorimetry — score it as production runs it. Remaining for Nick: confirm `staging` (vs
+  `main`) is the right baseline branch.
+- **[PARTIAL] OQ-32 — Physical V2 card dimensions (for distance `z`).** *Blocks S1 distance.*
+  The print master is 11×17 in with bleed (`tests/fixtures/reference_card/README.md`). In the
+  3000×1941 px render (= the full 17×11 in page) the tag centers are 2535 px apart
+  horizontally and 636 px vertically, i.e. ≈ 365 × 92 mm **if the card was printed at 100 %
+  scale** (no fit-to-page, no trim beyond the bleed) — an assumption until measured. The card also carries a 0–300 mm scale bar. **Ask (Nick):** tape-measure
+  the tag-center spacing (horizontal and vertical) and one tag's edge length on the physical
+  card → `configs/cards/nereus_v2.yaml`.
+- **[OPEN] OQ-33 — Licence allowlist details (Nick).** *Blocks S0 license check.* Installed
+  package metadata (checked 2026-09-26 in the Mac `.venv`):
+  - Pillow declares **`MIT-CMU`** (an HPND-family permissive license), not literally
+    MIT/BSD/Apache. It is already a runtime dependency (`analysis`, `web` extras) and the
+    brief suggests it for L3 JPEG.
+  - numpy declares a compound SPDX expression (`BSD-3-Clause AND 0BSD AND MIT AND Zlib AND
+    CC0-1.0`) — the check must parse SPDX expressions, not match one string.
+  - **`pillow-heif` (in the existing `analysis` extra) declares `BSD-3-Clause` but carries a
+    `GPLv2` classifier** — its wheels bundle GPL/LGPL HEIF codecs. So the `[color]` extra must
+    list its own dependencies and **not** pull in `[analysis]` wholesale. Whether the
+    existing `analysis` extra should drop `pillow-heif` (HEIC is optional, OQ-14) is a
+    separate decision.
+  - Proposal: allowlist MIT, MIT-CMU/HPND, BSD-0/2/3-Clause, Apache-2.0, ISC, PSF, Zlib and
+    CC0-1.0. Otherwise `color/` stays Pillow-free and uses `cv2.imencode`.
+  - The repo has **no CI** (no `.github/`), so the "license check in CI" runs as a pytest
+    test via `make test` until a CI workflow is added as its own PR — does Nick want that PR?
+- **[OPEN] OQ-34 — Does `rawpy`'s bundled LibRaw decode TG-7 ORF?** *Blocks S0 ORF reader.*
+  The TG-7 (2023) is newer than some LibRaw releases. Verify on one ORF in the S0 nibble;
+  fallback is Adobe DNG Converter → DNG (then the shipped `tifffile` reader applies). Note
+  from exiftool (2026-09-26): ORF is 4040×3016, 16-bit container, CFA GRBG, black level 257
+  — the decoded frame must agree.
+- **[OPEN] OQ-35 — How many TG-7 dives: 4 or 5? (Nick).** *Blocks S1 `dive_id`, S2
+  leave-one-dive-out.* The brief (§7 P1.0) says "5 dives", but splitting the 309 shots at
+  gaps > 45 min (camera-local time from `manifest.csv`, checked 2026-09-26) gives **4**
+  groups, and the brief's own sun-angle list names four (Sep 15 evening; Sep 16 early
+  morning, mid-morning, midday):
+
+  | Group | Camera-local time | Shots | Depth (m) | Reference frames |
+  |---|---|---|---|---|
+  | 1 | Sep 15 17:32–18:30 | 86 | 0.1–15.6 | 47 |
+  | 2 | Sep 16 07:50–08:30 | 44 | 8.3–16.6 | 38 |
+  | 3 | Sep 16 09:59–10:52 | 97 | 0.3–11.4 | 63 |
+  | 4 | Sep 16 12:15–13:04 | 82 | 0.1–16.6 | 58 |
+
+  The largest in-dive gap is 12.8 min (Sep 15 18:16 → 18:29, 5.1 → 8.4 m). If one of these
+  groups is really two dives, say where to split. Plan: `ingest` assigns `dive_id` by time
+  gap, with an optional per-dataset override file (in `results/`, not in the dataset).
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
