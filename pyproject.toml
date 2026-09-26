@@ -48,6 +48,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put THIS checkout first on sys.path: the shared venv's editable install points at the
+# primary checkout, so without this a git worktree silently tests the wrong code.
+pythonpath = ["src", "."]
 addopts = "-ra"
 # Hardware tests require real devices; run them explicitly, not in the default suite.
 norecursedirs = ["tests/hardware"]

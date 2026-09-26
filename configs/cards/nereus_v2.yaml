@@ -1,0 +1,94 @@
+# Nereus Reef Reference Card V2 — single source of truth for Phase 8 (SPEC §20).
+#
+# Geometry: patch boxes from tests/fixtures/reference_card/template_layout.json
+#   (template v2_11x17_rgb_vector_crop_bleed), in the canonical 3000x1000 rectified frame.
+# Truth: the SVG design fills from nereus-vision-dev
+#   backend/app/services/processing/profiles/template_layout_v2.json @ 6aeb1c2 (staging) —
+#   the same truth the backend GRVI correction uses. The rig fixture's raster-sampled values
+#   are ~1 count off on 11 of 17 patches; its geometry is identical.
+# Tags: centres + edge lengths measured with analysis/apriltag_detector.detect_tags on
+#   reference_card_template_3000x1000.png (2026-09-26). Canonical pixels are NOT square
+#   (x and y scale differently in the warp) — compute distance in card mm, never canonical px.
+#
+# Known differences vs web/color_check.py (Phase 6 view-time check; intentionally not changed,
+# not pinned by tests):
+#   gray_white: named 'white'; centre offset (-5, 15) px
+#   gray_light: named 'grey 200'; centre offset (0, 20) px
+#   gray_mid: named 'grey 128'; centre offset (-1, 20) px
+#   gray_dark: named 'grey 74'; centre offset (-2, 20) px
+#   gray_black: named 'black'; centre offset (-4, 20) px
+#   cream: centre offset (0, -7) px
+#   tan: named 'sand'; centre offset (0, -8) px
+#   ochre: named 'tan'; truth (218, 169, 110) vs (217, 169, 109); centre offset (-2, -7) px
+#   orange: named 'amber'; truth (215, 146, 53) vs (216, 146, 54); centre offset (-2, -8) px
+#   brown: named 'sienna'; truth (184, 109, 42) vs (185, 109, 42); centre offset (-2, -8) px
+#   dark_brown: named 'brown'; truth (99, 55, 26) vs (99, 55, 25); centre offset (-2, -7) px
+#   red_orange: named 'red-orange'; centre offset (0, 17) px
+#   yellow: truth (248, 185, 30) vs (247, 185, 30); centre offset (0, 17) px
+#   green: truth (109, 176, 79) vs (108, 176, 80); centre offset (-2, 17) px
+#   cyan: truth (92, 201, 208) vs (92, 200, 208); centre offset (-2, 17) px
+#   blue: centre offset (-2, 17) px
+#   magenta: truth (179, 70, 163) vs (180, 70, 163); centre offset (-2, 17) px
+
+card_id: nereus_v2
+schema_version: 1
+
+apriltag:
+  family: tag36h11            # OpenCV DICT_APRILTAG_36h11
+  corner_map: {tl: 0, tr: 1, bl: 2, br: 3}
+
+canonical:                     # rectified frame: tag-centre quad expanded about its centre
+  width: 3000
+  height: 1000
+  expand_x: 1.25
+  expand_y: 2.0
+
+tags:                          # canonical px: centre [x, y], edge [x_len, y_len]
+  0: {center: [299.5, 250.0], edge: [211.0, 176.0]}
+  1: {center: [2699.0, 250.0], edge: [210.0, 176.0]}
+  2: {center: [299.5, 749.5], edge: [211.0, 175.0]}
+  3: {center: [2699.0, 749.5], edge: [210.0, 175.0]}
+
+# Physical size on the printed card. null until tape-measured (OQ-32); while null, anything
+# derived from it (distance z) is provisional and uses `nominal_mm`.
+physical_mm:
+  tag_center_spacing_x: null
+  tag_center_spacing_y: null
+  tag_edge: null
+
+# ASSUMPTION: the 11x17 in print master printed at 100 % scale. From the 3000x1941 render of
+# the full page (6.948 px/mm): tag centres 2535 x 636 px apart, tag edge 223 px.
+nominal_mm:
+  source: pdf_render_100pct_scale_assumption
+  tag_center_spacing_x: 364.9
+  tag_center_spacing_y: 91.5
+  tag_edge: 32.1
+
+truth:
+  source: design_svg_2026-09-01
+  space: srgb8                 # 8-bit sRGB design values
+
+patches:                       # box: [x, y, w, h] in canonical px
+  - {id: gray_white, group: grey, label: white_reference, box: [204, 367, 202, 272], truth: [255, 255, 255]}
+  - {id: gray_light, group: grey, label: neutral_gray_light, box: [416, 288, 201, 351], truth: [200, 200, 200]}
+  - {id: gray_mid, group: grey, label: neutral_gray_mid, box: [626, 288, 202, 351], truth: [128, 128, 128]}
+  - {id: gray_dark, group: grey, label: neutral_gray_dark, box: [838, 288, 201, 351], truth: [74, 74, 74]}
+  - {id: gray_black, group: grey, label: black_reference, box: [1050, 289, 199, 349], truth: [0, 0, 0]}
+  - {id: cream, group: color, label: cream_low_saturation, box: [1635, 292, 136, 174], truth: [255, 249, 230]}
+  - {id: tan, group: color, label: tan, box: [1790, 293, 135, 173], truth: [239, 212, 167]}
+  - {id: ochre, group: color, label: ochre, box: [1944, 292, 136, 174], truth: [217, 169, 109]}
+  - {id: orange, group: color, label: orange, box: [2098, 292, 136, 175], truth: [216, 146, 54]}
+  - {id: brown, group: color, label: brown, box: [2252, 292, 136, 175], truth: [185, 109, 42]}
+  - {id: dark_brown, group: color, label: dark_brown, box: [2407, 292, 135, 174], truth: [99, 55, 25]}
+  - {id: red_orange, group: color, label: red_orange, box: [1635, 481, 136, 174], truth: [240, 74, 24]}
+  - {id: yellow, group: color, label: yellow, box: [1790, 481, 135, 174], truth: [247, 185, 30]}
+  - {id: green, group: color, label: green, box: [1944, 481, 136, 174], truth: [108, 176, 80]}
+  - {id: cyan, group: color, label: cyan, box: [2098, 481, 136, 174], truth: [92, 200, 208]}
+  - {id: blue, group: color, label: blue, box: [2252, 481, 136, 174], truth: [12, 102, 199]}
+  - {id: magenta, group: color, label: magenta, box: [2407, 481, 135, 174], truth: [180, 70, 163]}
+
+# Parts of a patch that can be sampled on their own (e.g. the V2 water-damage map excludes
+# only the left half of grey 128). Must lie inside the parent box.
+sub_patches:
+  - {id: gray_mid_left, parent: gray_mid, box: [626, 288, 101, 351]}
+  - {id: gray_mid_right, parent: gray_mid, box: [727, 288, 101, 351]}

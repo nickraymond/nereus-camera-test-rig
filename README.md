@@ -38,5 +38,9 @@ make test        # run the host-side unit tests
 make lint        # ruff checks
 ```
 
+Working in a git worktree: `data/` and `.venv` exist only in the primary checkout. Point
+make at the shared venv (`make test VENV=../../../.venv`, or an absolute path); pytest's
+`pythonpath` makes the tests import the worktree's own `src/`, not the primary checkout's.
+
 Runtime dependencies are minimal by default (PyYAML). Analysis, serial, and web
 dependencies are optional extras installed per phase (see `pyproject.toml`).

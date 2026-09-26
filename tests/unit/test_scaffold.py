@@ -39,6 +39,8 @@ PACKAGE_MODULES = [
     "nereus_camera_test_rig.analysis.image_metrics",
     "nereus_camera_test_rig.analysis.result_writer",
     "nereus_camera_test_rig.web.app",
+    "nereus_camera_test_rig.color",
+    "nereus_camera_test_rig.color.card",
 ]
 
 
