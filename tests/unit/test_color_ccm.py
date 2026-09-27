@@ -58,3 +58,20 @@ def test_leave_one_dive_out_never_uses_the_dives_own_frames():
     assert sum(b["n_frames"] for b in lodo["3"]) == 15 == sum(b["n_frames"] for b in lodo["4"])
     only_4 = band_matrices([o for o in obs if o["dive"] == "4"])
     assert lodo["3"] == only_4
+
+
+def test_affine_recovers_matrix_plus_offset_and_leaves_the_scored_patch_out():
+    from nereus_camera_test_rig.color.ccm import affine_leave_one_out, fit_affine
+
+    rng = np.random.default_rng(3)
+    A = np.array([[1.5, -0.3, 0.1], [-0.2, 1.3, 0.0], [0.1, -0.4, 1.4]])
+    c = np.array([-0.02, 0.01, -0.03])
+    x = {f"p{i}": rng.uniform(0.05, 0.6, 3) for i in range(12)}
+    t = {k: A @ v + c for k, v in x.items()}
+    fa, fc = fit_affine(list(x.values()), list(t.values()))
+    np.testing.assert_allclose(fa, A, atol=1e-9)
+    np.testing.assert_allclose(fc, c, atol=1e-9)
+    t_bad = {**t, "p0": t["p0"] + 0.5}  # a wrong target on p0 only
+    loo = affine_leave_one_out(x, t_bad, ["p0", "p1"])
+    np.testing.assert_allclose(loo["p0"], t["p0"], atol=1e-9)  # p0 was not in its own fit
+    assert np.abs(loo["p1"] - t["p1"]).max() > 1e-3  # p0's error leaks into the others' fits

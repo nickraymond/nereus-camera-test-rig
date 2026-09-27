@@ -76,3 +76,29 @@ def matrix_at(bands: list[dict], depth: float) -> Optional[np.ndarray]:
 def leave_one_dive_out(obs: list[dict], dives) -> dict[str, list[dict]]:
     """{dive: band matrices fitted on every other dive's frames}."""
     return {d: band_matrices([o for o in obs if o["dive"] != d]) for d in dives}
+
+
+# --- per-frame affine (card mode; review 2026-09-27) ---------------------------------------
+
+MIN_AFFINE_PATCHES = 6  # 4 unknowns per output channel
+
+
+def fit_affine(x: np.ndarray, t: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``A`` (3 × 3), ``c`` (3) minimising ‖A x + c − t‖² — a per-frame fit on the card's own
+    patches; the free offset absorbs haze and print non-linearity."""
+    X = np.c_[np.asarray(x, np.float64), np.ones(len(x))]
+    coef, *_ = np.linalg.lstsq(X, np.asarray(t, np.float64), rcond=None)
+    return coef[:3].T, coef[3]
+
+
+def affine_leave_one_out(x: dict, t: dict, scored) -> dict[str, np.ndarray]:
+    """{patch: prediction from an affine fitted on every *other* patch} for ``scored`` patches,
+    so no scored patch is ever in its own fit."""
+    out = {}
+    for pid in scored:
+        rest = [p for p in x if p != pid]
+        if pid not in x or len(rest) < MIN_AFFINE_PATCHES:
+            continue
+        A, c = fit_affine([x[p] for p in rest], [t[p] for p in rest])
+        out[pid] = A @ np.asarray(x[pid]) + c
+    return out
