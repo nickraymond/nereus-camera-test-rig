@@ -14,7 +14,10 @@ the camera colour matrix (L1), clip, sRGB encode (L3)::
 JPEG baselines score the camera's 8-bit output: ``camera_jpeg`` (A-mode as-shot) and
 ``olympus_preset_jpeg`` (the Olympus underwater preset, ``2_underwater_preset`` frames) — kept
 apart (SPEC §20 baselines b, c) — and ``jpeg_card_wb`` (the decoded camera JPEG white-balanced
-on the anchor grey; a channel the camera clipped to 0 stays 0).
+on the anchor grey; a channel the camera clipped to 0 stays 0). ``grvi_cheeca_v3`` is the
+backend GRVI correction (baseline a, OQ-31), read from a fresh ``grvi`` stage when one exists
+(``host_tools.color grvi``); GRVI solves on every card patch, so its scores are in-sample, and
+where it found no card its output is the camera JPEG (scored as such, ``grvi_no_card``).
 
 - Anchor grey: grey 128, else its right half, else grey 74 (whichever qc kept).
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
@@ -67,8 +70,10 @@ COLUMNS = {  # method → the name used in sheets and reports
     "raw_card_wb": "RAW + card WB",
     "raw_card_wb_haze": "RAW + card WB − haze",
     "raw_depth_wb_haze": "RAW + depth WB − haze (no card)",
+    "grvi_cheeca_v3": "GRVI cheeca_v3 (backend)",
 }
-CLASSES = {"card_anchored": ("jpeg_card_wb", "raw_card_wb", "raw_card_wb_haze"),
+CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
+                             "raw_card_wb_haze"),
            "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze")}
 ALL_GREYS = ("gray_white", "gray_light", "gray_mid", "gray_mid_left", "gray_mid_right",
              "gray_dark", "gray_black")
@@ -171,6 +176,11 @@ def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, An
                                                for k, v in lin.items()},
                                               card, neutralized=ALL_GREYS, anchor=anchor,
                                               exclude=excluded)
+    gm = job.get("grvi_means") or (jm if job.get("grvi_no_card") else None)
+    if gm:
+        out["grvi_cheeca_v3"] = score_srgb8(gm, card, neutralized=ALL_GREYS, anchor=lm,
+                                            exclude=excluded)
+        out["grvi_cheeca_v3"]["grvi_no_card"] = bool(job.get("grvi_no_card"))
     return out
 
 
@@ -231,6 +241,11 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
     no_card = set(cfg.get("no_card_categories", ["4_no_card"]))
     torch = set(cfg.get("torch_frames") or [])
     rho = grey_reflectance(card)
+    grvi_dir = root / "grvi"
+    grvi = None
+    if (grvi_dir / "stage.json").is_file():
+        grvi_sha = verify_fresh(grvi_dir)["params"]["backend_sha"]
+        grvi = json.loads((grvi_dir / "patches.json").read_text())
     tables = {d: depth_table(fit_dir / "wb_points.csv", sources, d)
               for d in {r["dive_id"] for r in rows.values()}}
 
@@ -264,6 +279,12 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
                 jpeg_stds={pid: s["std"] for pid, s in jpeg.items()
                            if pid in keep and s.get("mean")},
                 card_condition=q["card_condition"])
+            g = (grvi or {}).get(stem, {})
+            if g.get("no_card"):
+                job["grvi_no_card"] = True
+            elif "patches" in g:
+                job["grvi_means"] = {pid: s["mean"] for pid, s in g["patches"].items()
+                                     if pid in keep and s.get("mean")}
         jobs.append(job)
 
     out_dir = root / "correct"
@@ -292,12 +313,17 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
     summary = {"scored_frames": len(scores), "rendered_frames": len(frames),
                "no_card_frames": sum(1 for j in jobs if j["category"] in no_card),
                "card_haze_cap_bound_frames": f"{cap_bound[0]} of {cap_bound[1]}",
+               "grvi_backend_sha": grvi_sha if grvi else None,
+               "grvi_no_card_frames": sorted(s for s, v in scores.items()
+                                             if v["methods"].get("grvi_cheeca_v3", {})
+                                             .get("grvi_no_card")),
                "columns": COLUMNS}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     write_stage(out_dir, "correct", configs=[calibration, dataset_config, card_path],
-                upstream=[fit_dir], params={"version": "v0.2", "anchors": list(ANCHORS),
-                                            "table_source_dives": sources,
-                                            "dark_percentile": DARK_PERCENTILE,
-                                            "centre": CENTRE, "target_p99": TARGET_P99})
+                upstream=[fit_dir] + ([grvi_dir] if grvi else []),
+                params={"version": "v0.2", "anchors": list(ANCHORS),
+                        "table_source_dives": sources,
+                        "dark_percentile": DARK_PERCENTILE,
+                        "centre": CENTRE, "target_p99": TARGET_P99})
     summary["out_dir"] = str(out_dir)
     return summary

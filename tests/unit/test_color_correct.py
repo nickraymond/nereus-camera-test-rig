@@ -96,3 +96,15 @@ def test_card_haze_method_recovers_the_card_and_classes_share_patches():
     for m in ("raw_card_wb", "raw_card_wb_haze"):
         assert scores[m]["n_psi"] == 0 and scores[m]["n_de"] == 12
     assert set(ALL_GREYS) >= {p.id for p in CARD.group("grey")}
+
+
+def test_grvi_column_is_card_anchored_and_falls_back_to_the_camera_jpeg():
+    design = {p.id: list(p.truth) for p in CARD.patches}
+    j = job(card_means())
+    scores = score({**j, "grvi_means": design}, {}, CARD, np.eye(3))["grvi_cheeca_v3"]
+    assert scores["de2000_median"] < 0.5 and scores["n_psi"] == 0 and scores["n_de"] == 12
+    assert scores["grvi_no_card"] is False
+    grey = {pid: [128, 128, 128] for pid in design}
+    fallback = score({**j, "grvi_no_card": True, "jpeg_means": grey}, {}, CARD, np.eye(3))
+    assert fallback["grvi_cheeca_v3"]["grvi_no_card"] is True
+    assert fallback["grvi_cheeca_v3"]["de2000"] == fallback["camera_jpeg"]["de2000"]
