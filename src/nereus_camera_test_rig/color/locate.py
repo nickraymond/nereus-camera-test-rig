@@ -17,8 +17,11 @@ missed, or when a shot has no RAW; each tag records its source.
   versioned manual-corners file (``manual_corners`` in the dataset config, next to it; human
   work must survive a results/ or worktree cleanup). This stage only reads it, never writes.
 
-≥ 3 corner tags → the tag-centre quad, a single missing corner inferred as a parallelogram
-(``min_tags=3``). The quad must be convex with a card-like width/height ratio (design 3.985),
+≥ 3 corner tags → the tag-centre quad. A single missing corner is inferred from a homography
+fitted to the 12 corners of the 3 found tags (card geometry from the card YAML), which is
+exact under perspective; without card geometry it falls back to the parallelogram of
+``infer_card_corners_from_tags`` (exact only under an affine view — on close TG-7 cards it
+was off by up to ~50 px, enough to push patch samples onto the neighbouring patch). The quad must be convex with a card-like width/height ratio (design 3.985),
 else it is rejected. Quads are stored in RAW-mosaic and JPEG pixel coordinates (JPEG = RAW −
 the dataset's ``jpeg_offset_in_raw``). Output: ``locate/{corners.json, summary.json,
 stage.json}``; unlocated frames are recorded with their reason, never dropped.
@@ -94,7 +97,40 @@ def plausible(quad: np.ndarray) -> bool:
     return height > 0 and RATIO_RANGE[0] <= width / height <= RATIO_RANGE[1]
 
 
-def _record(tags: dict, corner_map: dict, offset, method: str) -> dict[str, Any]:
+def tag_geometry(card) -> tuple[float, float, float]:
+    """(tag-centre spacing x, y, tag edge) in mm from a loaded card."""
+    mm = card.physical_mm
+    return (mm["tag_center_spacing_x"], mm["tag_center_spacing_y"], mm["tag_edge"])
+
+
+_CENTRES = {"tl": (0, 0), "tr": (1, 0), "br": (1, 1), "bl": (0, 1)}
+_TAG_CORNERS = np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]]) / 2  # detector order TL,TR,BR,BL
+
+
+def infer_quad_from_tag_corners(tags: dict, corner_map: dict[str, int],
+                                geometry: tuple[float, float, float]) -> np.ndarray:
+    """Tag-centre quad (TL,TR,BR,BL) from a homography on the found tags' corners.
+
+    Card tags are printed upright, so detector corner k of every tag is the same card
+    direction (checked on the V2 render). Needs ≥ 2 tags; used for exactly 3.
+    """
+    sx, sy, edge = geometry
+    src, dst = [], []
+    for name, tid in corner_map.items():
+        if tid in tags:
+            cx, cy = _CENTRES[name]
+            src.extend(np.array([cx * sx, cy * sy]) + _TAG_CORNERS * edge)
+            dst.extend(np.asarray(tags[tid].corners, dtype=np.float64))
+    H, _ = cv2.findHomography(np.asarray(src), np.asarray(dst), 0)
+    if H is None:
+        raise CardLocalizationError("tag-corner homography failed")
+    centres = np.array([[_CENTRES[k][0] * sx, _CENTRES[k][1] * sy]
+                        for k in ("tl", "tr", "br", "bl")], dtype=np.float64)
+    return cv2.perspectiveTransform(centres.reshape(-1, 1, 2), H).reshape(4, 2)
+
+
+def _record(tags: dict, corner_map: dict, offset, method: str,
+            geometry: Optional[tuple] = None) -> dict[str, Any]:
     """Build the JSON record from {id: (TagDetection in RAW coords, scale, source)}."""
     record: dict[str, Any] = {
         "tags_found": sorted(tags),
@@ -107,6 +143,16 @@ def _record(tags: dict, corner_map: dict, offset, method: str) -> dict[str, Any]
     try:
         quad, inferred = infer_card_corners_from_tags(
             DetectionOutcome(tags={i: t[0] for i, t in tags.items()}), corner_map, min_tags=3)
+        if inferred and geometry is not None:
+            known = {tid: t[0] for tid, t in tags.items()}
+            known_quad = infer_quad_from_tag_corners(known, corner_map, geometry)
+            # keep the detected centres; only the missing corner comes from the homography
+            idx = ("tl", "tr", "br", "bl").index(inferred[0])
+            quad = quad.copy()
+            quad[idx] = known_quad[idx]
+            record["inference"] = "homography_tag_corners"
+        elif inferred:
+            record["inference"] = "parallelogram"
     except CardLocalizationError:
         return {**record, "located": False, "locate_method": None,
                 "reason": f"{len(tags)} of 4 card tags found (need 3)"}
@@ -158,7 +204,8 @@ def _search(raw_img, raw_origin, jpg, card_ids, offset, scales, window=None) -> 
 
 def locate_frame(raw: Optional[Path], jpeg: Optional[Path], corner_map: dict[str, int],
                  offset: tuple[float, float], raw_reader: Optional[RawReader] = None,
-                 window: Optional[tuple] = None) -> dict[str, Any]:
+                 window: Optional[tuple] = None,
+                 geometry: Optional[tuple] = None) -> dict[str, Any]:
     """Locate the card in one shot, RAW first; ``window`` restricts to a RAW-coord box (b)."""
     try:
         raw_img, raw_origin, jpg = _images(raw, jpeg, raw_reader)
@@ -170,7 +217,7 @@ def locate_frame(raw: Optional[Path], jpeg: Optional[Path], corner_map: dict[str
                 "reason": "no readable RAW or JPEG"}
     scales = WINDOW_SCALES if window else SCALES
     tags = _search(raw_img, raw_origin, jpg, set(corner_map.values()), offset, scales, window)
-    return _record(tags, corner_map, offset, "window" if window else "apriltag")
+    return _record(tags, corner_map, offset, "window" if window else "apriltag", geometry)
 
 
 def window_for(neighbour: dict) -> tuple[float, float, float, float]:
@@ -240,15 +287,16 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
         raw = dataset_dir / r["file"] if r["has_raw"] == "True" else None
         return raw, (dataset_dir / r["jpeg"] if r["jpeg"] else None)
 
+    geometry = tag_geometry(card)
     frame = partial(locate_frame, corner_map=card.corner_map, offset=offset,
-                    raw_reader=raw_reader)
+                    raw_reader=raw_reader, geometry=geometry)
     stems = list(rows)
     corners = dict(zip(stems, run_parallel(frame, [paths(rows[s]) for s in stems], workers)))
 
     retry = [(s, n) for s in stems if not corners[s]["located"]
              for n in [nearest_located(s, rows, corners, max_s)] if n]
-    jobs = [(*paths(rows[s]), card.corner_map, offset, raw_reader, window_for(corners[n]))
-            for s, n in retry]
+    jobs = [(*paths(rows[s]), card.corner_map, offset, raw_reader, window_for(corners[n]),
+             geometry) for s, n in retry]
     for (stem, n), rec in zip(retry, run_parallel(locate_frame, jobs, workers)):
         if rec["located"]:
             corners[stem] = {**rec, "neighbour": n}

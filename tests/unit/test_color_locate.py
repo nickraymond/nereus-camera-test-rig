@@ -23,8 +23,10 @@ from nereus_camera_test_rig.color.locate import (
     locate_frame,
     nearest_located,
     plausible,
+    tag_geometry,
     window_for,
 )
+from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.raw_io import RawFrame
 from nereus_camera_test_rig.color.stages import verify_fresh, write_stage
 
@@ -82,6 +84,34 @@ def test_locate_frame_infers_a_painted_out_tag(tmp_path):
     rec = locate_frame(None, path, CORNERS, offset=(0, 0))
     assert rec["locate_method"] == "apriltag3" and rec["inferred_corners"] == ["br"]
     assert rec["quad_jpeg"][2] == pytest.approx(list(TRUE[3]), abs=2.0)
+
+
+@pytest.mark.parametrize("dropped", [0, 3])
+def test_three_tags_under_strong_perspective_use_the_tag_corner_homography(tmp_path, dropped):
+    """Close TG-7 cards are far from affine: the parallelogram guess missed by up to ~50 px.
+    The 12-corner homography recovers the missing centre."""
+    img = cv2.imread(str(RENDER))
+    h, w = img.shape[:2]
+    view = cv2.getPerspectiveTransform(np.float32([[0, 0], [w, 0], [w, h], [0, h]]),
+                                       np.float32([[200, 300], [2700, 50], [2800, 1900],
+                                                   [150, 1500]]))
+    warped = cv2.warpPerspective(img, view, (3000, 2000), borderValue=(255, 255, 255))
+    x, y = cv2.perspectiveTransform(np.float32([[TRUE[dropped]]]), view)[0, 0]
+    cv2.circle(warped, (int(x), int(y)), 190, (255, 255, 255), -1)
+    path = tmp_path / "persp.png"
+    cv2.imwrite(str(path), warped)
+    truth = cv2.perspectiveTransform(
+        np.float32([[TRUE[0], TRUE[1], TRUE[3], TRUE[2]]]), view)[0]
+    idx = {0: 0, 3: 2}[dropped]
+    geometry = tag_geometry(load_card(CARD))
+    rec = locate_frame(None, path, CORNERS, offset=(0, 0), geometry=geometry)
+    old = locate_frame(None, path, CORNERS, offset=(0, 0))
+    assert rec["locate_method"] == "apriltag3" and rec["inference"] == "homography_tag_corners"
+    assert old["inference"] == "parallelogram"
+    err = np.linalg.norm(np.array(rec["quad_jpeg"][idx]) - truth[idx])
+    old_err = np.linalg.norm(np.array(old["quad_jpeg"][idx]) - truth[idx])
+    assert err < 2.0 and old_err > 20 * err, (err, old_err)
+    print(f"homography {err:.2f} px vs parallelogram {old_err:.1f} px")
 
 
 def test_locate_frame_without_tags_is_recorded_not_dropped(tmp_path):
