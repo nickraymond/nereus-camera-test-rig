@@ -24,6 +24,7 @@ COLOR_MODULES = [
     "nereus_camera_test_rig.color",
     "nereus_camera_test_rig.color.card",
     "nereus_camera_test_rig.color.raw_io",
+    "nereus_camera_test_rig.color.stages",
 ]
 
 # Capture path, web stack, serial transport, and LGPL rawpy (Mac-only tools, SPEC §20).
