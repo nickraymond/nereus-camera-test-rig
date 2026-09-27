@@ -41,6 +41,7 @@ PACKAGE_MODULES = [
     "nereus_camera_test_rig.web.app",
     "nereus_camera_test_rig.color",
     "nereus_camera_test_rig.color.card",
+    "nereus_camera_test_rig.color.raw_io",
 ]
 
 
