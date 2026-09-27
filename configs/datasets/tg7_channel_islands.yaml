@@ -51,3 +51,8 @@ card_damage:
 
 # Diver torch in view (dataset README) — artificial light, excluded from ambient-light work.
 torch_frames: [P9160606, P9160616, P9160617]
+
+# Table-mode scene distance for frames without a card distance (S2a, brief §7 P1.3 "assumed
+# scene distance, e.g. 2-3 m"). Table mode on card frames is also reported with this value
+# ("default z") next to the card's own z ("oracle z").
+default_scene_z_m: 2.0
