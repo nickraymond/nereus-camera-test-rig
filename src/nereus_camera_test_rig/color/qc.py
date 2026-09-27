@@ -72,19 +72,23 @@ def _damage_ids(card: Card, listed: list[str]) -> set[str]:
 
 
 def qc_patch(stats: dict, pid: str, known_damage: bool, threshold) -> dict[str, Any]:
-    reasons = []
+    reasons, codes = [], []
     if not stats.get("n_px"):
-        return {"usable": False, "damage": "unknown", "reasons": ["no pixels sampled"]}
+        return {"usable": False, "damage": "unknown", "reasons": ["no pixels sampled"],
+                "codes": ["no_pixels"]}
     if not stats["in_frame"]:
         reasons.append("partly outside the image")
+        codes.append("outside_image")
     if max(stats.get("clip_frac") or [0]) > CLIP_MAX:
         reasons.append(f"clipped (> {CLIP_MAX:.0%} of pixels)")
+        codes.append("clipped")
     ratio = cell_ratio(stats)
     rec: dict[str, Any] = {"cell_ratio": None if ratio is None else
                            [None if not np.isfinite(v) else round(float(v), 4) for v in ratio]}
     if known_damage:
         rec["damage"] = "known"
         reasons.append("known water damage (card_damage map)")
+        codes.append("known_damage")
     elif ratio is None or threshold is None:
         rec["damage"] = "unknown"
     elif np.any(ratio > np.asarray(threshold)):
@@ -92,9 +96,10 @@ def qc_patch(stats: dict, pid: str, known_damage: bool, threshold) -> dict[str, 
         worst = int(np.argmax(ratio / np.asarray(threshold)))
         reasons.append(f"cell ratio {ratio[worst]:.2f} > clean p{BASELINE_PERCENTILE} "
                        f"{threshold[worst]:.2f} ({'RGB'[worst]})")
+        codes.append("cell_ratio")
     else:
         rec["damage"] = "clean"
-    return {"usable": not reasons, **rec, "reasons": reasons}
+    return {"usable": not reasons, **rec, "reasons": reasons, "codes": codes}
 
 
 def qc(patches_dir: Path, dataset_config: Path, card_path: Path) -> dict[str, Any]:
@@ -180,9 +185,8 @@ def _summary(out: dict, ids: list[str], ref_stems: list[str], thresholds: dict) 
             if p["usable"]:
                 c["usable_patches"] += 1
                 c["usable_by_patch"][pid] += 1
-            for r in p["reasons"]:
-                key = r.split(" (")[0].split(" >")[0]
-                patch_reasons[key] = patch_reasons.get(key, 0) + 1
+            for code in p["codes"]:
+                patch_reasons[code] = patch_reasons.get(code, 0) + 1
     return {"frames": len(out), "by_card_condition": by_condition,
             "frame_exclusions": frame_reasons, "patch_exclusions_in_usable_frames": patch_reasons,
             "clean_reference_frames": ref_stems,
