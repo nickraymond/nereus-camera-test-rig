@@ -5,6 +5,11 @@
 dataset: tg7_channel_islands
 camera: om_tg7
 
+# The camera JPEG is the RAW cropped at (8, 8) — identical on all 308 ORFs (LibRaw crop
+# margins, verified 2026-09-26, S0.5). locate stores card quads in both frames.
+jpeg_offset_in_raw: [8, 8]
+no_card_categories: [4_no_card]
+
 # Four dives (Nick, 2026-09-26; OQ-35). `ingest` assigns dive_id from time gaps between shots;
 # these windows are a cross-check (an assigned dive must fall inside its window). Times are
 # UTC — the camera clock was UTC-8 (PST), so the camera-local dates in the brief differ.

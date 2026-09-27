@@ -45,6 +45,7 @@ PACKAGE_MODULES = [
     "nereus_camera_test_rig.color.stages",
     "nereus_camera_test_rig.color.ingest",
     "nereus_camera_test_rig.color.sun",
+    "nereus_camera_test_rig.color.locate",
 ]
 
 
