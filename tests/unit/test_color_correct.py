@@ -108,3 +108,18 @@ def test_grvi_column_is_card_anchored_and_falls_back_to_the_camera_jpeg():
     fallback = score({**j, "grvi_no_card": True, "jpeg_means": grey}, {}, CARD, np.eye(3))
     assert fallback["grvi_cheeca_v3"]["grvi_no_card"] is True
     assert fallback["grvi_cheeca_v3"]["de2000"] == fallback["camera_jpeg"]["de2000"]
+
+
+def test_preset_frames_pair_with_the_nearest_a_mode_frame_of_their_dive():
+    from nereus_camera_test_rig.color.correct import nearest_a_mode
+
+    rows = {s: {"category": c, "dive_id": d, "time_utc": f"2026-09-16T01:{m:02d}:00+00:00",
+                "depth_m": dep}
+            for s, c, d, m, dep in (("P", "2_underwater_preset", "1", 30, "10"),
+                                    ("A1", "1_reference_A_iso100", "1", 20, "12"),
+                                    ("A2", "1_reference_A_iso100", "1", 33, "9.5"),
+                                    ("B", "1_reference_A_iso100", "2", 30, "10"),
+                                    ("S", "3_scene_card_offcenter", "1", 30, "10"))}
+    pair = nearest_a_mode("P", rows, list(rows), "1_reference_A_iso100")
+    assert pair == {"stem": "A2", "dt_s": 180.0, "depth_diff_m": -0.5}
+    assert nearest_a_mode("P", rows, ["B", "S"], "1_reference_A_iso100") is None

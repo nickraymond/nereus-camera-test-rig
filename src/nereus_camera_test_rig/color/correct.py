@@ -18,6 +18,9 @@ on the anchor grey; a channel the camera clipped to 0 stays 0). ``grvi_cheeca_v3
 backend GRVI correction (baseline a, OQ-31), read from a fresh ``grvi`` stage when one exists
 (``host_tools.color grvi``); GRVI solves on every card patch, so its scores are in-sample, and
 where it found no card its output is the camera JPEG (scored as such, ``grvi_no_card``).
+Flash frames (the Olympus preset fired its flash) are scored on the camera's outputs only
+(``flash: true``), since the flash breaks the water model; every preset frame records its
+nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset comparison.
 
 - Anchor grey: grey 128, else its right half, else grey 74 (whichever qc kept).
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
@@ -47,6 +50,7 @@ import csv
 import json
 import os
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -184,6 +188,50 @@ def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, An
     return out
 
 
+def card_job(stem: str, row: dict, q: dict, patches: dict, grvi: Optional[dict], card: Card,
+             rho) -> dict[str, Any]:
+    """Scoring inputs of one card frame: qc-kept patch means per source (RAW, camera JPEG,
+    GRVI output), the anchor grey and the card-ramp fit."""
+    keep = {pid for pid, p in q["patches"].items() if p["usable"]}
+    anchor = next((a for a in ANCHORS if a in keep), None)
+    jpeg = (patches.get("jpeg") or {"patches": {}})["patches"]
+    job: dict[str, Any] = {
+        "stem": stem, "category": row["category"], "depth_m": float(row["depth_m"]),
+        "anchor": anchor, "excluded": [pid for pid in q["patches"] if pid not in keep],
+        "anchor_truth": _truth_linear(card, anchor) if anchor else None,
+        "jpeg_means": {pid: s["mean"] for pid, s in jpeg.items() if pid in keep and s.get("mean")},
+        "jpeg_stds": {pid: s["std"] for pid, s in jpeg.items() if pid in keep and s.get("mean")},
+        "card_condition": q["card_condition"]}
+    if "raw" in patches:
+        raw_stats = patches["raw"]["patches"]
+        k = patches["raw"]["exposure_factor"]
+        job.update(
+            ramp=ramp_fit(raw_stats, keep, rho),
+            raw_means={pid: s["mean_norm"] for pid, s in raw_stats.items()
+                       if pid in keep and s.get("mean_norm")},
+            raw_stds={pid: (np.asarray(s["std"]) / k).tolist() for pid, s in
+                      raw_stats.items() if pid in keep and s.get("mean_norm")})
+    if (grvi or {}).get("no_card"):
+        job["grvi_no_card"] = True
+    elif grvi and "patches" in grvi:
+        job["grvi_means"] = {pid: s["mean"] for pid, s in grvi["patches"].items()
+                             if pid in keep and s.get("mean")}
+    return job
+
+
+def nearest_a_mode(stem: str, rows: dict, candidates, category: str) -> Optional[dict]:
+    """The nearest ``category`` (A-mode reference) frame in the same dive, by capture time."""
+    me = rows[stem]
+    t = datetime.fromisoformat(me["time_utc"])
+    best = min(((abs((datetime.fromisoformat(rows[c]["time_utc"]) - t).total_seconds()), c)
+                for c in candidates if rows[c]["category"] == category
+                and rows[c]["dive_id"] == me["dive_id"]), default=None)
+    if best is None:
+        return None
+    return {"stem": best[1], "dt_s": round(best[0], 1),
+            "depth_diff_m": round(float(rows[best[1]]["depth_m"]) - float(me["depth_m"]), 2)}
+
+
 class _Frame:
     """Picklable per-frame worker: read the RAW once, derive maps, score, render."""
 
@@ -237,7 +285,8 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
     card = load_card(card_path)
     matrix = np.asarray(load_yaml(calibration)["color_matrix"]["matrix"], dtype=np.float64)
     cfg = load_yaml(dataset_config)
-    sources = fit_settings(dataset_config)["table_source_dives"]
+    settings = fit_settings(dataset_config)
+    sources = settings["table_source_dives"]
     no_card = set(cfg.get("no_card_categories", ["4_no_card"]))
     torch = set(cfg.get("torch_frames") or [])
     rho = grey_reflectance(card)
@@ -249,42 +298,26 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
     tables = {d: depth_table(fit_dir / "wb_points.csv", sources, d)
               for d in {r["dive_id"] for r in rows.values()}}
 
-    jobs = []
+    jobs, flash_jobs = [], []
     for stem, row in rows.items():
-        if row["has_raw"] != "True" or stem in torch or row["flash_fired"] == "True":
+        if row["has_raw"] != "True" or stem in torch:
+            continue
+        q, d = qc.get(stem), dist.get(stem, {})
+        if row["flash_fired"] == "True":
+            # the flash breaks the water model: only the camera's own outputs are scored,
+            # and reported apart (SPEC §4 S2a baseline b)
+            if q is not None and "jpeg" in patches.get(stem, {}) and d.get("medium") == "water":
+                flash_jobs.append(card_job(stem, row, q, patches[stem], (grvi or {}).get(stem),
+                                           card, rho))
             continue
         job: dict[str, Any] = {"stem": stem, "raw_path": str(dataset_dir / row["file"]),
                                "depth_m": float(row["depth_m"]), "category": row["category"],
                                "table": tables[row["dive_id"]]}
         if row["category"] not in no_card:
-            q, d = qc.get(stem), dist.get(stem, {})
             if (q is None or not q["usable"] or "raw" not in patches.get(stem, {})
                     or d.get("medium") != "water"):
                 continue
-            keep = {pid for pid, p in q["patches"].items() if p["usable"]}
-            anchor = next((a for a in ANCHORS if a in keep), None)
-            raw_stats = patches[stem]["raw"]["patches"]
-            k = patches[stem]["raw"]["exposure_factor"]
-            jpeg = (patches[stem].get("jpeg") or {"patches": {}})["patches"]
-            job.update(
-                anchor=anchor, excluded=[pid for pid in q["patches"] if pid not in keep],
-                anchor_truth=_truth_linear(card, anchor) if anchor else None,
-                ramp=ramp_fit(raw_stats, keep, rho),
-                raw_means={pid: s["mean_norm"] for pid, s in raw_stats.items()
-                           if pid in keep and s.get("mean_norm")},
-                raw_stds={pid: (np.asarray(s["std"]) / k).tolist() for pid, s in
-                          raw_stats.items() if pid in keep and s.get("mean_norm")},
-                jpeg_means={pid: s["mean"] for pid, s in jpeg.items()
-                            if pid in keep and s.get("mean")},
-                jpeg_stds={pid: s["std"] for pid, s in jpeg.items()
-                           if pid in keep and s.get("mean")},
-                card_condition=q["card_condition"])
-            g = (grvi or {}).get(stem, {})
-            if g.get("no_card"):
-                job["grvi_no_card"] = True
-            elif "patches" in g:
-                job["grvi_means"] = {pid: s["mean"] for pid, s in g["patches"].items()
-                                     if pid in keep and s.get("mean")}
+            job.update(card_job(stem, row, q, patches[stem], (grvi or {}).get(stem), card, rho))
         jobs.append(job)
 
     out_dir = root / "correct"
@@ -307,10 +340,21 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
                                    "dive_id": row["dive_id"], "sweep_id": row["sweep_id"],
                                    "card_condition": job["card_condition"],
                                    "methods": res["scores"]}
+    for job in flash_jobs:
+        row = rows[job["stem"]]
+        scores[job["stem"]] = {"anchor": job["anchor"], "category": job["category"],
+                               "dive_id": row["dive_id"], "sweep_id": row["sweep_id"],
+                               "card_condition": job["card_condition"], "flash": True,
+                               "methods": score(job, {}, card, matrix)}
+    a_mode = [s for s, v in scores.items() if not v.get("flash")]
+    for stem, v in scores.items():
+        if v["category"] == PRESET_CATEGORY:
+            v["pair_a_mode"] = nearest_a_mode(stem, rows, a_mode, settings["reference_category"])
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "scores.json").write_text(json.dumps(scores, indent=1) + "\n")
     (out_dir / "frames.json").write_text(json.dumps(frames, indent=1) + "\n")
     summary = {"scored_frames": len(scores), "rendered_frames": len(frames),
+               "flash_frames_jpeg_only": sorted(j["stem"] for j in flash_jobs),
                "no_card_frames": sum(1 for j in jobs if j["category"] in no_card),
                "card_haze_cap_bound_frames": f"{cap_bound[0]} of {cap_bound[1]}",
                "grvi_backend_sha": grvi_sha if grvi else None,
