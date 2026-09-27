@@ -7,6 +7,7 @@ Usage::
 
     python -m host_tools.color inspect <file.orf|file.dng> [--out results/color]
     python -m host_tools.color ingest <dataset_dir> --config configs/datasets/<dataset>.yaml
+    python -m host_tools.color locate results/color/<dataset_id>/ingest --config <dataset.yaml>
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ if str(REPO / "src") not in sys.path:
 
 from nereus_camera_test_rig.color import stages  # noqa: E402
 from nereus_camera_test_rig.color.ingest import ingest  # noqa: E402
+from nereus_camera_test_rig.color.locate import locate  # noqa: E402
 
 from .tg7.exif import read_exif  # noqa: E402
 from .tg7.orf_io import read_orf  # noqa: E402
@@ -40,13 +42,19 @@ def main(argv=None) -> int:
     p.add_argument("dataset_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--out", type=Path, default=REPO / "results" / "color")
+    p = sub.add_parser("locate", help="find the card (tag-centre quad) in every card frame")
+    p.add_argument("ingest_dir", type=Path)
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
     args = parser.parse_args(argv)
 
     try:
         if args.stage == "inspect":
             summary = stages.inspect(args.file, args.out)
-        else:
+        elif args.stage == "ingest":
             summary = ingest(args.dataset_dir, args.config, args.out, read_exif)
+        else:
+            summary = locate(args.ingest_dir, args.card, args.config)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"{args.stage} failed: {exc}", file=sys.stderr)
         return 1
