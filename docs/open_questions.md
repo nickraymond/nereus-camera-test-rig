@@ -226,16 +226,13 @@ Items for Nick are marked **(Nick)**.
   colorimetry — score it as production runs it. Its card truth (`profiles/template_layout_v2.json`,
   SVG design fills) becomes the V2 truth in `configs/cards/nereus_v2.yaml`. Remaining for Nick: confirm `staging` (vs
   `main`) is the right baseline branch.
-- **[PARTIAL] OQ-32 — Physical V2 card dimensions (for distance `z`).** *Blocks S1 distance.*
-  The print master is 11×17 in with bleed (`tests/fixtures/reference_card/README.md`). In the
-  3000×1941 px render (= the full 17×11 in page) the tag centers are 2535 px apart
-  horizontally and 636 px vertically, i.e. ≈ 365 × 92 mm **if the card was printed at 100 %
-  scale** (no fit-to-page, no trim beyond the bleed) — an assumption until measured. Use the
-  tag-centre quad for `z`: the canonical "card quad" is the tag quad expanded ×1.25 / ×2.0,
-  which is wider than the printed sheet, so its corners are not physical points. The card
-  also carries a 0–300 mm scale bar. **Ask (Nick):** tape-measure
-  the tag-center spacing (horizontal and vertical) and one tag's edge length on the physical
-  card → `configs/cards/nereus_v2.yaml`.
+- **[RESOLVED] OQ-32 — Physical V2 card dimensions (for distance `z`).** Measured from the
+  vector print master (Nick's direction, 2026-09-26) by reading the PDF drawing operators:
+  tag-centre spacing **364.900 × 91.566 mm**, tag edge **31.980 mm**, card **410.000 ×
+  136.667 mm** (the PDF is drawn at true scale). Recorded in `configs/cards/nereus_v2.yaml`;
+  derivation in `docs/reference_card_v2.md`. Two notes: the printed "0–300 mm" bar is
+  298.96 mm in the vector file with uneven ticks — never use it for scale; and the values
+  assume the card was printed at 100 % (a tape check of the 410 mm width would confirm).
 - **[RESOLVED-DECISION] OQ-33 — Licence policy.** Decision (Nick, 2026-09-26), recorded in
   SPEC §20: shipped and hosted code is permissive-only (MIT / BSD / Apache-2.0 and
   equivalents such as Pillow's `MIT-CMU`); no GPL / LGPL / AGPL, including native libraries
@@ -264,7 +261,9 @@ Items for Nick are marked **(Nick)**.
   rejects compressed CFA data with a clear error rather than half-reading it.) From exiftool
   (2026-09-26, all 308 ORFs): 4040×3016, CFA GRBG, 12-bit, black level per frame and
   channel (256–260) — the decoded frame must agree.
-- **[OPEN] OQ-35 — How many TG-7 dives: 4 or 5? (Nick).** *Blocks S1 `dive_id`, S2a
+- **[RESOLVED] OQ-35 — How many TG-7 dives: 4 or 5?** **Four** (Nick, 2026-09-26): dives 1–2
+  at Santa Cruz Island, 3–4 at Anacapa — recorded with UTC windows in
+  `configs/datasets/tg7_channel_islands.yaml`. Original analysis: *Blocks S1 `dive_id`, S2a
   leave-one-dive-out.* The brief (§7 P1.0) says "5 dives", but splitting the 309 shots at
   gaps > 45 min (camera-local time from `manifest.csv`, checked 2026-09-26) gives **4**
   groups, and the brief's own sun-angle list names four (Sep 15 evening; Sep 16 early
@@ -300,10 +299,11 @@ Items for Nick are marked **(Nick)**.
   JPEG is shading- (vignetting-) corrected while the RAW is not. Matters for comparing
   RAW-based correction against JPEG-based baselines near the frame edge; until a flat-field
   exists (S2b), fits stay within ~0.6 of the image half-diagonal (SPEC §4 S2a).
-- **[OPEN] OQ-38 — Dive site coordinates (Nick).** *Blocks S1 sun elevation.* The ORFs have
-  no GPS tags. Sun elevation per frame (needed to model changing light — dives 1 and 2 both
-  ascend while the light changes) needs the site latitude/longitude, per dive if the sites
-  differed. Goes in the dataset config, not the dataset folder.
+- **[RESOLVED] OQ-38 — Dive site coordinates.** No GPS was logged (Nick, 2026-09-26): dives 1–2
+  were at **Santa Cruz Island**, 3–4 at **Anacapa Island**. Island-level coordinates
+  (Santa Cruz ≈ 34.00° N, 119.75° W; Anacapa ≈ 34.01° N, 119.40° W) are in
+  `configs/datasets/tg7_channel_islands.yaml`, used only for sun elevation — ±0.2° in position
+  moves solar elevation by ≲0.3°, small next to the light changes being modelled.
 
 ---
 
