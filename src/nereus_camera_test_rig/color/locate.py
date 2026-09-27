@@ -29,7 +29,6 @@ from __future__ import annotations
 import csv
 import json
 import os
-from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -43,7 +42,7 @@ from ..analysis.reference_card import CardLocalizationError, infer_card_corners_
 from ..config import load_yaml
 from .card import load_card
 from .raw_io import RawFrame, demosaic_bilinear, normalize
-from .stages import sha256_file, verify_fresh, write_stage
+from .stages import run_parallel, sha256_file, verify_fresh, write_stage
 
 DEFAULT_NO_CARD = ["4_no_card"]
 SCALES = (1.0, 0.5, 0.25)
@@ -217,13 +216,6 @@ def manual_corners_path(dataset_config: Path, cfg: dict, out_dir: Path) -> Path:
     return dataset_config.parent / name if name else out_dir / MANUAL_FILE
 
 
-def _run(fn, jobs: list, workers: int) -> list:
-    if workers > 1 and len(jobs) > 1:
-        with ProcessPoolExecutor(workers) as pool:
-            return list(pool.map(fn, *zip(*jobs)))
-    return [fn(*job) for job in jobs]
-
-
 def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
            raw_reader: Optional[RawReader] = None, workers: int | None = None) -> dict[str, Any]:
     """Run ``locate`` over every card-bearing frame of an ingested dataset.
@@ -251,13 +243,13 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
     frame = partial(locate_frame, corner_map=card.corner_map, offset=offset,
                     raw_reader=raw_reader)
     stems = list(rows)
-    corners = dict(zip(stems, _run(frame, [paths(rows[s]) for s in stems], workers)))
+    corners = dict(zip(stems, run_parallel(frame, [paths(rows[s]) for s in stems], workers)))
 
     retry = [(s, n) for s in stems if not corners[s]["located"]
              for n in [nearest_located(s, rows, corners, max_s)] if n]
     jobs = [(*paths(rows[s]), card.corner_map, offset, raw_reader, window_for(corners[n]))
             for s, n in retry]
-    for (stem, n), rec in zip(retry, _run(locate_frame, jobs, workers)):
+    for (stem, n), rec in zip(retry, run_parallel(locate_frame, jobs, workers)):
         if rec["located"]:
             corners[stem] = {**rec, "neighbour": n}
         else:

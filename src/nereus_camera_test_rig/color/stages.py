@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
@@ -98,6 +99,15 @@ def verify_fresh(stage_dir: Path) -> dict:
             raise StaleInputError(f"{stage_dir}: upstream {up} was re-run after the "
                                   f"{record['stage']!r} stage — re-run it")
     return record
+
+
+def run_parallel(fn: Callable, jobs: list, workers: int) -> list:
+    """``[fn(*job) for job in jobs]``, in worker processes when ``workers > 1``. ``fn`` must
+    be picklable (module-level, or a ``functools.partial`` of one)."""
+    if workers > 1 and len(jobs) > 1:
+        with ProcessPoolExecutor(workers) as pool:
+            return list(pool.map(fn, *zip(*jobs)))
+    return [fn(*job) for job in jobs]
 
 
 def _srgb8(linear: np.ndarray) -> np.ndarray:
