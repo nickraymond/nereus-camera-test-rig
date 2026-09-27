@@ -43,6 +43,8 @@ PACKAGE_MODULES = [
     "nereus_camera_test_rig.color.card",
     "nereus_camera_test_rig.color.raw_io",
     "nereus_camera_test_rig.color.stages",
+    "nereus_camera_test_rig.color.ingest",
+    "nereus_camera_test_rig.color.sun",
 ]
 
 
