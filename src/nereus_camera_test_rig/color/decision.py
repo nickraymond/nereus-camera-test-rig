@@ -18,11 +18,16 @@ held-out dive and per card condition, with n per method × dive × condition. GR
 production runs it (its no-card frames are the camera JPEG) and on the frames where it found the
 card. Flash frames are reported apart.
 
-Output: ``decide/{decision.json, index.html, stage.json}``.
+The visual sheets — column cut sheet and blind side-randomized review — are built by
+``decision_sheets``. Saved blind answers — ``<dataset config>_blind_answers.json`` next to the
+dataset config, or its ``blind_answers`` key; versioned human work — are scored here.
+
+Output: ``decide/{decision.json, index.html, cutsheet.html, blind.html, stage.json}``.
 """
 
 from __future__ import annotations
 
+import csv
 import html
 import json
 from datetime import datetime
@@ -31,7 +36,10 @@ from typing import Any, Optional
 
 import numpy as np
 
-from .correct import COLUMNS
+from ..config import load_yaml
+from .card import load_card
+from .correct import COLUMNS, _truth_linear
+from .decision_sheets import Images, blind_pairs, blind_sheet, cut_frames, cut_sheet, score_blind
 from .report import STYLE
 from .stages import verify_fresh, write_stage
 from .water_model import fit_settings
@@ -268,6 +276,18 @@ def render(result: dict, provenance: dict) -> str:
                     f"<td>{_e(v['psi_median'])}</td><td>{_e(v['de2000_median'])}</td></tr>"
                     for s, ms in sorted(result["flash"].items()) for m, v in ms.items())
     needs = "".join(f"<li>{_e(x)}</li>" for x in result["needs_v3"])
+    blind = result.get("blind")
+    if blind:
+        review = "".join(f"<tr><td>{_e(cls)}</td><td>{v['nereus']}</td><td>{v['baseline']}</td>"
+                         f"<td>{v['tie']}</td><td>{_pct(v['prefer_nereus'])}</td>"
+                         f"<td class=\"v {'pass' if v['rule_pass'] else 'fail'}\">"
+                         f"{'pass' if v['rule_pass'] else 'fail'}</td></tr>"
+                         for cls, v in blind.items())
+        review = ("<table><thead><tr><th>class</th><th>prefer Nereus</th><th>prefer baseline"
+                  "</th><th>no preference</th><th>Nereus share</th><th>≥ 70 %</th></tr>"
+                  f"</thead><tbody>{review}</tbody></table>")
+    else:
+        review = "<p class=\"note\"><b>Blind review not done yet.</b></p>"
     rule = result["rule"]
     prov = "".join(f"<tr><td>{_e(k)}</td><td><code>{_e(v)}</code></td></tr>"
                    for k, v in provenance.items())
@@ -286,6 +306,10 @@ from a sweep-level bootstrap ({rule['n_boot']} resamples). Rule (SPEC §20): Ner
 ≥ {rule['win_min']:.0%}. {_e(rule['note'])} Card-anchored columns are scored on the 12 colour
 patches only (their greys are used); card-free columns on the greys (ψ) and colours (ΔE00).
 GRVI solves on every card patch, so its card-anchored scores are in-sample.</p>
+<h2>Visual review</h2><p class="note"><a href="blind.html">Blind review</a>
+({result.get('blind_pairs', 0)} pairs, sides randomized, method names hidden) — decides the gate.
+<a href="cutsheet.html">Cut sheet</a> — every method side by side on {result.get('cut_frames', 0)}
+frames.</p>{review}
 {"".join(sections)}
 <h2>Olympus underwater preset vs the nearest A-mode frame</h2>
 <p class="note">Each preset frame against the nearest A-mode reference frame of the same dive
@@ -298,7 +322,7 @@ camera's outputs are scored.</p><table><thead><tr><th>frame</th><th>method</th><
 </main></body></html>"""
 
 
-def decide(correct_dir: Path, dataset_config: Path) -> dict[str, Any]:
+def decide(correct_dir: Path, dataset_config: Path, card_path: Path) -> dict[str, Any]:
     record = verify_fresh(correct_dir)
     root = correct_dir.parent
     scores = json.loads((correct_dir / "scores.json").read_text())
@@ -310,13 +334,40 @@ def decide(correct_dir: Path, dataset_config: Path) -> dict[str, Any]:
                                   fit_settings(dataset_config)["flagged_dives"], comps)
     out_dir = root / "decide"
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    cfg = load_yaml(dataset_config)
+    configs = [dataset_config, card_path]
+    answers = dataset_config.parent / cfg.get("blind_answers",
+                                              f"{dataset_config.stem}_blind_answers.json")
+    if answers.is_file():
+        result["blind"] = score_blind(json.loads(answers.read_text()))
+        configs.append(answers)
+    ingest_dir = root / "ingest"
+    rows = {r["stem"]: r for r in csv.DictReader((ingest_dir / "manifest.csv").open())}
+    card = load_card(card_path)
+    truth = {pid: _truth_linear(card, pid) for pid in
+             [p.id for p in card.patches] + [sp.id for sp in card.sub_patches]}
+    patches = json.loads((root / "patches" / "patches.json").read_text())
+    images = Images(root, Path(verify_fresh(ingest_dir)["params"]["dataset_dir"]), rows, scores,
+                    patches, truth)
+    rendered = {p.stem for p in (correct_dir / "images" / "raw_depth_wb_haze").glob("*.jpg")}
+    frames = cut_frames(rows, scores, rendered)
+    pairs = blind_pairs(rows, scores, rendered)
+    result.update(cut_frames=len(frames), blind_pairs=len(pairs))
+    (out_dir / "cutsheet.html").write_text(cut_sheet(images, frames, rows, scores))
+    try:
+        shown = answers.resolve().relative_to(Path.cwd())
+    except ValueError:
+        shown = answers.resolve()
+    (out_dir / "blind.html").write_text(blind_sheet(images, pairs, str(shown)))
     provenance = {"dataset": root.name, "correct stage git": record["git"],
                   "GRVI backend commit": correct_summary.get("grvi_backend_sha")}
     (out_dir / "decision.json").write_text(json.dumps(result, indent=1) + "\n")
     (out_dir / "index.html").write_text(render(result, provenance))
-    write_stage(out_dir, "decide", configs=[dataset_config], upstream=[correct_dir],
+    write_stage(out_dir, "decide", configs=configs, upstream=[correct_dir],
                 params=result["rule"])
     return {"out_dir": str(out_dir), "needs_v3": result["needs_v3"],
+            "cut_frames": len(frames), "blind_pairs": len(pairs), "blind": result.get("blind"),
             "verdicts": {cls: [f"{METRIC_NAMES[c['metric']]} {LABELS[c['nereus']]} vs "
                                f"{LABELS[c['baseline']]}: {c['verdict']}"
                                for c in v["comparisons"]]
