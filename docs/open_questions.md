@@ -322,6 +322,15 @@ Items for Nick are marked **(Nick)**.
   through the dive (sunset, morning). The colour of the light is stable enough to use (ratios
   cancel it); absolute light levels are not transferable between frames or dives.
 
+- **[OPEN] OQ-42 — The TG-7 JPEG is lens-corrected; the RAW is not.** *S2a (JPEG baselines).*
+  Found by Nick on the v0.2 cut sheet, measured 2026-09-27: AprilTag centres detected separately
+  on RAW and JPEG agree to ~1 px near the centre but the JPEG's sit 16 px farther out at 950 px
+  radius and 125–140 px at 1800 px — in-camera barrel-distortion correction, although EXIF says
+  `DistortionCorrection: Off`. `locate` maps RAW → JPEG as a pure (8, 8) crop, so JPEG-baseline
+  patch samples are misplaced on off-centre cards. Fix in S2a: detect the card on the JPEG itself
+  (or fit the radial RAW → JPEG map). Whether the ORF maker notes carry the correction
+  parameters is unverified.
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
