@@ -18,7 +18,15 @@ Solved by **variable projection**: on a (βD, βB) grid the rest is a weighted l
 squares; the grid minimum is the fit and the profile gives the 68 % intervals (Δχ² ≤ 1 after
 scaling χ² to its reduced minimum). numpy only.
 
-Output: ``fit/{params.json, observations.csv, summary.json, stage.json}``.
+**Depth white-balance table (v0.1, 2026-09-27).** Run A showed the grey's colour barely
+changes with distance (0.5–3 m) but strongly with depth, and absolute light levels differ ~10×
+between dives. So table mode uses only a colour-of-light table: per card frame, the anchor
+grey after haze removal gives the light colour; ``ln(R/G)`` and ``ln(B/G)`` are regressed on
+depth per dive (and on depth + distance, as a check that distance adds little). Ratios cancel
+exposure and between-frame light flicker.
+
+Output: ``fit/{params.json, wb_table.json, wb_points.csv, observations.csv, summary.json,
+stage.json}``.
 """
 
 from __future__ import annotations
@@ -181,6 +189,90 @@ def fit_dive(obs: list[dict]) -> dict[str, Any]:
     return out
 
 
+ANCHORS = ("gray_mid", "gray_mid_right", "gray_dark")
+WB_CATEGORIES = ("1_reference_A_iso100", "2_underwater_preset", "3_scene_card_offcenter")
+
+
+def haze_from_black(raw: dict, anchor: str, rho_anchor: float,
+                    black_to_white: float) -> list[float] | None:
+    """Per-channel haze: what the black patch shows beyond its own print reflectance.
+
+    I_black = r·A + H and I_anchor = A + H with r = ρ_black / ρ_anchor → H = (I_black − r·I_anchor)
+    / (1 − r). None when the black patch is unusable or too small.
+    """
+    b = raw.get("gray_black") or {}
+    if not b.get("mean_norm") or min(b["size_px"]) < MIN_BLACK_PX:
+        return None
+    r = black_to_white / rho_anchor
+    ib, ia = np.asarray(b["mean_norm"]), np.asarray(raw[anchor]["mean_norm"])
+    return ((ib - r * ia) / (1 - r)).tolist()
+
+
+def wb_points(root: Path, dist: dict, card: Card, black_to_white: float) -> list[dict]:
+    rows = {r["stem"]: r for r in csv.DictReader((root / "ingest" / "manifest.csv").open())}
+    patches = json.loads((root / "patches" / "patches.json").read_text())
+    qc = json.loads((root / "qc" / "qc.json").read_text())
+    rho = grey_reflectance(card)
+    out = []
+    for stem, q in qc.items():
+        r, d = rows[stem], dist.get(stem, {})
+        if (r["category"] not in WB_CATEGORIES or not q["usable"] or d.get("medium") != "water"
+                or d.get("z_m") is None or "raw" not in patches.get(stem, {})
+                or r["flash_fired"] == "True"):
+            continue
+        keep = {pid for pid, p in q["patches"].items() if p["usable"]}
+        anchor = next((a for a in ANCHORS if a in keep), None)
+        raw = patches[stem]["raw"]["patches"]
+        if anchor is None or "gray_black" not in keep:
+            continue
+        haze = haze_from_black(raw, anchor, rho[anchor], black_to_white)
+        if haze is None:
+            continue
+        light = np.asarray(raw[anchor]["mean_norm"]) - np.asarray(haze)
+        if np.any(light <= 0):
+            continue
+        out.append({"stem": stem, "dive": r["dive_id"], "category": r["category"],
+                    "depth_m": float(r["depth_m"]), "z_m": d["z_m"], "anchor": anchor,
+                    "ln_rg": float(np.log(light[0] / light[1])),
+                    "ln_bg": float(np.log(light[2] / light[1])),
+                    "haze_frac_g": float(haze[1] / raw[anchor]["mean_norm"][1])})
+    return out
+
+
+def _regress(points: list[dict], key: str, with_z: bool = False) -> dict[str, Any]:
+    y = np.array([p[key] for p in points])
+    cols = [np.ones_like(y), np.array([p["depth_m"] for p in points])]
+    if with_z:
+        cols.append(np.array([p["z_m"] for p in points]))
+    X = np.stack(cols, axis=1)
+    coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+    resid = y - X @ coef
+    dof = max(1, len(y) - X.shape[1])
+    cov = np.sum(resid ** 2) / dof * np.linalg.pinv(X.T @ X)
+    names = ["intercept", "per_m_depth"] + (["per_m_distance"] if with_z else [])
+    return {"n": len(y), "rms": round(float(np.sqrt(np.mean(resid ** 2))), 4),
+            **{n: round(float(c), 5) for n, c in zip(names, coef)},
+            **{f"{n}_se": round(float(np.sqrt(cov[i, i])), 5) for i, n in enumerate(names)}}
+
+
+def wb_table(points: list[dict]) -> dict[str, Any]:
+    table: dict[str, Any] = {}
+    for dive in sorted({p["dive"] for p in points}, key=int):
+        pts = [p for p in points if p["dive"] == dive]
+        if len(pts) < 3 or np.ptp([p["depth_m"] for p in pts]) < 2.0:
+            table[dive] = {"n": len(pts), "usable": False}
+            continue
+        table[dive] = {"n": len(pts), "usable": True,
+                       "depth_range_m": [min(p["depth_m"] for p in pts),
+                                         max(p["depth_m"] for p in pts)],
+                       "ln_rg": _regress(pts, "ln_rg"), "ln_bg": _regress(pts, "ln_bg"),
+                       "ln_rg_with_distance": _regress(pts, "ln_rg", with_z=True),
+                       "ln_bg_with_distance": _regress(pts, "ln_bg", with_z=True)}
+        if dive in FLAGGED_DIVES:
+            table[dive]["flag"] = FLAGGED_DIVES[dive]
+    return table
+
+
 def fit(qc_dir: Path, distance_dir: Path, card_path: Path, calibration: Path) -> dict[str, Any]:
     verify_fresh(qc_dir)
     verify_fresh(distance_dir)
@@ -195,9 +287,18 @@ def fit(qc_dir: Path, distance_dir: Path, card_path: Path, calibration: Path) ->
         if dive in FLAGGED_DIVES:
             params[dive]["flag"] = FLAGGED_DIVES[dive]
 
+    black_to_white = float(calib["card_reference"]["black_to_white"])
+    points = wb_points(root, dist, card, black_to_white)
+    table = wb_table(points)
+
     out_dir = root / "fit"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "params.json").write_text(json.dumps(params, indent=1) + "\n")
+    (out_dir / "wb_table.json").write_text(json.dumps(table, indent=1) + "\n")
+    with (out_dir / "wb_points.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(points[0]) if points else ["stem"])
+        w.writeheader()
+        w.writerows(points)
     with (out_dir / "observations.csv").open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["stem", "dive", "sweep", "depth_m", "z_m", "patch", "rho", "radius",
@@ -206,7 +307,10 @@ def fit(qc_dir: Path, distance_dir: Path, card_path: Path, calibration: Path) ->
             w.writerow([o["stem"], o["dive"], o["sweep"], o["depth_m"], o["z_m"], o["patch"],
                         o["rho"], o["radius"], *(f"{v:.6g}" for v in o["I"]),
                         *(f"{v:.6g}" for v in o["fitted"])])
-    summary = {"observations": len(obs), "dives": {
+    summary = {"observations": len(obs), "wb_points": len(points),
+               "wb_table": {d: ({k: t[k]["per_m_depth"] for k in ("ln_rg", "ln_bg")}
+                                if t["usable"] else "unusable") for d, t in table.items()},
+               "dives": {
         d: {"frames": p["frames"], "sweeps": len(p["sweeps"]),
             "identifiable_sweeps": sum(s["identifiable"] for s in p["sweeps"].values()),
             **{c: {k: p["channels"][c][k] for k in ("beta_d", "beta_d_ci", "beta_b",
