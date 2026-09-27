@@ -1,0 +1,58 @@
+# Reviewed licence table — SPEC §20 licensing policy (Nick, 2026-09-26).
+#
+# Package metadata alone is not trusted: rawpy declares MIT but bundles LGPL LibRaw, and the
+# PyPI OpenCV wheels declare Apache 2.0 but bundle FFmpeg (LGPL) plus GPL codecs. So every
+# package in the shipped dependency closure (base deps + the [color] extra in pyproject.toml)
+# must have an entry here, reviewed by a human. `host_tools/license_check.py` enforces it and
+# fails on anything unlisted, on a GPL/LGPL/AGPL licence or classifier, on a declared licence
+# that drifted from `declared`, and on a bundled native library not covered by `bundled`.
+#
+# decision:
+#   allowed        permissive; may ship (Pi, backend, customer devices)
+#   dev_only       fine for Mac development; a shipped install must replace it — `probe`
+#                  names the check `license_check --shipped` runs to prove the replacement
+#   internal_only  Mac-only analysis tools; must never be in the shipped closure
+#
+# Not legal advice — counsel review before the first commercial device ships.
+
+allowed_licenses: [MIT, MIT-CMU, BSD-2-Clause, BSD-3-Clause, 0BSD, Apache-2.0, ISC,
+                   PSF-2.0, Zlib, CC0-1.0]
+
+packages:
+  pyyaml:
+    declared: MIT
+    licenses: [MIT]
+    decision: allowed
+    bundled: []                    # the C extension is PyYAML's own code
+
+  numpy:
+    declared: BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0
+    licenses: [BSD-3-Clause, 0BSD, MIT, Zlib, CC0-1.0]
+    decision: allowed
+    # macOS arm64 wheels bundle nothing (Accelerate). Linux wheels usually bundle OpenBLAS
+    # (+ gfortran runtime) under numpy.libs/ — NOT yet reviewed: run `license_check --shipped`
+    # on the Pi; an unreviewed bundled library fails it until an entry is added here.
+    bundled: []
+
+  tifffile:
+    declared: BSD-3-Clause
+    licenses: [BSD-3-Clause]
+    decision: allowed
+    bundled: []                    # pure Python; the optional `imagecodecs` extra is not used
+
+  opencv-contrib-python-headless:
+    declared: Apache 2.0
+    licenses: [Apache-2.0]
+    decision: dev_only
+    # The PyPI wheel (5.0.0.93, macOS arm64) bundles 99 native libraries in cv2/.dylibs,
+    # including FFmpeg libav*/libsw* (LGPL) and libx264, libx265, libpostproc, librubberband,
+    # libvidstab (GPL). Not reviewed one by one: shipped installs must use an OpenCV build
+    # without FFmpeg / video I/O (OQ-36), proven by the probe below.
+    bundled: ["*"]
+    probe: cv2_without_ffmpeg
+
+  rawpy:
+    declared: MIT                  # per PyPI; the bundled LibRaw is LGPL-2.1 / CDDL-1.0
+    licenses: [MIT]
+    decision: internal_only        # [tg7] extra, host_tools/tg7/ only; banned from src/
+    bundled: ["*"]

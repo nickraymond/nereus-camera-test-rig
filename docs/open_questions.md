@@ -281,7 +281,11 @@ Items for Nick are marked **(Nick)**.
   (`-DWITH_FFMPEG=OFF` etc.) for the Pi and backend images; (b) a distro package, only if
   its linked libraries check out. Each option must still import on the Pi 5 (aarch64,
   Python 3.13) and keep `DICT_APRILTAG_36h11`. Mac analysis tools may keep the PyPI wheel
-  (internal use).
+  (internal use). The acceptance test exists: `make license-check-shipped` runs the
+  `cv2_without_ffmpeg` probe (`cv2.getBuildInformation()` must not report `FFMPEG: YES`);
+  on the Mac PyPI wheel it fails as expected. Also pending: run it on the Pi to review what
+  the Linux numpy wheel bundles (OpenBLAS / gfortran runtime) — blocked 2026-09-26 by an
+  SSH host-key mismatch for `nereus000` (not bypassed; owner to confirm the key).
 - **[OPEN] OQ-37 — TG-7 `ShadingCompensation2: On`.** *S2a.* The ORFs report
   `ShadingCompensation: Off` but `ShadingCompensation2: On`. Unverified whether the camera
   JPEG is shading- (vignetting-) corrected while the RAW is not. Matters for comparing
