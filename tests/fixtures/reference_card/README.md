@@ -23,6 +23,9 @@ Sourced from `bm_cam_legacy/tools/reference_card_color_correction/reference_card
 - **Canonical rectified size:** `3000 × 1000 px`.
 - Detected tag centers in the 3000×1941 render: TL(232,652) TR(2767,652) BL(232,1288) BR(2767,1288).
 
+Physical dimensions (tag spacing, tag size, card size) measured from the vector PDF, and why
+the printed scale bar must not be used for scale: [`docs/reference_card_v2.md`](../../../docs/reference_card_v2.md).
+
 ## Card features
 
 Grayscale ramp (white / light / mid / dark / black), centre focus/white-balance target,

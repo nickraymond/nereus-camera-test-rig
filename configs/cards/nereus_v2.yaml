@@ -49,20 +49,20 @@ tags:                          # canonical px: centre [x, y], edge [x_len, y_len
   2: {center: [299.5, 749.5], edge: [211.0, 175.0]}
   3: {center: [2699.0, 749.5], edge: [210.0, 175.0]}
 
-# Physical size on the printed card. null until tape-measured (OQ-32); while null, anything
-# derived from it (distance z) is provisional and uses `nominal_mm`.
+# Physical size, measured from the vector print master (2026-09-26):
+# tests/fixtures/reference_card/Nereus_Reef_Reference_Card_V2.pdf, a 17x11 in page drawn at
+# true scale (the card outline is exactly 410.000 x 136.667 mm, 3:1). Tag values are the
+# stroked tag outlines (outer edge of the black border, 90.652 pt). See docs/reference_card_v2.md.
+# ASSUMPTION: the card was printed at 100 % scale (no fit-to-page). A tape check of the card
+# width (410 mm) would confirm it. The printed "0-300 mm" bar is NOT an exact ruler (it is
+# 298.96 mm in the vector file) — never use it for scale.
 physical_mm:
-  tag_center_spacing_x: null
-  tag_center_spacing_y: null
-  tag_edge: null
-
-# ASSUMPTION: the 11x17 in print master printed at 100 % scale. From the 3000x1941 render of
-# the full page (6.948 px/mm): tag centres 2535 x 636 px apart, tag edge 223 px.
-nominal_mm:
-  source: pdf_render_100pct_scale_assumption
-  tag_center_spacing_x: 364.9
-  tag_center_spacing_y: 91.5
-  tag_edge: 32.1
+  source: vector_print_master_v2_100pct_scale
+  tag_center_spacing_x: 364.900
+  tag_center_spacing_y: 91.566
+  tag_edge: 31.980
+  card_width: 410.000
+  card_height: 136.667
 
 truth:
   source: design_svg_2026-09-01
