@@ -31,6 +31,9 @@ patches: the card-anchored class holds out **every grey** (the ramp fit uses the
 would be circular) and is scored on ΔE2000 of the 12 colour patches; the card-free class
 scores ψ on all usable greys and ΔE2000. Per-patch ΔE is kept.
 
+Images: a pixel with any channel clipped at the sensor's white level is rendered neutral
+(highlight handling; otherwise white balance tints clipped whites magenta).
+
 Output: ``correct/{scores.json, frames.json, images/<method>/<stem>.jpg|.json, summary.json,
 stage.json}``; ``images/`` is rebuilt on every run.
 """
@@ -181,14 +184,21 @@ class _Frame:
     def __call__(self, job: dict) -> dict[str, Any]:
         frame = self.reader(Path(job["raw_path"]))
         linear, sat, cfa = normalize(frame)
-        image, _ = bin2x2(linear, cfa, sat)
+        image, clipped = bin2x2(linear, cfa, sat)
         image = image / frame.exposure_factor()
+        clipped = clipped.any(axis=-1)
         maps, diag = frame_maps(job, image)
         result = {"maps": maps, "diag": diag,
                   "scores": score(job, maps, self.card, self.matrix)
                   if job.get("raw_means") else {}}
         for method, (haze, gain) in maps.items():
-            img = encode8(apply(image, haze, gain, self.matrix)).astype(np.uint8)
+            out = apply(image, haze, gain, self.matrix)
+            # A pixel with any channel at the sensor's white level has lost its colour; white
+            # balance would tint it (clipped G/B whites turn magenta once red is boosted).
+            # Render it neutral at its brightest channel. Scoring is unaffected: qc already
+            # excludes clipped patches.
+            out[clipped] = out[clipped].max(axis=-1, keepdims=True)
+            img = encode8(out).astype(np.uint8)
             d = self.out_dir / method
             d.mkdir(parents=True, exist_ok=True)
             path = d / f"{job['stem']}.jpg"
