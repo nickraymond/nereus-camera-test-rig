@@ -22,8 +22,10 @@ fitted to the 12 corners of the 3 found tags (card geometry from the card YAML),
 exact under perspective; without card geometry it falls back to the parallelogram of
 ``infer_card_corners_from_tags`` (exact only under an affine view — on close TG-7 cards it
 was off by up to ~50 px, enough to push patch samples onto the neighbouring patch). The quad must be convex with a card-like width/height ratio (design 3.985),
-else it is rejected. Quads are stored in RAW-mosaic and JPEG pixel coordinates (JPEG = RAW −
-the dataset's ``jpeg_offset_in_raw``). Output: ``locate/{corners.json, summary.json,
+else it is rejected. Quads are stored in RAW-mosaic and JPEG pixel coordinates; the JPEG
+quad is the RAW one through the dataset's RAW → JPEG map (``jpeg_from_raw``, OQ-42 — the TG-7
+JPEG is radially remapped, not a plain crop), and tags found on the JPEG are mapped back to
+RAW the same way. Output: ``locate/{corners.json, summary.json,
 stage.json}``; unlocated frames are recorded with their reason, never dropped.
 """
 
@@ -44,6 +46,7 @@ from ..analysis.apriltag_detector import DetectionOutcome, TagDetection, detect_
 from ..analysis.reference_card import CardLocalizationError, infer_card_corners_from_tags
 from ..config import load_yaml
 from .card import load_card
+from .jpeg_geometry import JpegMap, read_jpeg
 from .raw_io import RawFrame, demosaic_bilinear, normalize
 from .stages import run_parallel, sha256_file, verify_fresh, write_stage
 
@@ -129,7 +132,7 @@ def infer_quad_from_tag_corners(tags: dict, corner_map: dict[str, int],
     return cv2.perspectiveTransform(centres.reshape(-1, 1, 2), H).reshape(4, 2)
 
 
-def _record(tags: dict, corner_map: dict, offset, method: str,
+def _record(tags: dict, corner_map: dict, jpeg_map: JpegMap, method: str,
             geometry: Optional[tuple] = None) -> dict[str, Any]:
     """Build the JSON record from {id: (TagDetection in RAW coords, scale, source)}."""
     record: dict[str, Any] = {
@@ -163,8 +166,7 @@ def _record(tags: dict, corner_map: dict, offset, method: str,
             "locate_method": f"{method}{'4' if not inferred else '3'}",
             "inferred_corners": list(inferred), "quad_type": "tag_centers",
             "quad_raw": [[round(float(x), 2), round(float(y), 2)] for x, y in quad],
-            "quad_jpeg": [[round(float(x) - offset[0], 2), round(float(y) - offset[1], 2)]
-                          for x, y in quad]}
+            "quad_jpeg": jpeg_map.to_jpeg(quad).round(2).tolist()}
 
 
 def _images(raw: Optional[Path], jpeg: Optional[Path], raw_reader: Optional[RawReader]):
@@ -172,7 +174,7 @@ def _images(raw: Optional[Path], jpeg: Optional[Path], raw_reader: Optional[RawR
     if raw is not None and raw_reader is not None:
         raw_img, raw_origin = raw_detection_image(raw_reader(raw))
     if jpeg is not None:
-        jpg = cv2.imread(str(jpeg), cv2.IMREAD_GRAYSCALE)
+        jpg = read_jpeg(jpeg, cv2.IMREAD_GRAYSCALE)
     return raw_img, raw_origin, jpg
 
 
@@ -187,7 +189,25 @@ def _crop(img, origin, window):
     return img[cy0:cy1, cx0:cx1], (ox + cx0, oy + cy0)
 
 
-def _search(raw_img, raw_origin, jpg, card_ids, offset, scales, window=None) -> dict:
+def _to_raw(t: TagDetection, jpeg_map: JpegMap) -> TagDetection:
+    corners = jpeg_map.to_raw(t.corners)
+    return TagDetection(t.tag_id, corners, tuple(float(v) for v in corners.mean(axis=0)),
+                        t.side_px_min)
+
+
+def _jpeg_window(window, jpeg_map: JpegMap):
+    """Bounding box in JPEG px of a RAW-coord window (edges sampled: the map is not affine)."""
+    if window is None:
+        return None
+    x0, y0, x1, y1 = window
+    t = np.linspace(0, 1, 9)
+    edge = np.concatenate([np.stack([x0 + (x1 - x0) * t, np.full(9, y)], 1) for y in (y0, y1)]
+                          + [np.stack([np.full(9, x), y0 + (y1 - y0) * t], 1) for x in (x0, x1)])
+    j = jpeg_map.to_jpeg(edge)
+    return (*j.min(axis=0), *j.max(axis=0))
+
+
+def _search(raw_img, raw_origin, jpg, card_ids, jpeg_map, scales, window=None) -> dict:
     """RAW pass, then the JPEG for tags the RAW missed. ``window`` is in RAW coords."""
     tags: dict[int, tuple] = {}
     if raw_img is not None:
@@ -195,15 +215,15 @@ def _search(raw_img, raw_origin, jpg, card_ids, offset, scales, window=None) -> 
         if crop.size:
             tags = {i: (*v, "raw") for i, v in _detect(crop, card_ids, scales, shift).items()}
     if len(tags) < 4 and jpg is not None:
-        crop, shift = _crop(jpg, offset, window)
+        crop, shift = _crop(jpg, (0, 0), _jpeg_window(window, jpeg_map))
         if crop.size:
             for i, (t, s) in _detect(crop, card_ids, scales, shift).items():
-                tags.setdefault(i, (t, s, "jpeg"))
+                tags.setdefault(i, (_to_raw(t, jpeg_map), s, "jpeg"))
     return tags
 
 
 def locate_frame(raw: Optional[Path], jpeg: Optional[Path], corner_map: dict[str, int],
-                 offset: tuple[float, float], raw_reader: Optional[RawReader] = None,
+                 jpeg_map: JpegMap, raw_reader: Optional[RawReader] = None,
                  window: Optional[tuple] = None,
                  geometry: Optional[tuple] = None) -> dict[str, Any]:
     """Locate the card in one shot, RAW first; ``window`` restricts to a RAW-coord box (b)."""
@@ -216,8 +236,8 @@ def locate_frame(raw: Optional[Path], jpeg: Optional[Path], corner_map: dict[str
         return {"located": False, "locate_method": None, "tags_found": [],
                 "reason": "no readable RAW or JPEG"}
     scales = WINDOW_SCALES if window else SCALES
-    tags = _search(raw_img, raw_origin, jpg, set(corner_map.values()), offset, scales, window)
-    return _record(tags, corner_map, offset, "window" if window else "apriltag", geometry)
+    tags = _search(raw_img, raw_origin, jpg, set(corner_map.values()), jpeg_map, scales, window)
+    return _record(tags, corner_map, jpeg_map, "window" if window else "apriltag", geometry)
 
 
 def window_for(neighbour: dict) -> tuple[float, float, float, float]:
@@ -246,13 +266,13 @@ def nearest_located(stem: str, rows: dict, corners: dict, max_s: float) -> Optio
     return best[1] if best else None
 
 
-def manual_record(entry: dict, offset) -> dict[str, Any]:
+def manual_record(entry: dict, jpeg_map: JpegMap) -> dict[str, Any]:
     """A located record from clicked tag centres ({"quad_raw": [[x, y] ×4, TL,TR,BR,BL]})."""
     quad = np.asarray(entry["quad_raw"], dtype=np.float64)
     return {"located": True, "locate_method": "manual", "tags_found": [],
             "inferred_corners": [], "quad_type": "tag_centers",
             "quad_raw": quad.round(2).tolist(),
-            "quad_jpeg": (quad - np.asarray(offset)).round(2).tolist(),
+            "quad_jpeg": jpeg_map.to_jpeg(quad).round(2).tolist(),
             "clicked_utc": entry.get("clicked_utc")}
 
 
@@ -275,7 +295,7 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
     cfg = load_yaml(dataset_config)
     card = load_card(card_path)
     no_card = cfg.get("no_card_categories", DEFAULT_NO_CARD)
-    offset = tuple(float(v) for v in cfg.get("jpeg_offset_in_raw", (0, 0)))
+    jmap = JpegMap.from_config(cfg)
     max_s = float(cfg.get("window_max_s", WINDOW_MAX_S))
     workers = workers or os.cpu_count() or 1
     out_dir = ingest_dir.parent / "locate"
@@ -288,14 +308,14 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
         return raw, (dataset_dir / r["jpeg"] if r["jpeg"] else None)
 
     geometry = tag_geometry(card)
-    frame = partial(locate_frame, corner_map=card.corner_map, offset=offset,
+    frame = partial(locate_frame, corner_map=card.corner_map, jpeg_map=jmap,
                     raw_reader=raw_reader, geometry=geometry)
     stems = list(rows)
     corners = dict(zip(stems, run_parallel(frame, [paths(rows[s]) for s in stems], workers)))
 
     retry = [(s, n) for s in stems if not corners[s]["located"]
              for n in [nearest_located(s, rows, corners, max_s)] if n]
-    jobs = [(*paths(rows[s]), card.corner_map, offset, raw_reader, window_for(corners[n]),
+    jobs = [(*paths(rows[s]), card.corner_map, jmap, raw_reader, window_for(corners[n]),
              geometry) for s, n in retry]
     for (stem, n), rec in zip(retry, run_parallel(locate_frame, jobs, workers)):
         if rec["located"]:
@@ -311,7 +331,7 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
                 corners[stem].update(manual_skip=True,
                                      reason=f"operator: {entry.get('reason', 'not usable')}")
             else:
-                corners[stem] = manual_record(entry, offset)
+                corners[stem] = manual_record(entry, jmap)
 
     counts: dict[str, dict[str, int]] = {}
     for stem, rec in corners.items():
@@ -335,7 +355,7 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
                 params={"source": "raw first, jpeg fallback" if raw_reader else "jpeg only",
                         "scales": list(SCALES), "window_scales": list(WINDOW_SCALES),
                         "window_max_s": max_s, "min_tags": 3, "ratio_range": list(RATIO_RANGE),
-                        "jpeg_offset_in_raw": list(offset),
+                        "jpeg_from_raw": jmap.as_dict(),
                         "manual_corners": str(manual_path),
                         "manual_corners_sha256": sha256_file(manual_path) if manual else None})
     summary["out_dir"] = str(out_dir)

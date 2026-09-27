@@ -32,6 +32,7 @@ import cv2
 import numpy as np
 
 from .card import Card, load_card
+from .jpeg_geometry import read_jpeg
 from .metrics import score_srgb8
 from .patches import homography
 from .stages import run_parallel, verify_fresh, write_stage
@@ -203,7 +204,7 @@ def thumbnail(jpeg: Optional[Path], quad_jpeg, card: Card,
         img = cv2.resize(img, (TILE_W, int(TILE_W * img.shape[0] / img.shape[1])),
                          interpolation=cv2.INTER_AREA)
     else:
-        img = cv2.imread(str(jpeg), cv2.IMREAD_COLOR)
+        img = read_jpeg(jpeg)  # stored orientation: quad_jpeg is in the RAW's frame
         if img is None:
             return None
         H = homography(card, np.asarray(quad_jpeg))

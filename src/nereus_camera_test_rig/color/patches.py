@@ -11,7 +11,10 @@ demosaic), linear, black-subtracted, 0 = black and 1 = white level; clip = any s
 of the cell at the white level. ``mean_norm`` divides by ``t · ISO / N²`` so frames compare.
 The camera JPEG is sampled as well, with the same boxes, as the "before" the scoring
 protocol needs (as-shot baseline) — 8-bit sRGB values, with ceiling (255) and floor (0)
-fractions. Each result states its source.
+fractions. Each result states its source. The TG-7 JPEG is radially remapped from the RAW
+(OQ-42), so a JPEG pixel is mapped back to RAW (``locate``'s ``jpeg_from_raw``) before the box
+test: both sources sample the same area of the card. Frames the map lists in
+``exclude_frames`` get no JPEG sample (``jpeg_excluded`` + reason).
 
 Output: ``patches/{patches.json, summary.json, stage.json}``.
 """
@@ -29,6 +32,7 @@ import cv2
 import numpy as np
 
 from .card import Box, Card, load_card
+from .jpeg_geometry import JpegMap, read_jpeg
 from .raw_io import RawFrame, bin2x2, normalize
 from .stages import run_parallel, verify_fresh, write_stage
 
@@ -63,10 +67,13 @@ def _r(values, digits: int) -> list:
 
 
 def sample(img: np.ndarray, H: np.ndarray, box: Box, clip: Optional[np.ndarray] = None,
-           floor: Optional[np.ndarray] = None, digits: int = 6) -> dict[str, Any]:
+           floor: Optional[np.ndarray] = None, digits: int = 6,
+           warp: Optional[JpegMap] = None) -> dict[str, Any]:
     """Statistics of the pixels in the central ``INNER`` of ``box`` (canonical px).
 
-    ``img`` is (h, w, 3); ``clip`` / ``floor`` are optional per-channel boolean masks.
+    ``img`` is (h, w, 3); ``clip`` / ``floor`` are optional per-channel boolean masks. With
+    ``warp``, ``H`` maps the card into RAW-mosaic px and ``img`` is the camera JPEG: box
+    outlines go RAW → JPEG and each JPEG pixel goes back to RAW before the inside test.
     """
     x0 = box.x + box.w * (1 - INNER) / 2
     y0 = box.y + box.h * (1 - INNER) / 2
@@ -74,18 +81,26 @@ def sample(img: np.ndarray, H: np.ndarray, box: Box, clip: Optional[np.ndarray] 
     corners = np.array([[[x0, y0]], [[x0 + w1, y0]], [[x0 + w1, y0 + h1]], [[x0, y0 + h1]]],
                        dtype=np.float64)
     pts = cv2.perspectiveTransform(corners, H).reshape(4, 2)
+    outline = pts
+    if warp is not None:
+        t = np.linspace(0, 1, 9)[:, None]
+        outline = warp.to_jpeg(np.concatenate([pts[i] + (pts[(i + 1) % 4] - pts[i]) * t
+                                               for i in range(4)]))  # edges bow under the map
+        pts = warp.to_jpeg(pts)
     size = [float(np.linalg.norm(pts[1] - pts[0]) + np.linalg.norm(pts[2] - pts[3])) / 2,
             float(np.linalg.norm(pts[3] - pts[0]) + np.linalg.norm(pts[2] - pts[1])) / 2]
     ih, iw = img.shape[:2]
-    in_frame = bool(np.all((pts >= -0.5) & (pts <= [iw - 0.5, ih - 0.5])))
-    u0, v0 = np.maximum(np.floor(pts.min(axis=0)).astype(int), 0)
-    u1, v1 = np.minimum(np.ceil(pts.max(axis=0)).astype(int), [iw - 1, ih - 1])
+    in_frame = bool(np.all((outline >= -0.5) & (outline <= [iw - 0.5, ih - 0.5])))
+    u0, v0 = np.maximum(np.floor(outline.min(axis=0)).astype(int), 0)
+    u1, v1 = np.minimum(np.ceil(outline.max(axis=0)).astype(int), [iw - 1, ih - 1])
     out: dict[str, Any] = {"n_px": 0, "size_px": _r(size, 1), "in_frame": in_frame}
     if u1 < u0 or v1 < v0:
         return out
     uu, vv = np.meshgrid(np.arange(u0, u1 + 1), np.arange(v0, v1 + 1))
-    canon = cv2.perspectiveTransform(np.stack([uu, vv], axis=-1).reshape(-1, 1, 2)
-                                     .astype(np.float64), np.linalg.inv(H)).reshape(-1, 2)
+    img_px = np.stack([uu, vv], axis=-1).reshape(-1, 2).astype(np.float64)
+    if warp is not None:
+        img_px = warp.to_raw(img_px)
+    canon = cv2.perspectiveTransform(img_px.reshape(-1, 1, 2), np.linalg.inv(H)).reshape(-1, 2)
     fx, fy = (canon[:, 0] - x0) / w1, (canon[:, 1] - y0) / h1
     inside = (fx >= 0) & (fx < 1) & (fy >= 0) & (fy < 1)
     if not inside.any():
@@ -130,25 +145,30 @@ def sample_raw(frame: RawFrame, quad_raw, card: Card) -> dict[str, Any]:
             "binned_shape": list(binned.shape[:2]), "patches": result}
 
 
-def sample_jpeg(path: Path, quad_jpeg, card: Card) -> dict[str, Any]:
-    bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
+def sample_jpeg(path: Path, quad_raw, card: Card, jpeg_map: JpegMap) -> dict[str, Any]:
+    """Camera JPEG patches on the card area of the RAW tag-centre quad (see ``sample``)."""
+    bgr = read_jpeg(path)
     if bgr is None:
         raise IOError(f"cannot read {path}")
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-    H = homography(card, np.asarray(quad_jpeg))
-    return {"source": "camera_jpeg_srgb8",
-            "patches": {pid: sample(rgb, H, box, clip=rgb >= 255, floor=rgb <= 0, digits=3)
+    H = homography(card, np.asarray(quad_raw))
+    return {"source": "camera_jpeg_srgb8", "geometry": "raw quad through jpeg_from_raw",
+            "patches": {pid: sample(rgb, H, box, clip=rgb >= 255, floor=rgb <= 0, digits=3,
+                                    warp=jpeg_map)
                         for pid, box in _boxes(card).items()}}
 
 
-def sample_frame(raw: Optional[Path], jpeg: Optional[Path], quad_raw, quad_jpeg, card: Card,
-                 raw_reader: Optional[Callable[[Path], RawFrame]]) -> dict[str, Any]:
+def sample_frame(raw: Optional[Path], jpeg: Optional[Path], quad_raw, stem: str, card: Card,
+                 raw_reader: Optional[Callable[[Path], RawFrame]],
+                 jpeg_map: JpegMap) -> dict[str, Any]:
     out: dict[str, Any] = {}
     try:
         if raw is not None and raw_reader is not None:
             out["raw"] = sample_raw(raw_reader(raw), quad_raw, card)
-        if jpeg is not None:
-            out["jpeg"] = sample_jpeg(jpeg, quad_jpeg, card)
+        if jpeg is not None and stem in jpeg_map.exclude_frames:
+            out["jpeg_excluded"] = jpeg_map.exclude_frames[stem]
+        elif jpeg is not None:
+            out["jpeg"] = sample_jpeg(jpeg, quad_raw, card, jpeg_map)
     except (OSError, ValueError, RuntimeError) as exc:
         out["error"] = f"{type(exc).__name__}: {exc}"
     return out
@@ -158,7 +178,7 @@ def patches(locate_dir: Path, card_path: Path,
             raw_reader: Optional[Callable[[Path], RawFrame]] = None,
             workers: int | None = None) -> dict[str, Any]:
     """Sample every patch + sub-patch of every located frame (RAW and camera JPEG)."""
-    verify_fresh(locate_dir)
+    jmap = JpegMap.from_config(verify_fresh(locate_dir)["params"])
     ingest_dir = locate_dir.parent / "ingest"
     dataset_dir = Path(verify_fresh(ingest_dir)["params"]["dataset_dir"])
     rows = {r["stem"]: r for r in csv.DictReader((ingest_dir / "manifest.csv").open())}
@@ -171,8 +191,8 @@ def patches(locate_dir: Path, card_path: Path,
         r = rows[s]
         raw = dataset_dir / r["file"] if r["has_raw"] == "True" else None
         jpeg = dataset_dir / r["jpeg"] if r["jpeg"] else None
-        jobs.append((raw, jpeg, corners[s]["quad_raw"], corners[s]["quad_jpeg"]))
-    fn = partial(sample_frame, card=card, raw_reader=raw_reader)
+        jobs.append((raw, jpeg, corners[s]["quad_raw"], s))
+    fn = partial(sample_frame, card=card, raw_reader=raw_reader, jpeg_map=jmap)
     results = dict(zip(stems, run_parallel(fn, jobs, workers or os.cpu_count() or 1)))
 
     out_dir = locate_dir.parent / "patches"
@@ -182,11 +202,14 @@ def patches(locate_dir: Path, card_path: Path,
                "with_raw": sum("raw" in r for r in results.values()),
                "with_jpeg": sum("jpeg" in r for r in results.values()),
                "errors": {s: r["error"] for s, r in results.items() if "error" in r},
+               "jpeg_excluded": {s: r["jpeg_excluded"] for s, r in results.items()
+                                 if "jpeg_excluded" in r},
                "patches_per_frame": len(_boxes(card)), "inner_fraction": INNER,
                "cells": CELLS}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     write_stage(out_dir, "patches", configs=[card_path], upstream=[locate_dir],
                 params={"inner_fraction": INNER, "cells": CELLS,
-                        "raw": "bin2x2 linear" if raw_reader else None})
+                        "raw": "bin2x2 linear" if raw_reader else None,
+                        "jpeg_from_raw": jmap.as_dict()})
     summary["out_dir"] = str(out_dir)
     return summary
