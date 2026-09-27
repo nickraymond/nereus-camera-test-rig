@@ -14,7 +14,10 @@ make license-check     # shipped dependency closure vs configs/licenses.yaml
 ```
 
 Verified versions (2026-09-26): exiftool 13.55, tifffile 2026.9.20, OpenCV 5.0.0.93,
-numpy 2.5.1, Python 3.13.
+numpy 2.5.1, rawpy 0.27.1 (LibRaw 0.22.1 — decodes the TG-7 ORF), Python 3.13.
+
+Real-data tests are opt-in (the dataset is git-ignored and lives in the primary checkout):
+`NEREUS_TG7_DATASET=<path to data/tg7_channel_islands> make test`.
 
 In a git worktree, pass the shared venv: `make install-color VENV=../../../.venv`. Note that
 `pip install -e` from a worktree re-points the shared venv's editable install at that

@@ -144,3 +144,122 @@ def demosaic_bilinear(linear: np.ndarray, cfa: str) -> np.ndarray:
         den = cv2.filter2D(mask, -1, kernel, borderType=cv2.BORDER_CONSTANT)
         out[..., _CHANNEL[color]] = num / den
     return out
+
+
+# --- DNG reader (tifffile) -------------------------------------------------------------
+
+_CFA_COLORS = {0: "R", 1: "G", 2: "B"}
+
+
+def _floats(tag) -> list[float]:
+    """A TIFF tag's values as floats. RATIONAL/SRATIONAL tags come back from tifffile as a
+    flat (num, den, num, den, ...) tuple; integer tags as plain values — the tag's own
+    datatype decides, never the shape of the value."""
+    value = tag.value
+    values = list(value) if isinstance(value, (tuple, list)) else [value]
+    if int(tag.dtype) in (5, 10):
+        return [n / d if d else float("nan") for n, d in zip(values[::2], values[1::2])]
+    return [float(v) for v in values]
+
+
+def _find_cfa_page(tf):
+    """The full-resolution CFA image: IFD0 or one of its SubIFDs (DNG allows both)."""
+    for page in tf.pages:
+        for p in [page, *(page.pages or [])]:
+            if int(p.photometric) == 32803 and int(p.subfiletype or 0) == 0:
+                return p
+    raise ValueError("no full-resolution CFA image (PhotometricInterpretation 32803)")
+
+
+def _capture_value(tf, raw_page, tag_id: int, name: str) -> Optional[float]:
+    """A capture tag (exposure, ISO, f-number) from the raw IFD, IFD0, or IFD0's Exif IFD.
+
+    DNG writers differ on where these live. Exif-IFD values come back as a plain dict with
+    no datatype, so a 2-tuple there is a rational (num, den).
+    """
+    for page in (raw_page, tf.pages[0]):
+        if tag_id in page.tags:
+            return _floats(page.tags[tag_id])[0]
+    exif = tf.pages[0].tags.get(34665)
+    value = exif.value.get(name) if exif is not None else None
+    if value is None:
+        return None
+    if isinstance(value, (tuple, list)):
+        return value[0] / value[1] if len(value) == 2 and value[1] else float(value[0])
+    return float(value)
+
+
+def _text(tf, raw_page, tag_id: int) -> Optional[str]:
+    """An ASCII tag (Make, Model) from IFD0, else the raw IFD."""
+    for page in (tf.pages[0], raw_page):
+        if tag_id in page.tags:
+            return str(page.tags[tag_id].value)
+    return None
+
+
+def read_dng(path) -> RawFrame:
+    """Read an uncompressed Bayer DNG into a ``RawFrame``.
+
+    Fails loudly on what this reader does not handle rather than guessing: compressed CFA
+    data (needs ``imagecodecs``), a LinearizationTable, non-2×2 or non-RGB CFA patterns,
+    and an ActiveArea starting at an odd offset (where the DNG CFA / BlackLevel pattern
+    origin convention would matter and is unverified here).
+    """
+    import tifffile
+
+    with tifffile.TiffFile(path) as tf:
+        page = _find_cfa_page(tf)
+        tags = page.tags
+        if int(page.compression) != 1:
+            raise ValueError(f"{path}: compressed CFA data ({page.compression!r}) not supported")
+        if 50712 in tags:
+            raise ValueError(f"{path}: LinearizationTable not supported")
+        if tuple(tags[33421].value) != (2, 2):
+            raise ValueError(f"{path}: CFA repeat {tags[33421].value} is not 2x2")
+        codes = bytes(tags[33422].value)
+        if len(codes) != 4 or any(c not in _CFA_COLORS for c in codes):
+            raise ValueError(f"{path}: CFAPattern {list(codes)} is not an RGB Bayer pattern")
+        cfa = "".join(_CFA_COLORS[c] for c in codes)
+        mosaic = page.asarray()
+
+        black = _floats(tags[50714]) if 50714 in tags else [0.0]
+        repeat = tuple(tags[50713].value) if 50713 in tags else (1, 1)
+        if repeat == (1, 1) and len(black) == 1:
+            black = black * 4
+        elif repeat != (2, 2) or len(black) != 4:
+            raise ValueError(f"{path}: BlackLevel {black} with repeat {repeat} not supported")
+        bits = page.bitspersample
+        white = _floats(tags[50717])[0] if 50717 in tags else 2.0**bits - 1
+
+        crop = None
+        if 50829 in tags:  # ActiveArea: top, left, bottom, right
+            top, left, bottom, right = (int(v) for v in tags[50829].value)
+            if top % 2 or left % 2:
+                raise ValueError(f"{path}: odd ActiveArea origin ({left}, {top}) not supported")
+            crop = (left, top, right - left, bottom - top)
+
+        wb = None
+        if 50728 in tags:  # AsShotNeutral: camera response to neutral → multipliers
+            n = _floats(tags[50728])
+            wb = (n[1] / n[0], 1.0, n[1] / n[2])
+        matrix, matrix_note = None, None
+        if 50721 in tags:
+            matrix = np.asarray(_floats(tags[50721]), dtype=np.float64).reshape(3, 3)
+            illum = tags[50778].value if 50778 in tags else None
+            matrix_note = f"DNG ColorMatrix1: XYZ -> camera, CalibrationIlluminant1={illum}"
+
+        return RawFrame(
+            mosaic=mosaic,
+            cfa=cfa,
+            black_level=tuple(black),
+            white_level=white,
+            valid_crop=crop,
+            exposure_s=_capture_value(tf, page, 33434, "ExposureTime"),
+            iso=_capture_value(tf, page, 34855, "ISOSpeedRatings"),
+            fnumber=_capture_value(tf, page, 33437, "FNumber"),
+            as_shot_wb=wb,
+            color_matrix=matrix,
+            source={"reader": "dng/tifffile", "path": str(path), "bits_per_sample": bits,
+                    "color_matrix": matrix_note,
+                    "make": _text(tf, page, 271), "model": _text(tf, page, 272)},
+        )
