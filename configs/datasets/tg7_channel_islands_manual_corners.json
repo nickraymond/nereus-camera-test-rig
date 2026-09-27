@@ -2405,5 +2405,15 @@
   "quad_type": "tag_centers",
   "display": "raw_binned_wb",
   "clicked_utc": "2026-09-27T07:05:14+00:00"
+ },
+ "P9160508": {
+  "skip": true,
+  "reason": "card not usable in this frame",
+  "clicked_utc": "2026-09-27T07:11:54+00:00"
+ },
+ "P9160511": {
+  "skip": true,
+  "reason": "card not usable in this frame",
+  "clicked_utc": "2026-09-27T07:12:02+00:00"
  }
 }
