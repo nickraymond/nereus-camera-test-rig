@@ -57,9 +57,20 @@ def test_tag_centres_match_the_expand_geometry(card):
         assert abs(cx - expected[corner][0]) < 2 and abs(cy - expected[corner][1]) < 2, corner
 
 
-def test_physical_size_unmeasured_until_oq32(card):
-    assert not card.physically_measured
-    assert card.nominal_mm["source"].endswith("assumption")
+def test_physical_size_from_the_vector_print_master(card):
+    """Values measured from the V2 PDF (docs/reference_card_v2.md); canonical geometry agrees."""
+    assert card.physically_measured and card.physical_source.startswith("vector_print_master")
+    mm = card.physical_mm
+    assert mm["tag_center_spacing_x"] == pytest.approx(364.900)
+    assert mm["tag_center_spacing_y"] == pytest.approx(91.566)
+    assert mm["tag_edge"] == pytest.approx(31.980)
+    assert mm["card_width"] / mm["card_height"] == pytest.approx(3.0, abs=1e-4)
+    # The canonical tag edge is consistent with the physical one (canonical px not square).
+    px_per_mm_x = (card.canonical_w - 1) / (card.expand_x * mm["tag_center_spacing_x"])
+    px_per_mm_y = (card.canonical_h - 1) / (card.expand_y * mm["tag_center_spacing_y"])
+    edge_x, edge_y = card.tags[0].edge
+    assert edge_x == pytest.approx(mm["tag_edge"] * px_per_mm_x, rel=0.02)
+    assert edge_y == pytest.approx(mm["tag_edge"] * px_per_mm_y, rel=0.02)
 
 
 def test_sub_patches_split_grey_128(card):

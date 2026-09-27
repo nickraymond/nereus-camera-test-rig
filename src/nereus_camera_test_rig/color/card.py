@@ -74,14 +74,14 @@ class Card:
     expand_y: float
     tags: dict[int, Tag]
     physical_mm: dict[str, Optional[float]]
-    nominal_mm: dict[str, Any]
+    physical_source: str
     truth_source: str
     patches: tuple[Patch, ...]
     sub_patches: tuple[SubPatch, ...]
 
     @property
     def physically_measured(self) -> bool:
-        """False while any physical dimension is unmeasured (distances are provisional)."""
+        """False while any physical dimension is unknown (distances would be provisional)."""
         return all(v is not None for v in self.physical_mm.values())
 
     def patch(self, patch_id: str) -> Patch:
@@ -163,6 +163,8 @@ def load_card(path: str | Path) -> Card:
         subs.append(SubPatch(str(_get(raw, "id", sw)), parent, box))
 
     truth = _get(data, "truth", where)
+    physical = dict(_get(data, "physical_mm", where))
+    physical_source = str(physical.pop("source", "unspecified"))
     return Card(
         card_id=str(_get(data, "card_id", where)),
         path=p,
@@ -173,8 +175,8 @@ def load_card(path: str | Path) -> Card:
         expand_x=float(_get(canonical, "expand_x", where)),
         expand_y=float(_get(canonical, "expand_y", where)),
         tags=tags,
-        physical_mm=dict(_get(data, "physical_mm", where)),
-        nominal_mm=dict(data.get("nominal_mm") or {}),
+        physical_mm={k: (None if v is None else float(v)) for k, v in physical.items()},
+        physical_source=physical_source,
         truth_source=str(_get(truth, "source", where)),
         patches=tuple(patches),
         sub_patches=tuple(subs),

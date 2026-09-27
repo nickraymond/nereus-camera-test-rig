@@ -1,0 +1,23 @@
+# TG-7 Channel Islands dataset (Sep 15-16, 2026) — dataset config for the Phase 8 tool
+# (SPEC §4 Phase 8 S1, §20). Versioned here, never written into the dataset folder, which is
+# read-only and lives only in the primary checkout (data/tg7_channel_islands/).
+
+dataset: tg7_channel_islands
+camera: om_tg7
+
+# Four dives (Nick, 2026-09-26; OQ-35). `ingest` assigns dive_id from time gaps between shots;
+# these windows are a cross-check (an assigned dive must fall inside its window). Times are
+# UTC — the camera clock was UTC-8 (PST), so the camera-local dates in the brief differ.
+dives:
+  1: {site: santa_cruz_island, start_utc: "2026-09-16T01:32:26Z", end_utc: "2026-09-16T02:30:23Z",
+      note: "evening dive near sunset; card clean until ~P9150408 (SPEC §20)"}
+  2: {site: santa_cruz_island, start_utc: "2026-09-16T15:50:20Z", end_utc: "2026-09-16T16:30:12Z"}
+  3: {site: anacapa_island, start_utc: "2026-09-16T17:59:08Z", end_utc: "2026-09-16T18:52:56Z"}
+  4: {site: anacapa_island, start_utc: "2026-09-16T20:15:16Z", end_utc: "2026-09-16T21:04:26Z"}
+
+# No GPS in the files (OQ-38) and exact dive sites were not logged: island-level coordinates,
+# used only for sun elevation. ±0.2° in position changes solar elevation by ≲0.3°, small next
+# to the light changes being modelled.
+sites:
+  santa_cruz_island: {lat: 34.00, lon: -119.75, precision: island_centroid_approx}
+  anacapa_island: {lat: 34.01, lon: -119.40, precision: island_centroid_approx}
