@@ -305,6 +305,32 @@ Items for Nick are marked **(Nick)**.
   `configs/datasets/tg7_channel_islands.yaml`, used only for sun elevation — ±0.2° in position
   moves solar elevation by ≲0.3°, small next to the light changes being modelled.
 
+- **[OPEN] OQ-39 — TG-7 colour matrix target space and the in-water colour floor.** *S2b.* The
+  Olympus `ColorMatrix` (/256) is applied after white balance as camera → linear sRGB, as LibRaw
+  does. Verified 2026-09-27 (colour review): the order is right, but every RAW method bottoms out
+  at ΔE00 ≈ 19 under water (≈ 10 in air) — chroma loss under blue-green light that no single
+  daylight matrix fixes (a matrix fitted in air: 6.4 in air, 19.2 under water). Next step: a
+  light-dependent matrix fitted on the card per depth, validated leave-one-sweep/dive-out.
+- **[OPEN] OQ-40 — True printed values of the reference card.** *S2b, V3 dive.* The V2 print is
+  not its design: after white balance the grey ramp reads white 0.78, grey 200 0.47, grey 74
+  0.114 (design 1, 0.578, 0.068), colours come out lighter (median ΔL* +5), and the black patch's
+  reflectance is uncertain (0.027 on one near-surface frame, ≈ 0.076 on deep frames). Until the
+  card is measured (daylight reference shots, X-Rite, OQ-27), ΔE00 is provisional and haze cannot
+  be separated from print non-linearity. The V3 dive plan includes the dry reference shots.
+- **[OPEN] OQ-41 — Light changes between frames.** *S2a fit.* Exposure-normalized brightness jumps
+  up to 3× between consecutive frames on shallow sunny dives (caustics), and dives 1–2 drift
+  through the dive (sunset, morning). The colour of the light is stable enough to use (ratios
+  cancel it); absolute light levels are not transferable between frames or dives.
+
+- **[OPEN] OQ-42 — The TG-7 JPEG is lens-corrected; the RAW is not.** *S2a (JPEG baselines).*
+  Found by Nick on the v0.2 cut sheet, measured 2026-09-27: AprilTag centres detected separately
+  on RAW and JPEG agree to ~1 px near the centre but the JPEG's sit 16 px farther out at 950 px
+  radius and 125–140 px at 1800 px — in-camera barrel-distortion correction, although EXIF says
+  `DistortionCorrection: Off`. `locate` maps RAW → JPEG as a pure (8, 8) crop, so JPEG-baseline
+  patch samples are misplaced on off-centre cards. Fix in S2a: detect the card on the JPEG itself
+  (or fit the radial RAW → JPEG map). Whether the ORF maker notes carry the correction
+  parameters is unverified.
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,

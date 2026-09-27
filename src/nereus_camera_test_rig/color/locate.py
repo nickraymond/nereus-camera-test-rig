@@ -328,7 +328,10 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
                "unlocated": sum(not r["located"] for r in corners.values()),
                "manual_entries": len(manual)}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    write_stage(out_dir, "locate", configs=[card_path, dataset_config], upstream=[ingest_dir],
+    # The manual-corners file is hashed as a config: new clicks make locate (and everything
+    # downstream) stale, as SPEC §20 requires.
+    configs = [card_path, dataset_config] + ([manual_path] if manual_path.is_file() else [])
+    write_stage(out_dir, "locate", configs=configs, upstream=[ingest_dir],
                 params={"source": "raw first, jpeg fallback" if raw_reader else "jpeg only",
                         "scales": list(SCALES), "window_scales": list(WINDOW_SCALES),
                         "window_max_s": max_s, "min_tags": 3, "ratio_range": list(RATIO_RANGE),

@@ -21,3 +21,16 @@ intrinsics:
   distortion: null
   # Flat front glass: under water the effective focal length is ~n_water x the in-air one.
   water_focal_factor: 1.33
+
+# L1 colour (S2a provisional; SPEC §4 Phase 8 S2a `calibrate`). The camera's embedded Olympus
+# maker-note ColorMatrix, identical in all 308 TG-7 ORFs (exiftool 13.55, 2026-09-27):
+# 420 -164 0 / -64 392 -72 / 8 -112 360, divided by 256. Rows sum to 1, so a white-balanced
+# neutral stays neutral. Applied to white-balanced camera RGB; its target space is assumed to
+# be linear sRGB (unverified until the S2b X-Rite / reshoot calibration, OQ-27).
+color_matrix:
+  source: olympus_makernote_ColorMatrix_div256
+  matrix:
+    - [1.640625, -0.640625, 0.0]
+    - [-0.25, 1.53125, -0.28125]
+    - [0.03125, -0.4375, 1.40625]
+

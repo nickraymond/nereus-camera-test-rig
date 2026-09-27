@@ -74,8 +74,10 @@ def write_stage(out_dir: Path, stage: str, *, configs: Iterable[Path] = (),
         "stage": stage,
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "git": git_state(),
-        "configs": {str(p): sha256_file(p) for p in configs},
-        "upstream": {str(d): sha256_file(Path(d) / STAGE_FILE) for d in upstream},
+        # absolute paths: freshness checks must not depend on the working directory
+        "configs": {str(Path(p).resolve()): sha256_file(p) for p in configs},
+        "upstream": {str(Path(d).resolve()): sha256_file(Path(d) / STAGE_FILE)
+                     for d in upstream},
         "params": params or {},
     }
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -90,7 +92,11 @@ def verify_fresh(stage_dir: Path) -> dict:
         raise StaleInputError(f"{stage_dir}: no {STAGE_FILE} — run that stage first")
     record = json.loads(path.read_text())
     for cfg, digest in record["configs"].items():
-        if not Path(cfg).is_file() or sha256_file(cfg) != digest:
+        if not Path(cfg).is_file():
+            raise StaleInputError(f"{stage_dir}: config {cfg} used by the {record['stage']!r} "
+                                  f"stage is missing (moved, deleted, or a relative path "
+                                  f"from another working directory)")
+        if sha256_file(cfg) != digest:
             raise StaleInputError(f"{stage_dir}: config {cfg} changed since the "
                                   f"{record['stage']!r} stage ran — re-run it")
     for up, digest in record["upstream"].items():
