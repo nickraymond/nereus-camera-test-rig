@@ -54,7 +54,7 @@ def main(argv=None) -> int:
         elif args.stage == "ingest":
             summary = ingest(args.dataset_dir, args.config, args.out, read_exif)
         else:
-            summary = locate(args.ingest_dir, args.card, args.config)
+            summary = locate(args.ingest_dir, args.card, args.config, raw_reader=read_orf)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"{args.stage} failed: {exc}", file=sys.stderr)
         return 1
