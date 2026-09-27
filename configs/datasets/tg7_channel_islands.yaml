@@ -44,7 +44,10 @@ medium:
 card_damage:
   from_stem: P9150409          # this frame and every later one (by capture time)
   patches: [gray_white, gray_light, gray_mid_left]
-  clean_reference: [P9150343, P9150360]   # first/last clean frame for the cell-ratio baseline
+  # First/last frame of the cell-ratio baseline: the whole clean-card period. The SPEC's
+  # first choice, P9150343-P9150360, has only 8 located frames, almost all at 15 m in even
+  # light; with it, 33 % of clean-period patches failed the test (S1.7 finding, 2026-09-26).
+  clean_reference: [P9150341, P9150408]
 
 # Diver torch in view (dataset README) — artificial light, excluded from ambient-light work.
 torch_frames: [P9160606, P9160616, P9160617]
