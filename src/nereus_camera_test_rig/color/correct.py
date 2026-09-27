@@ -29,7 +29,9 @@ nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset
 - Depth WB table: ``ln(R/G)``, ``ln(B/G)`` of the light vs depth, pooled over the dataset's
   ``fit.table_source_dives`` **leaving the frame's own dive out**; brightness puts the image's
   99th percentile of green at ``TARGET_P99``. Distance is not used (run A: colour barely
-  changes over 0.5–3 m).
+  changes over 0.5–3 m). ``raw_depth_wb_haze_loso`` is the same table validated
+  **leave-one-sweep-out** (only the frame's own sweep, or the frame itself outside a sweep, is
+  left out — the frame's dive stays in when it is a source dive); scored, not rendered.
 
 Scoring (SPEC §20): the map is applied to the patch means (and their stds, through the same
 map) and encoded to 8-bit. Within a comparison class every method is scored on the same
@@ -75,10 +77,13 @@ COLUMNS = {  # method → the name used in sheets and reports
     "raw_card_wb_haze": "RAW + card WB − haze",
     "raw_depth_wb_haze": "RAW + depth WB − haze (no card)",
     "grvi_cheeca_v3": "GRVI cheeca_v3 (backend)",
+    "raw_depth_wb_haze_loso": "RAW + depth WB − haze (no card, leave-one-sweep-out)",
 }
+NOT_RENDERED = {"raw_depth_wb_haze_loso"}  # a validation variant: scored, no images
 CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
                              "raw_card_wb_haze"),
-           "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze")}
+           "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze",
+                         "raw_depth_wb_haze_loso")}
 ALL_GREYS = ("gray_white", "gray_light", "gray_mid", "gray_mid_left", "gray_mid_right",
              "gray_dark", "gray_black")
 PRESET_CATEGORY = "2_underwater_preset"
@@ -107,10 +112,13 @@ def dark_floor(image: np.ndarray) -> np.ndarray:
     return np.percentile(image[y0:h - y0, x0:w - x0].reshape(-1, 3), DARK_PERCENTILE, axis=0)
 
 
-def depth_table(points_csv: Path, sources: list[str], held_out: str) -> Optional[dict]:
-    """Pooled ln(R/G), ln(B/G) vs depth over the source dives except ``held_out``."""
+def depth_table(points_csv: Path, sources: list[str], held_out: Optional[str],
+                exclude_stems=frozenset()) -> Optional[dict]:
+    """Pooled ln(R/G), ln(B/G) vs depth over the source dives, leaving out the dive
+    ``held_out`` (leave-one-dive-out) or only the frames ``exclude_stems`` (leave-one-sweep-out:
+    the frame's own sweep)."""
     pts = [p for p in csv.DictReader(points_csv.open())
-           if p["dive"] in sources and p["dive"] != held_out]
+           if p["dive"] in sources and p["dive"] != held_out and p.get("stem") not in exclude_stems]
     if len(pts) < 3:
         return None
     d = np.array([float(p["depth_m"]) for p in pts])
@@ -146,14 +154,15 @@ def frame_maps(job: dict, image: np.ndarray) -> tuple[dict[str, tuple], dict[str
             haze, diag["haze_source"] = np.minimum(h, dark), "grey ramp"
         maps["raw_card_wb_haze"] = (np.asarray(haze).tolist(),
                                     (t / np.maximum(a - haze, 1e-9)).tolist())
-    table = job.get("table")
-    if table:
-        d = job["depth_m"]
-        colour = np.array([np.exp(table["ln_rg"][0] + table["ln_rg"][1] * d), 1.0,
-                           np.exp(table["ln_bg"][0] + table["ln_bg"][1] * d)])
-        green = (image[..., 1] - dark[1]).ravel()
-        scale = TARGET_P99 / max(float(np.percentile(green, 99)), 1e-9)
-        maps["raw_depth_wb_haze"] = (dark.tolist(), (scale / colour).tolist())
+    for method, key in (("raw_depth_wb_haze", "table"), ("raw_depth_wb_haze_loso", "table_loso")):
+        table = job.get(key)
+        if table:
+            d = job["depth_m"]
+            colour = np.array([np.exp(table["ln_rg"][0] + table["ln_rg"][1] * d), 1.0,
+                               np.exp(table["ln_bg"][0] + table["ln_bg"][1] * d)])
+            green = (image[..., 1] - dark[1]).ravel()
+            scale = TARGET_P99 / max(float(np.percentile(green, 99)), 1e-9)
+            maps[method] = (dark.tolist(), (scale / colour).tolist())
     return maps, diag
 
 
@@ -250,6 +259,8 @@ class _Frame:
                   "scores": score(job, maps, self.card, self.matrix)
                   if job.get("raw_means") else {}}
         for method, (haze, gain) in maps.items():
+            if method in NOT_RENDERED:
+                continue
             out = apply(image, haze, gain, self.matrix)
             # A pixel with any channel at the sensor's white level has lost its colour; white
             # balance would tint it (clipped G/B whites turn magenta once red is boosted).
@@ -297,6 +308,10 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
         grvi = json.loads((grvi_dir / "patches.json").read_text())
     tables = {d: depth_table(fit_dir / "wb_points.csv", sources, d)
               for d in {r["dive_id"] for r in rows.values()}}
+    sweeps: dict[str, set] = {}
+    for stem, row in rows.items():
+        if row["sweep_id"]:
+            sweeps.setdefault(row["sweep_id"], set()).add(stem)
 
     jobs, flash_jobs = [], []
     for stem, row in rows.items():
@@ -310,9 +325,12 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
                 flash_jobs.append(card_job(stem, row, q, patches[stem], (grvi or {}).get(stem),
                                            card, rho))
             continue
+        sweep = sweeps.get(row["sweep_id"], {stem}) if row["sweep_id"] else {stem}
         job: dict[str, Any] = {"stem": stem, "raw_path": str(dataset_dir / row["file"]),
                                "depth_m": float(row["depth_m"]), "category": row["category"],
-                               "table": tables[row["dive_id"]]}
+                               "table": tables[row["dive_id"]],
+                               "table_loso": depth_table(fit_dir / "wb_points.csv", sources,
+                                                         None, frozenset(sweep))}
         if row["category"] not in no_card:
             if (q is None or not q["usable"] or "raw" not in patches.get(stem, {})
                     or d.get("medium") != "water"):

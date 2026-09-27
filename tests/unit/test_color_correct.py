@@ -123,3 +123,17 @@ def test_preset_frames_pair_with_the_nearest_a_mode_frame_of_their_dive():
     pair = nearest_a_mode("P", rows, list(rows), "1_reference_A_iso100")
     assert pair == {"stem": "A2", "dt_s": 180.0, "depth_diff_m": -0.5}
     assert nearest_a_mode("P", rows, ["B", "S"], "1_reference_A_iso100") is None
+
+
+def test_leave_one_sweep_out_keeps_the_dive_but_drops_the_sweep(tmp_path):
+    path = tmp_path / "wb_points.csv"
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["stem", "dive", "depth_m", "ln_rg", "ln_bg"])
+        w.writeheader()
+        for i, (dive, d, rg) in enumerate([("3", 4, -1.6), ("3", 8, -1.8), ("3", 12, -9.0),
+                                           ("4", 4, -1.6), ("4", 8, -1.8)]):
+            w.writerow({"stem": f"S{i}", "dive": dive, "depth_m": d, "ln_rg": rg, "ln_bg": 0})
+    loso = depth_table(path, ["3", "4"], None, frozenset({"S2"}))  # S2 = the held-out sweep
+    assert loso["n"] == 4 and loso["source_dives"] == ["3", "4"]
+    assert loso["ln_rg"][1] == pytest.approx(-0.05)
+    assert depth_table(path, ["3", "4"], None)["n"] == 5
