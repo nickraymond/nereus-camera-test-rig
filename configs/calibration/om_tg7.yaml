@@ -1,0 +1,23 @@
+# OM System TG-7 — camera calibration (SPEC §20: configs/calibration/<camera_id>.yaml).
+#
+# PROVISIONAL: nominal intrinsics from EXIF only (Phase 8 S1.4). The S2a `calibrate` stage
+# adds black/white level and the colour matrix; the P1.4 checkerboard reshoot (S2b, OQ-29)
+# replaces the intrinsics and then `provisional` becomes false.
+
+camera_id: om_tg7
+provisional: true
+
+intrinsics:
+  source: nominal_exif_2026-09-26
+  # Focal length comes from each shot's EXIF FocalLength (4.5 mm on all 308 TG-7 ORFs).
+  # Pixel pitch: Olympus maker-note FocalPlaneDiagonal 7.77 mm (all 308 ORFs) over the
+  # 4000 x 3000 recorded image (5000 px diagonal) = 1.554 um, so f = 2896 px in air.
+  # Cross-check: FocalLengthIn35mmFormat 25 mm gives 2889 px (0.2 % apart).
+  pixel_pitch_mm: 0.001554
+  # ASSUMPTION: optical axis at the centre of the 4000 x 3000 JPEG crop, which starts at
+  # (8, 8) in the RAW mosaic.
+  principal_point_raw: [2007.5, 1507.5]
+  # No lens distortion model yet (RAW is uncorrected; EXIF DistortionCorrection Off).
+  distortion: null
+  # Flat front glass: under water the effective focal length is ~n_water x the in-air one.
+  water_focal_factor: 1.33

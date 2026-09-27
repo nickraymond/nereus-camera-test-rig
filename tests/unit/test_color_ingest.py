@@ -56,6 +56,7 @@ def fake_metadata(shots=SHOTS):
             _, minutes, depth, _ = shots[Path(p).stem]
             out.append({"path": str(p), "time_utc": (T0 + timedelta(minutes=minutes)).isoformat(),
                         "depth_m": depth, "exposure_s": 0.01, "iso": 100, "fnumber": 2.0,
+                        "focal_length_mm": 4.5,
                         "flash_fired": Path(p).stem == "S008", "black_level2": [257] * 4})
         return out
     return read
@@ -94,6 +95,7 @@ def test_manifest_dives_sweeps_and_jpeg_only(tmp_path):
     assert rows["S006"]["has_raw"] == "False" and rows["S006"]["file"].endswith("S006.JPG")
     assert rows["S002"]["file"] == "raw/1_reference_A_iso100/S002.dng"
     assert rows["S002"]["black_level"] == "257 257 257 257"
+    assert rows["S002"]["focal_length_mm"] == "4.5"
     assert -10 < float(rows["S002"]["sun_elevation_deg"]) < 10  # near sunset, Santa Cruz
 
 

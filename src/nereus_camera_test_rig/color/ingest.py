@@ -7,7 +7,7 @@ Input: a read-only dataset folder (``raw/<category>/<stem>.<raw ext|jpg>``) and 
 Capture metadata comes from a ``read_metadata(paths) -> list[dict]`` callable supplied by the
 caller (the Mac CLI passes the exiftool reader), so this module stays reader-agnostic. Each
 dict needs: path, time_utc (ISO 8601), depth_m, exposure_s, iso, fnumber, flash_fired;
-optional: black_level2, model.
+optional: focal_length_mm, black_level2, model.
 
 - ``dive_id``: split the time-sorted shots at gaps > ``dive_gap_minutes``; each group must
   fall inside the configured dive window, in order, or ingest fails loudly.
@@ -34,7 +34,7 @@ RAW_EXTENSIONS = (".orf", ".dng")
 IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 COLUMNS = ["stem", "file", "jpeg", "has_raw", "category", "camera", "dive_id", "site",
            "sweep_id", "time_utc", "sun_elevation_deg", "depth_m", "exposure_s", "iso",
-           "fnumber", "flash_fired", "black_level", "notes"]
+           "fnumber", "focal_length_mm", "flash_fired", "black_level", "notes"]
 DEFAULTS = {"reference_category": "1_reference_A_iso100", "dive_gap_minutes": 45,
             "sweep_gap_s": 90, "sweep_depth_m": 1.5}
 
@@ -148,7 +148,8 @@ def ingest(dataset_dir: Path, config_path: Path, out_root: Path,
             "category": shot["category"], "camera": cfg.get("camera", m.get("model", "")),
             "dive_id": "", "site": "", "sweep_id": "", "time_utc": m["time_utc"],
             "depth_m": m["depth_m"], "exposure_s": m["exposure_s"], "iso": m["iso"],
-            "fnumber": m["fnumber"], "flash_fired": bool(m["flash_fired"]),
+            "fnumber": m["fnumber"], "focal_length_mm": m.get("focal_length_mm", ""),
+            "flash_fired": bool(m["flash_fired"]),
             "black_level": " ".join(str(v) for v in black) if black else "", "notes": "",
         })
     assign_dives(rows, cfg, float(cfg["dive_gap_minutes"]))

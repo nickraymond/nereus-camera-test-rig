@@ -29,3 +29,22 @@ dives:
 sites:
   santa_cruz_island: {lat: 34.00, lon: -119.75, precision: island_centroid_approx}
   anacapa_island: {lat: 34.01, lon: -119.40, precision: island_centroid_approx}
+
+# What the camera looked through, for distance z (S1.4): the effective focal length is ×1.33
+# in water (flat front glass). Depth cannot decide it — P9160474 is in air at 0.4 m while
+# P9150343 is under water at 0.4 m — so the exceptions come from a visual review of the
+# 0_surface_card frames (Claude, 2026-09-26): two on the boat deck, one shot from above the
+# water, one with the lens split at the waterline (no z). Every other frame is under water.
+medium:
+  default: water
+  air: [P9150341, P9160474, P9160571]
+  split: [P9150342]
+
+# Card water damage (SPEC §20, brief §7 P1.0) — qc excludes these, never repairs them.
+card_damage:
+  from_stem: P9150409          # this frame and every later one (by capture time)
+  patches: [gray_white, gray_light, gray_mid_left]
+  clean_reference: [P9150343, P9150360]   # first/last clean frame for the cell-ratio baseline
+
+# Diver torch in view (dataset README) — artificial light, excluded from ambient-light work.
+torch_frames: [P9160606, P9160616, P9160617]
