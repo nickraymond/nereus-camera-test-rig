@@ -256,7 +256,8 @@ Items for Nick are marked **(Nick)**.
   The TG-7 (2023) is newer than some LibRaw releases. Verify on one ORF in the S0 nibble;
   fallback is Adobe DNG Converter → DNG. Caveat: the converter's default output is (from
   memory, unverified) lossless-JPEG-compressed, which `tifffile` decodes only with
-  `imagecodecs` — check its compression before relying on the fallback. From exiftool
+  `imagecodecs` — check its compression before relying on the fallback. (`read_dng`, S0.4,
+  rejects compressed CFA data with a clear error rather than half-reading it.) From exiftool
   (2026-09-26, all 308 ORFs): 4040×3016, CFA GRBG, 12-bit, black level per frame and
   channel (256–260) — the decoded frame must agree.
 - **[OPEN] OQ-35 — How many TG-7 dives: 4 or 5? (Nick).** *Blocks S1 `dive_id`, S2a
