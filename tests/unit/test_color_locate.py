@@ -89,8 +89,8 @@ def test_locate_frame_without_tags_is_recorded_not_dropped(tmp_path):
     cv2.imwrite(str(path), np.full((400, 600, 3), 128, np.uint8))
     rec = locate_frame(None, path, CORNERS, offset=(0, 0))
     assert rec == {"tags_found": [], "tag_source": {}, "found_at_scale": {},
-                   "tag_side_px_min": {}, "located": False, "locate_method": None,
-                   "reason": "0 of 4 card tags found (need 3)"}
+                   "tag_side_px_min": {}, "tag_centers_raw": {}, "located": False,
+                   "locate_method": None, "reason": "0 of 4 card tags found (need 3)"}
 
 
 def test_locate_stage_end_to_end(tmp_path):
@@ -228,3 +228,39 @@ def test_manual_corners_are_read_never_overwritten(tmp_path):
     assert (locate_dir / MANUAL_FILE).read_bytes() == before
     assert summary["manual_entries"] == 1
     assert verify_fresh(locate_dir)["params"]["manual_corners_sha256"]
+
+
+def test_operator_skip_is_recorded_as_unlocated_with_reason(tmp_path):
+    ds = tmp_path / "ds"
+    (ds / "raw" / "1_reference_A_iso100").mkdir(parents=True)
+    cv2.imwrite(str(ds / "raw" / "1_reference_A_iso100" / "K1.JPG"),
+                np.full((300, 400, 3), 128, np.uint8))
+    ingest_dir = tmp_path / "out" / "synthetic-00000000" / "ingest"
+    ingest_dir.mkdir(parents=True)
+    with (ingest_dir / "manifest.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["stem", "file", "jpeg", "has_raw", "category",
+                                          "dive_id", "sweep_id", "time_utc"])
+        w.writeheader()
+        w.writerow({"stem": "K1", "file": "raw/1_reference_A_iso100/K1.JPG",
+                    "jpeg": "raw/1_reference_A_iso100/K1.JPG", "has_raw": "False",
+                    "category": "1_reference_A_iso100", "dive_id": 1, "sweep_id": 1,
+                    "time_utc": "2026-09-16T01:00:00+00:00"})
+    write_stage(ingest_dir, "ingest", params={"dataset_dir": str(ds)})
+    cfg = tmp_path / "dataset.yaml"
+    cfg.write_text("jpeg_offset_in_raw: [0, 0]\n")
+    (ingest_dir.parent / "locate").mkdir()
+    (ingest_dir.parent / "locate" / MANUAL_FILE).write_text(
+        json.dumps({"K1": {"skip": True, "reason": "card not usable in this frame"}}))
+    locate(ingest_dir, CARD, cfg, workers=1)
+    rec = json.loads((ingest_dir.parent / "locate" / "corners.json").read_text())["K1"]
+    assert not rec["located"] and rec["manual_skip"]
+    assert rec["reason"] == "operator: card not usable in this frame"
+
+
+def test_manual_corners_path_comes_from_the_dataset_config(tmp_path):
+    from nereus_camera_test_rig.color.locate import manual_corners_path
+
+    cfg = tmp_path / "configs" / "ds.yaml"
+    assert manual_corners_path(cfg, {"manual_corners": "ds_manual.json"}, tmp_path / "loc") == \
+        tmp_path / "configs" / "ds_manual.json"
+    assert manual_corners_path(cfg, {}, tmp_path / "loc") == tmp_path / "loc" / MANUAL_FILE
