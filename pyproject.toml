@@ -48,6 +48,7 @@ color = [
 # only, never imported from src/ (SPEC §20).
 tg7 = [
     "rawpy>=0.19",
+    "matplotlib>=3.8",   # host_tools/click_corners.py (manual card corners)
 ]
 dev = [
     "pytest>=8.0",

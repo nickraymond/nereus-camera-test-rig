@@ -56,3 +56,9 @@ packages:
     licenses: [MIT]
     decision: internal_only        # [tg7] extra, host_tools/tg7/ only; banned from src/
     bundled: ["*"]
+
+  matplotlib:
+    declared: License agreement for matplotlib versions 1.3.0 and later
+    licenses: [PSF-2.0]
+    decision: internal_only        # [tg7]: the Mac manual-click tool only, never src/
+    bundled: ["*"]

@@ -13,8 +13,9 @@ missed, or when a shot has no RAW; each tag records its source.
   (same sweep preferred). It is searched at 1×–4×, but a scaled window never exceeds
   ~16 MP — near-frame neighbours have large cards, so their windows can span most of the
   frame, and a 4× upscale of that is the 190 MP cost this stage otherwise avoids.
-- **(c) manual:** tag centres clicked with ``host_tools.color click`` go to
-  ``locate/manual_corners.json``, which this stage only reads (never writes) — S1.3b.
+- **(c) manual:** tag centres clicked with ``host_tools.color click`` go to the dataset's
+  versioned manual-corners file (``manual_corners`` in the dataset config, next to it; human
+  work must survive a results/ or worktree cleanup). This stage only reads it, never writes.
 
 ≥ 3 corner tags → the tag-centre quad, a single missing corner inferred as a parallelogram
 (``min_tags=3``). The quad must be convex with a card-like width/height ratio (design 3.985),
@@ -101,6 +102,8 @@ def _record(tags: dict, corner_map: dict, offset, method: str) -> dict[str, Any]
         "tag_source": {str(i): tags[i][2] for i in sorted(tags)},
         "found_at_scale": {str(i): tags[i][1] for i in sorted(tags)},
         "tag_side_px_min": {str(i): round(tags[i][0].side_px_min, 1) for i in sorted(tags)},
+        "tag_centers_raw": {str(i): [round(c, 2) for c in tags[i][0].center]
+                            for i in sorted(tags)},
     }
     try:
         quad, inferred = infer_card_corners_from_tags(
@@ -207,6 +210,13 @@ def manual_record(entry: dict, offset) -> dict[str, Any]:
             "clicked_utc": entry.get("clicked_utc")}
 
 
+def manual_corners_path(dataset_config: Path, cfg: dict, out_dir: Path) -> Path:
+    """The dataset's manual-corners file: ``manual_corners`` (relative to the dataset config),
+    else ``<locate dir>/manual_corners.json``."""
+    name = cfg.get("manual_corners")
+    return dataset_config.parent / name if name else out_dir / MANUAL_FILE
+
+
 def _run(fn, jobs: list, workers: int) -> list:
     if workers > 1 and len(jobs) > 1:
         with ProcessPoolExecutor(workers) as pool:
@@ -253,11 +263,15 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
         else:
             corners[stem]["window_tried"] = {"neighbour": n, "result": rec["reason"]}
 
-    manual_path = out_dir / MANUAL_FILE
+    manual_path = manual_corners_path(dataset_config, cfg, out_dir)
     manual = json.loads(manual_path.read_text()) if manual_path.is_file() else {}
     for stem, entry in manual.items():
         if stem in corners and not corners[stem]["located"]:
-            corners[stem] = manual_record(entry, offset)
+            if entry.get("skip"):
+                corners[stem].update(manual_skip=True,
+                                     reason=f"operator: {entry.get('reason', 'not usable')}")
+            else:
+                corners[stem] = manual_record(entry, offset)
 
     counts: dict[str, dict[str, int]] = {}
     for stem, rec in corners.items():
@@ -279,6 +293,7 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
                         "scales": list(SCALES), "window_scales": list(WINDOW_SCALES),
                         "window_max_s": max_s, "min_tags": 3, "ratio_range": list(RATIO_RANGE),
                         "jpeg_offset_in_raw": list(offset),
+                        "manual_corners": str(manual_path),
                         "manual_corners_sha256": sha256_file(manual_path) if manual else None})
     summary["out_dir"] = str(out_dir)
     return summary

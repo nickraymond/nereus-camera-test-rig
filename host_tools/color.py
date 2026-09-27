@@ -8,6 +8,7 @@ Usage::
     python -m host_tools.color inspect <file.orf|file.dng> [--out results/color]
     python -m host_tools.color ingest <dataset_dir> --config configs/datasets/<dataset>.yaml
     python -m host_tools.color locate results/color/<dataset_id>/ingest --config <dataset.yaml>
+    python -m host_tools.color click results/color/<dataset_id>/locate --config <dataset.yaml>
 """
 
 from __future__ import annotations
@@ -46,7 +47,15 @@ def main(argv=None) -> int:
     p.add_argument("ingest_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p = sub.add_parser("click", help="click tag centres on frames locate could not find")
+    p.add_argument("locate_dir", type=Path)
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--redo", action="store_true", help="also revisit frames already clicked")
+    p.add_argument("--list", action="store_true", help="only list the frames still to do")
     args = parser.parse_args(argv)
+
+    if args.stage == "click":
+        return _click(args)
 
     try:
         if args.stage == "inspect":
@@ -60,6 +69,27 @@ def main(argv=None) -> int:
         return 1
     print(json.dumps(summary, indent=2, default=str))
     return 0
+
+
+def _click(args) -> int:
+    import csv
+
+    from nereus_camera_test_rig.color.locate import manual_corners_path
+    from nereus_camera_test_rig.config import load_yaml
+
+    from . import click_corners
+
+    manual = manual_corners_path(args.config, load_yaml(args.config), args.locate_dir)
+    stems = click_corners.todo(args.locate_dir, manual, args.redo)
+    if args.list:
+        print("\n".join(stems) or "nothing to click")
+        print(f"{len(stems)} frames · manual corners file: {manual}")
+        return 0
+    ingest_dir = args.locate_dir.parent / "ingest"
+    record = stages.verify_fresh(ingest_dir)
+    rows = {r["stem"]: r for r in csv.DictReader((ingest_dir / "manifest.csv").open())}
+    return click_corners.run(args.locate_dir, manual, Path(record["params"]["dataset_dir"]),
+                             read_orf, rows, args.redo)
 
 
 if __name__ == "__main__":
