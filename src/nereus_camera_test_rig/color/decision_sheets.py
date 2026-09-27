@@ -3,8 +3,8 @@ blind, side-randomized review that decides the gate.
 
 - **Cut sheet** (``decide/cutsheet.html``): one row per frame, one whole-frame thumbnail per
   method — camera JPEG (or Olympus preset JPEG), JPEG + card WB (rendered here from the camera
-  JPEG: linear gain on the anchor grey), RAW + card WB, RAW + card WB − haze, RAW + depth WB −
-  haze (no card), GRVI. Frames: the middle frame of every sweep, every off-centre and no-card
+  JPEG: linear gain on the anchor grey), RAW + card WB, RAW + card WB − haze, RAW + card WB +
+  depth matrix (v0.3), RAW + depth WB − haze (no card), the same + depth matrix (v0.3), GRVI. Frames: the middle frame of every sweep, every off-centre and no-card
   frame (torch frames have no Nereus output), every preset frame.
 - **Blind review** (``decide/blind.html``): pairs of images with the method names hidden and the
   sides randomized — card-free: camera JPEG vs Nereus no card (off-centre, no-card, one frame per
@@ -34,8 +34,8 @@ from .report import STYLE
 
 SEED = "s2a-blind-2026-09-27"
 THUMB_W, BLIND_W = 300, 640
-CUT_COLUMNS = ("camera", "jpeg_card_wb", "raw_card_wb", "raw_card_wb_haze", "raw_depth_wb_haze",
-               "grvi_cheeca_v3")
+CUT_COLUMNS = ("camera", "jpeg_card_wb", "raw_card_wb", "raw_card_wb_haze", "raw_card_wb_ccm",
+               "raw_depth_wb_haze", "raw_depth_wb_haze_ccm", "grvi_cheeca_v3")
 BLIND = {"card_free": ("camera", "raw_depth_wb_haze"),
          "card_anchored": ("grvi_cheeca_v3", "raw_card_wb")}  # (baseline, Nereus)
 

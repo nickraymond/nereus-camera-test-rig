@@ -137,3 +137,17 @@ def test_leave_one_sweep_out_keeps_the_dive_but_drops_the_sweep(tmp_path):
     assert loso["n"] == 4 and loso["source_dives"] == ["3", "4"]
     assert loso["ln_rg"][1] == pytest.approx(-0.05)
     assert depth_table(path, ["3", "4"], None)["n"] == 5
+
+
+def test_v03_columns_use_the_frames_depth_matrix():
+    means = card_means()
+    image = np.zeros((50, 50, 3)) + HAZE + 1e-6
+    j = {**job(means), "ccm": np.eye(3).tolist()}
+    maps, _ = frame_maps(j, image)
+    assert {"raw_card_wb_ccm", "raw_depth_wb_haze_ccm"} <= set(maps)
+    scores = score(j, maps, CARD, np.eye(3))
+    assert scores["raw_card_wb_ccm"]["de2000"] == scores["raw_card_wb"]["de2000"]
+    desat = 0.7 * np.eye(3) + 0.1  # rows sum to 1: a desaturating depth matrix
+    worse = score({**j, "ccm": desat.tolist()}, frame_maps({**j, "ccm": desat.tolist()},
+                                                          image)[0], CARD, np.eye(3))
+    assert worse["raw_card_wb_ccm"]["de2000_median"] > scores["raw_card_wb"]["de2000_median"]
