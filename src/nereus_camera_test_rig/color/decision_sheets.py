@@ -159,7 +159,7 @@ def cut_sheet(images: Images, frames: list[str], rows: dict, scores: dict) -> st
         body.append(f"<tr><td><b>{html.escape(s)}</b><br><span class=\"muted\">dive "
                     f"{r['dive_id']} · {html.escape(r['category'])} · {r['depth_m']} m"
                     f"</span></td>{''.join(cells)}</tr>")
-    return _page("S2a Cut Sheet", (
+    return _page("S2a Cut Sheet", ("<style>main{max-width:none}</style>"
         "<h1>Phase 8 · S2a cut sheet</h1><p class=\"note\">Whole frames, one column per method. "
         "RAW outputs are 2 × 2 binned and in sensor orientation; the camera JPEG is shown in its "
         "stored orientation too. ΔE00 = the frame's median over the scored colour patches (card "

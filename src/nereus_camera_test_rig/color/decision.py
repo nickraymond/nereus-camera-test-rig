@@ -138,7 +138,8 @@ def preset_pairs(scores: dict) -> dict[str, Any]:
 
 
 def needs_v3(scores: dict, qc: dict, correct_summary: dict, flagged: dict,
-             comparisons: list) -> list[str]:
+             comparisons: list, table_depths: Optional[list] = None,
+             frame_depths: Optional[dict] = None) -> list[str]:
     """What this dataset cannot answer; every item is computed from the data."""
     main = [s for s, v in scores.items() if not v.get("flash")]
     items, usable = [], {}
@@ -157,6 +158,16 @@ def needs_v3(scores: dict, qc: dict, correct_summary: dict, flagged: dict,
                      f"{correct_summary['card_haze_cap_bound_frames']} frames: haze cannot be "
                      f"separated from the print's non-linearity without measured card values "
                      f"(OQ-40).")
+    if table_depths and frame_depths:
+        lo, hi = min(table_depths), max(table_depths)
+        out = [s for s in main if s in frame_depths and not lo <= frame_depths[s] <= hi
+               and value(scores[s], "raw_depth_wb_haze", "psi_median") is not None]
+        worse = [s for s in out if (value(scores[s], "camera_jpeg", "psi_median") or 1e9)
+                 < value(scores[s], "raw_depth_wb_haze", "psi_median")]
+        if out:
+            items.append(f"The no-card depth table is fitted on {lo:g}–{hi:g} m; {len(out)} "
+                         f"scored frames lie outside it (extrapolated) and no card is worse than "
+                         f"the camera JPEG on {len(worse)} of them ({', '.join(sorted(worse))}).")
     for d, why in sorted(flagged.items()):
         items.append(f"Dive {d} is flagged ({why}): not a like-for-like light test.")
     if correct_summary.get("grvi_no_card_frames"):
@@ -330,8 +341,13 @@ def decide(correct_dir: Path, dataset_config: Path, card_path: Path) -> dict[str
     qc = json.loads((root / "qc" / "qc.json").read_text())
     result = decide_numbers(scores)
     comps = [c for cls in result["classes"].values() for c in cls["comparisons"]]
-    result["needs_v3"] = needs_v3(scores, qc, correct_summary,
-                                  fit_settings(dataset_config)["flagged_dives"], comps)
+    settings = fit_settings(dataset_config)
+    points = list(csv.DictReader((root / "fit" / "wb_points.csv").open()))
+    table_depths = [float(p["depth_m"]) for p in points
+                    if p["dive"] in settings["table_source_dives"]]
+    frames = json.loads((correct_dir / "frames.json").read_text())
+    result["needs_v3"] = needs_v3(scores, qc, correct_summary, settings["flagged_dives"], comps,
+                                  table_depths, {s: f["depth_m"] for s, f in frames.items()})
     out_dir = root / "decide"
     out_dir.mkdir(parents=True, exist_ok=True)
 

@@ -115,6 +115,10 @@ def _stage_fixture(tmp_path):
     (root / "patches" / "patches.json").write_text(json.dumps(
         {s: {"jpeg": {"patches": {"gray_mid": {"mean": [100, 120, 110]}}}} for s in scores}))
     (correct_dir / "scores.json").write_text(json.dumps(scores))
+    (correct_dir / "frames.json").write_text(json.dumps(
+        {s: {"depth_m": 1.0 if s == "F2" else 8.0} for s in scores}))
+    (root / "fit").mkdir()
+    (root / "fit" / "wb_points.csv").write_text("stem,dive,depth_m\nA,3,5.0\nB,4,16.0\n")
     (correct_dir / "summary.json").write_text(json.dumps(
         {"card_haze_cap_bound_frames": "3 of 4", "grvi_no_card_frames": []}))
     qc_dir.mkdir()
@@ -139,6 +143,7 @@ def test_decide_stage_writes_numbers_and_pages(tmp_path):
     assert result["preset_pairs"]["n"] == 1 and list(result["flash"]) == ["FL"]
     assert any("gray_white" in x for x in out["needs_v3"])
     assert any("Dive 1" in x for x in out["needs_v3"])
+    assert any("fitted on 5–16 m; 1 scored frames lie outside" in x for x in out["needs_v3"])
     page = (root / "decide" / "index.html").read_text()
     assert "Card-anchored" in page and "Blind review not done yet" in page
     # 10 sweep middles + the no-card frame (card-free), 10 sweep middles (card-anchored)
