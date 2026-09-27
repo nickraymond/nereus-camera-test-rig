@@ -20,7 +20,11 @@ import nereus_camera_test_rig
 REPO = Path(__file__).resolve().parents[2]
 SRC = REPO / "src"
 
-COLOR_MODULES = ["nereus_camera_test_rig.color", "nereus_camera_test_rig.color.card"]
+COLOR_MODULES = [
+    "nereus_camera_test_rig.color",
+    "nereus_camera_test_rig.color.card",
+    "nereus_camera_test_rig.color.raw_io",
+]
 
 # Capture path, web stack, serial transport, and LGPL rawpy (Mac-only tools, SPEC §20).
 FORBIDDEN = [
