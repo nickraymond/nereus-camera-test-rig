@@ -10,6 +10,7 @@ Usage::
     python -m host_tools.color locate results/color/<dataset_id>/ingest --config <dataset.yaml>
     python -m host_tools.color click results/color/<dataset_id>/locate --config <dataset.yaml>
     python -m host_tools.color distance results/color/<dataset_id>/locate --config <dataset.yaml>
+    python -m host_tools.color patches results/color/<dataset_id>/locate
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from nereus_camera_test_rig.color import stages  # noqa: E402
 from nereus_camera_test_rig.color.distance import distance  # noqa: E402
 from nereus_camera_test_rig.color.ingest import ingest  # noqa: E402
 from nereus_camera_test_rig.color.locate import locate  # noqa: E402
+from nereus_camera_test_rig.color.patches import patches  # noqa: E402
 from nereus_camera_test_rig.config import load_yaml  # noqa: E402
 
 from .tg7.exif import read_exif  # noqa: E402
@@ -56,6 +58,9 @@ def main(argv=None) -> int:
     p.add_argument("--calibration", type=Path,
                    help="default: configs/calibration/<dataset camera>.yaml")
     p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p = sub.add_parser("patches", help="sample every card patch (binned RAW + camera JPEG)")
+    p.add_argument("locate_dir", type=Path)
+    p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
     p = sub.add_parser("click", help="click tag centres on frames locate could not find")
     p.add_argument("locate_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -75,6 +80,8 @@ def main(argv=None) -> int:
             calibration = args.calibration or (REPO / "configs" / "calibration" /
                                                f"{load_yaml(args.config).get('camera', '')}.yaml")
             summary = distance(args.locate_dir, calibration, args.config, args.card)
+        elif args.stage == "patches":
+            summary = patches(args.locate_dir, args.card, raw_reader=read_orf)
         else:
             summary = locate(args.ingest_dir, args.card, args.config, raw_reader=read_orf)
     except (OSError, ValueError, RuntimeError) as exc:
