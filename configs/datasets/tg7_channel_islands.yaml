@@ -56,3 +56,13 @@ torch_frames: [P9160606, P9160616, P9160617]
 # scene distance, e.g. 2-3 m"). Table mode on card frames is also reported with this value
 # ("default z") next to the card's own z ("oracle z").
 default_scene_z_m: 2.0
+
+# Water-model fit and depth white-balance table (S2a). Dataset facts, not code, so the tool
+# re-runs on a new dataset without code changes.
+fit:
+  reference_category: 1_reference_A_iso100      # distance sweeps: the water-model fit
+  wb_categories: [1_reference_A_iso100, 2_underwater_preset, 3_scene_card_offcenter]
+  table_source_dives: ["3", "4"]                # stable light; each dive is left out of its own table
+  flagged_dives:
+    "1": "sunset dive: light falls through the dive"
+    "2": "early-morning dive: light rises through the dive"

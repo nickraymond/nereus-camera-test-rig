@@ -20,8 +20,9 @@ scaling χ² to its reduced minimum). numpy only.
 
 **Depth white-balance table (v0.1, 2026-09-27).** Run A showed the grey's colour barely
 changes with distance (0.5–3 m) but strongly with depth, and absolute light levels differ ~10×
-between dives. So table mode uses only a colour-of-light table: per card frame, the anchor
-grey after haze removal gives the light colour; ``ln(R/G)`` and ``ln(B/G)`` are regressed on
+between dives. So table mode uses only a colour-of-light table: per card frame, the slope of a
+straight line through the greys (``ramp_fit``, I = A·ρ + H) gives the light colour A and the
+haze H; ``ln(R/G)`` and ``ln(B/G)`` of A are regressed on
 depth per dive (and on depth + distance, as a check that distance adds little). Ratios cancel
 exposure and between-frame light flicker.
 
@@ -34,19 +35,18 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import cv2
 import numpy as np
 
-from ..config import load_yaml
+from ..config import ConfigError, load_yaml
 from .card import Card, load_card
 from .metrics import srgb8_to_linear
 from .patches import homography
 from .stages import verify_fresh, write_stage
 
 CHANNELS = "RGB"
-REFERENCE = "1_reference_A_iso100"
 BETA_D = np.round(np.arange(0.0, 1.5001, 0.015), 4)
 BETA_B = np.round(np.geomspace(0.03, 10.0, 56), 4)
 MAX_RADIUS = 0.6          # of the image half-diagonal (brief/SPEC S2a: no flat-field yet)
@@ -54,8 +54,6 @@ MIN_BLACK_PX = 6          # binned px, shorter side of the black sample
 REL_SIGMA = 0.03          # per-observation error: 3 % of the value ...
 FLOOR_SIGMA = 0.003       # ... plus 0.3 % of the dive-channel maximum
 IDENTIFIABLE_Z_RATIO = 1.5
-FLAGGED_DIVES = {"1": "sunset dive: light falls through the dive",
-                 "2": "early-morning dive: light rises through the dive"}
 
 
 def grey_reflectance(card: Card) -> dict[str, float]:
@@ -75,7 +73,8 @@ def _grey_ids(qpatches: dict) -> list[str]:
     return [i for i in ids if qpatches[i]["usable"]]
 
 
-def observations(root: Path, dist: dict, card: Card, principal) -> list[dict]:
+def observations(root: Path, dist: dict, card: Card, principal,
+                 reference: str) -> list[dict]:
     rows = {r["stem"]: r for r in csv.DictReader((root / "ingest" / "manifest.csv").open())}
     corners = json.loads((root / "locate" / "corners.json").read_text())
     patches = json.loads((root / "patches" / "patches.json").read_text())
@@ -87,7 +86,7 @@ def observations(root: Path, dist: dict, card: Card, principal) -> list[dict]:
     obs = []
     for stem, q in qc.items():
         r, d = rows[stem], dist.get(stem, {})
-        if (r["category"] != REFERENCE or not r["sweep_id"] or not q["usable"]
+        if (r["category"] != reference or not r["sweep_id"] or not q["usable"]
                 or d.get("medium") != "water" or d.get("z_m") is None):
             continue
         H = homography(card, np.asarray(corners[stem]["quad_raw"]))
@@ -190,25 +189,32 @@ def fit_dive(obs: list[dict]) -> dict[str, Any]:
 
 
 ANCHORS = ("gray_mid", "gray_mid_right", "gray_dark")
-WB_CATEGORIES = ("1_reference_A_iso100", "2_underwater_preset", "3_scene_card_offcenter")
+RAMP = ("gray_white", "gray_light", "gray_dark")
 
 
-def haze_from_black(raw: dict, anchor: str, rho_anchor: float,
-                    black_to_white: float) -> list[float] | None:
-    """Per-channel haze: what the black patch shows beyond its own print reflectance.
+def ramp_fit(raw: dict, keep: set, rho: dict) -> Optional[dict[str, Any]]:
+    """Per-channel straight line through the usable greys: I = A·ρ + H.
 
-    I_black = r·A + H and I_anchor = A + H with r = ρ_black / ρ_anchor → H = (I_black − r·I_anchor)
-    / (1 − r). None when the black patch is unusable or too small.
+    ``A`` is the light reaching the card (its colour = the white balance), ``H`` the additive
+    haze. Uses white, grey 200, grey 128 (or its right half) and grey 74 — never black, whose
+    print reflectance is not known (colour review 2026-09-27: the single-frame black estimate
+    over-predicted haze ~3×). Needs ≥ 2 greys spanning ≥ 0.1 in reflectance.
     """
-    b = raw.get("gray_black") or {}
-    if not b.get("mean_norm") or min(b["size_px"]) < MIN_BLACK_PX:
+    ids = [p for p in RAMP if p in keep]
+    mid = next((m for m in ("gray_mid", "gray_mid_right") if m in keep), None)
+    ids += [mid] if mid else []
+    ids = [p for p in ids if raw.get(p, {}).get("mean_norm")]
+    x = np.array([rho[p] for p in ids])
+    if len(ids) < 2 or np.ptp(x) < 0.1:
         return None
-    r = black_to_white / rho_anchor
-    ib, ia = np.asarray(b["mean_norm"]), np.asarray(raw[anchor]["mean_norm"])
-    return ((ib - r * ia) / (1 - r)).tolist()
+    Y = np.array([raw[p]["mean_norm"] for p in ids])
+    X = np.c_[x, np.ones_like(x)]
+    coef, *_ = np.linalg.lstsq(X, Y, rcond=None)
+    return {"A": coef[0].tolist(), "H": coef[1].tolist(), "greys": ids}
 
 
-def wb_points(root: Path, dist: dict, card: Card, black_to_white: float) -> list[dict]:
+def wb_points(root: Path, dist: dict, card: Card, categories) -> list[dict]:
+    """Light colour per card frame, from the grey-ramp slope ``A`` (haze-free)."""
     rows = {r["stem"]: r for r in csv.DictReader((root / "ingest" / "manifest.csv").open())}
     patches = json.loads((root / "patches" / "patches.json").read_text())
     qc = json.loads((root / "qc" / "qc.json").read_text())
@@ -216,26 +222,20 @@ def wb_points(root: Path, dist: dict, card: Card, black_to_white: float) -> list
     out = []
     for stem, q in qc.items():
         r, d = rows[stem], dist.get(stem, {})
-        if (r["category"] not in WB_CATEGORIES or not q["usable"] or d.get("medium") != "water"
+        if (r["category"] not in categories or not q["usable"] or d.get("medium") != "water"
                 or d.get("z_m") is None or "raw" not in patches.get(stem, {})
                 or r["flash_fired"] == "True"):
             continue
         keep = {pid for pid, p in q["patches"].items() if p["usable"]}
-        anchor = next((a for a in ANCHORS if a in keep), None)
-        raw = patches[stem]["raw"]["patches"]
-        if anchor is None or "gray_black" not in keep:
+        ramp = ramp_fit(patches[stem]["raw"]["patches"], keep, rho)
+        if ramp is None or min(ramp["A"]) <= 0:
             continue
-        haze = haze_from_black(raw, anchor, rho[anchor], black_to_white)
-        if haze is None:
-            continue
-        light = np.asarray(raw[anchor]["mean_norm"]) - np.asarray(haze)
-        if np.any(light <= 0):
-            continue
+        A, H = np.asarray(ramp["A"]), np.asarray(ramp["H"])
         out.append({"stem": stem, "dive": r["dive_id"], "category": r["category"],
-                    "depth_m": float(r["depth_m"]), "z_m": d["z_m"], "anchor": anchor,
-                    "ln_rg": float(np.log(light[0] / light[1])),
-                    "ln_bg": float(np.log(light[2] / light[1])),
-                    "haze_frac_g": float(haze[1] / raw[anchor]["mean_norm"][1])})
+                    "depth_m": float(r["depth_m"]), "z_m": d["z_m"],
+                    "greys": len(ramp["greys"]),
+                    "ln_rg": float(np.log(A[0] / A[1])), "ln_bg": float(np.log(A[2] / A[1])),
+                    "haze_frac_g": float(H[1] / (A[1] + H[1]))})
     return out
 
 
@@ -255,7 +255,7 @@ def _regress(points: list[dict], key: str, with_z: bool = False) -> dict[str, An
             **{f"{n}_se": round(float(np.sqrt(cov[i, i])), 5) for i, n in enumerate(names)}}
 
 
-def wb_table(points: list[dict]) -> dict[str, Any]:
+def wb_table(points: list[dict], flagged: dict) -> dict[str, Any]:
     table: dict[str, Any] = {}
     for dive in sorted({p["dive"] for p in points}, key=int):
         pts = [p for p in points if p["dive"] == dive]
@@ -268,28 +268,42 @@ def wb_table(points: list[dict]) -> dict[str, Any]:
                        "ln_rg": _regress(pts, "ln_rg"), "ln_bg": _regress(pts, "ln_bg"),
                        "ln_rg_with_distance": _regress(pts, "ln_rg", with_z=True),
                        "ln_bg_with_distance": _regress(pts, "ln_bg", with_z=True)}
-        if dive in FLAGGED_DIVES:
-            table[dive]["flag"] = FLAGGED_DIVES[dive]
+        if dive in flagged:
+            table[dive]["flag"] = flagged[dive]
     return table
 
 
-def fit(qc_dir: Path, distance_dir: Path, card_path: Path, calibration: Path) -> dict[str, Any]:
+def fit_settings(dataset_config: Path) -> dict[str, Any]:
+    """The dataset's ``fit:`` block (SPEC §20 config, not code)."""
+    fit_cfg = load_yaml(dataset_config).get("fit") or {}
+    for key in ("reference_category", "wb_categories", "table_source_dives"):
+        if key not in fit_cfg:
+            raise ConfigError(f"{dataset_config}: fit.{key} missing")
+    return {**fit_cfg, "flagged_dives": {str(k): v for k, v in
+                                         (fit_cfg.get("flagged_dives") or {}).items()},
+            "table_source_dives": [str(d) for d in fit_cfg["table_source_dives"]]}
+
+
+def fit(qc_dir: Path, distance_dir: Path, card_path: Path, calibration: Path,
+        dataset_config: Path) -> dict[str, Any]:
     verify_fresh(qc_dir)
     verify_fresh(distance_dir)
     root = qc_dir.parent
     card = load_card(card_path)
     calib = load_yaml(calibration)
+    settings = fit_settings(dataset_config)
+    flagged = settings["flagged_dives"]
     dist = json.loads((distance_dir / "distances.json").read_text())
-    obs = observations(root, dist, card, calib["intrinsics"]["principal_point_raw"])
+    obs = observations(root, dist, card, calib["intrinsics"]["principal_point_raw"],
+                       settings["reference_category"])
     params: dict[str, Any] = {}
     for dive in sorted({o["dive"] for o in obs}, key=int):
         params[dive] = fit_dive([o for o in obs if o["dive"] == dive])
-        if dive in FLAGGED_DIVES:
-            params[dive]["flag"] = FLAGGED_DIVES[dive]
+        if dive in flagged:
+            params[dive]["flag"] = flagged[dive]
 
-    black_to_white = float(calib["card_reference"]["black_to_white"])
-    points = wb_points(root, dist, card, black_to_white)
-    table = wb_table(points)
+    points = wb_points(root, dist, card, settings["wb_categories"])
+    table = wb_table(points, flagged)
 
     out_dir = root / "fit"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -317,11 +331,13 @@ def fit(qc_dir: Path, distance_dir: Path, card_path: Path, calibration: Path) ->
                                                      "chi2_reduced", "K", "K_se")}
                for c in CHANNELS}} for d, p in params.items()}}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    write_stage(out_dir, "fit", configs=[card_path, calibration], upstream=[qc_dir, distance_dir],
+    write_stage(out_dir, "fit", configs=[card_path, calibration, dataset_config],
+                upstream=[qc_dir, distance_dir],
                 params={"beta_d_grid": [float(BETA_D[0]), float(BETA_D[-1]), BETA_D.size],
                         "beta_b_grid": [float(BETA_B[0]), float(BETA_B[-1]), BETA_B.size],
                         "max_radius": MAX_RADIUS, "min_black_px": MIN_BLACK_PX,
                         "rel_sigma": REL_SIGMA, "floor_sigma": FLOOR_SIGMA,
-                        "fit_category": REFERENCE})
+                        "fit_category": settings["reference_category"],
+                        "wb_haze": "grey-ramp intercept (not the black patch)"})
     summary["out_dir"] = str(out_dir)
     return summary

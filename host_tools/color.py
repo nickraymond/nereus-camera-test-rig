@@ -108,7 +108,7 @@ def main(argv=None) -> int:
                 summary = distance(args.locate_dir, calibration, args.config, args.card)
             elif args.stage == "fit":
                 summary = fit(args.qc_dir, args.qc_dir.parent / "distance", args.card,
-                              calibration)
+                              calibration, args.config)
             else:
                 summary = correct(args.fit_dir, calibration, args.config, args.card,
                                   raw_reader=read_orf)

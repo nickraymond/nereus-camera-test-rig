@@ -28,7 +28,7 @@ from nereus_camera_test_rig.color.locate import (
 )
 from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.raw_io import RawFrame
-from nereus_camera_test_rig.color.stages import verify_fresh, write_stage
+from nereus_camera_test_rig.color.stages import StaleInputError, verify_fresh, write_stage
 
 REPO = Path(__file__).resolve().parents[2]
 RENDER = REPO / "tests" / "fixtures" / "reference_card" / "Nereus_Reef_Reference_Card_V2.png"
@@ -258,6 +258,10 @@ def test_manual_corners_are_read_never_overwritten(tmp_path):
     assert (locate_dir / MANUAL_FILE).read_bytes() == before
     assert summary["manual_entries"] == 1
     assert verify_fresh(locate_dir)["params"]["manual_corners_sha256"]
+    # a new click makes locate stale (SPEC §20)
+    (locate_dir / MANUAL_FILE).write_text(json.dumps({**manual, "M2": {"skip": True}}))
+    with pytest.raises(StaleInputError, match="changed"):
+        verify_fresh(locate_dir)
 
 
 def test_operator_skip_is_recorded_as_unlocated_with_reason(tmp_path):

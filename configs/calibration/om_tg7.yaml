@@ -34,12 +34,3 @@ color_matrix:
     - [-0.25, 1.53125, -0.28125]
     - [0.03125, -0.4375, 1.40625]
 
-# This camera's own view of the V2 card (brief §5.3 card reference; provisional until the
-# S2b daylight reshoot). black_to_white: the printed black patch relative to the white patch,
-# from a linear fit of the grey ramp on P9150343 (under water at 0.4 m, near-zero water path;
-# R/G/B 0.024/0.027/0.031, 2026-09-27). In air the laminate's surface reflection lifts it to
-# ~0.07 (P9150341), so the in-water value is used. Card mode subtracts haze = what the black
-# patch shows beyond this.
-card_reference:
-  black_to_white: 0.027
-  source: P9150343_grey_ramp_fit_underwater_0.4m
