@@ -205,7 +205,7 @@ Items for Nick are marked **(Nick)**.
   (`raw/5_above_water_calibration/`, `raw/6_pool_distance_check/`) — the tool picks them up
   by folder; nothing already in the dataset is touched.
 - **[OPEN] OQ-30 — Leak sensor for the soak? (Nick).** *Blocks S7.*
-- **[RESOLVED-LOCATION] OQ-31 — Backend color correction as an S2a baseline.** *Blocks S2a.*
+- **[RESOLVED] OQ-31 — Backend color correction as an S2a baseline.** *Blocks S2a.*
   (The brief §1a cites "OQ 6" for this, but its §11 item 6 is the pool-housing question; this
   item replaces that reference.) Found by reading `nereus-vision-dev` (local checkout on
   `staging`, 2026-09-26): the backend's only image filter is **GRVI**, processor
@@ -226,6 +226,15 @@ Items for Nick are marked **(Nick)**.
   colorimetry — score it as production runs it. Its card truth (`profiles/template_layout_v2.json`,
   SVG design fills) becomes the V2 truth in `configs/cards/nereus_v2.yaml`. Remaining for Nick: confirm `staging` (vs
   `main`) is the right baseline branch.
+  **Run 2026-09-27 (`grvi` stage, SPEC §4 S2a):** backend `03272be` (origin/staging), exported
+  with `git archive`, run in `.venv-grvi` (`make grvi-env`: the backend's own pins, numpy 2.5.1,
+  OpenCV 5.0.0, scipy 1.18.1, Pillow 12.3.0), `PROCESSING_DETECT_SCALES` unset (native only).
+  GRVI found the card on **128 of 269** located TG-7 frames (the rig's RAW-first locate + clicks:
+  270). On the 118 scored frames where it found the card: ΔE00 median **34.4** vs 39.6 camera
+  JPEG and **18.1 RAW + card WB** (RAW + card WB better on 118/118). Its `cheeca_v3` render
+  targets sit ΔE00 12–25 from the V2 design values (grey 128 itself 12.4, a warm tint), so part
+  of the gap is the look by design; the rest is its JPEG input (red already clipped to 0 under
+  water) — deep frames come out washed-out cyan. Near the surface it is close (ΔE00 ~15).
 - **[RESOLVED] OQ-32 — Physical V2 card dimensions (for distance `z`).** Measured from the
   vector print master (Nick's direction, 2026-09-26) by reading the PDF drawing operators:
   tag-centre spacing **364.900 × 91.566 mm**, tag edge **31.980 mm**, card **410.000 ×
