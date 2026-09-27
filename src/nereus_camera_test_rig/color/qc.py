@@ -45,7 +45,7 @@ def cell_ratio(stats: dict) -> Optional[np.ndarray]:
         return None
     cells = np.asarray(stats["cells"], dtype=np.float64).reshape(-1, 3)
     lo, hi = cells.min(axis=0), cells.max(axis=0)
-    with np.errstate(divide="ignore"):
+    with np.errstate(divide="ignore", invalid="ignore"):
         return np.where(lo > 0, hi / lo, np.inf)
 
 
