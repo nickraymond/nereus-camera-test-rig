@@ -16,6 +16,7 @@ Usage::
     python -m host_tools.color report results/color/<dataset_id>/qc --config <dataset.yaml>
     python -m host_tools.color fit results/color/<dataset_id>/qc --config <dataset.yaml>
     python -m host_tools.color correct results/color/<dataset_id>/fit --config <dataset.yaml>
+    python -m host_tools.color decide results/color/<dataset_id>/correct --config <dataset.yaml>
     python -m host_tools.color grvi results/color/<dataset_id>/locate --config <dataset.yaml> \
         --backend <nereus-vision-dev checkout> --python <backend env python>   # before correct
 """
@@ -35,6 +36,7 @@ if str(REPO / "src") not in sys.path:
 
 from nereus_camera_test_rig.color import stages  # noqa: E402
 from nereus_camera_test_rig.color.correct import correct  # noqa: E402
+from nereus_camera_test_rig.color.decision import decide  # noqa: E402
 from nereus_camera_test_rig.color.distance import distance  # noqa: E402
 from nereus_camera_test_rig.color.ingest import ingest  # noqa: E402
 from nereus_camera_test_rig.color.jpeg_map import jpeg_map  # noqa: E402
@@ -93,6 +95,9 @@ def main(argv=None) -> int:
                        help="default: configs/calibration/<dataset camera>.yaml")
         p.add_argument("--card", type=Path,
                        default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p = sub.add_parser("decide", help="S2a decision report: classes, CIs, win rates, needs-V3")
+    p.add_argument("correct_dir", type=Path)
+    p.add_argument("--config", type=Path, required=True)
     p = sub.add_parser("grvi", help="backend GRVI cheeca_v3 baseline, in the backend's env")
     p.add_argument("locate_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -133,6 +138,8 @@ def main(argv=None) -> int:
         elif args.stage == "jpeg-map":
             summary = jpeg_map(args.locate_dir, args.config)
             print(summary.pop("config_block"), file=sys.stderr)
+        elif args.stage == "decide":
+            summary = decide(args.correct_dir, args.config)
         elif args.stage == "grvi":
             from .grvi_baseline import grvi
 
