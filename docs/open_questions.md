@@ -252,7 +252,11 @@ Items for Nick are marked **(Nick)**.
   - Enforcement: a reviewed `configs/licenses.yaml` table + a test (not SPDX parsing of
     metadata). No CI exists; the test runs under `make test`; a CI workflow is a later PR.
   Not legal advice — counsel review before the first commercial device ships.
-- **[OPEN] OQ-34 — Does `rawpy`'s bundled LibRaw decode TG-7 ORF?** *Blocks S0 ORF reader.*
+- **[RESOLVED] OQ-34 — Does `rawpy`'s bundled LibRaw decode TG-7 ORF?** **Yes** — rawpy
+  0.27.1 / LibRaw 0.22.1 decodes all 308 TG-7 ORFs (2026-09-26, S0.5), agreeing with exiftool
+  on CFA (GRBG), per-channel black level (Olympus `BlackLevel2` order is R, G1, G2, B), white
+  level 4095 and as-shot WB on every file. The DNG Converter fallback is not needed. Original
+  question: *Blocks S0 ORF reader.*
   The TG-7 (2023) is newer than some LibRaw releases. Verify on one ORF in the S0 nibble;
   fallback is Adobe DNG Converter → DNG. Caveat: the converter's default output is (from
   memory, unverified) lossless-JPEG-compressed, which `tifffile` decodes only with
