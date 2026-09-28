@@ -165,7 +165,7 @@ Runs on data that exists today (Nick, 2026-09-26): shows how good v0 is before b
 - [~] Baselines on the same frames, scored with the same protocol: **(a)** backend GRVI `cheeca_v3`, unmodified, on the TG-7 camera JPEGs, run in the backend's own environment (OQ-31); **(b)** the Olympus underwater-preset JPEG from the same exposure (flash-fired 4 reported separately), plus the nearest A-mode sweep frame at the same site; **(c)** the as-shot A-mode JPEG ("no correction" — also what GRVI outputs when it can't find the card). *(S2a status: (b) Olympus preset and (c) as-shot JPEG scored as separate baselines; flash-fired frames excluded, not yet reported separately; nearest A-mode frame and (a) GRVI not yet. Added at Nick's request (2026-09-27): **RAW + card WB** and **JPEG + card WB** — the same card white balance on both, which shows the JPEG's clipped red cannot be recovered.)*
 - [ ] **JPEG card position fix (OQ-42).** `locate` stores `quad_jpeg = quad_raw − (8, 8)`, wrong away from the centre (above), so JPEG-baseline patch samples are misplaced on off-centre cards (63 of 232 scored frames have a tag beyond 1200 px from the centre, 12 of 13 off-centre scenes). Detect the card on the JPEG independently (or fit the RAW→JPEG radial map from tag pairs), re-sample and re-score the JPEG baselines. RAW methods are unaffected.
 - [ ] **v0.3 — depth-dependent colour matrix.** A 3×3 matrix fitted on the 12 colour patches per depth band, interpolated by depth for table mode, validated leave-one-dive-out with the scored patches never in their own fit; reported as its own column. Targets the ΔE00 ≈ 19 in-water floor (OQ-39); a prototype on V2 data, confirmed on the V3 dive with a measured card (OQ-40).
-- [ ] **RAW lens-distortion model** from the P1.4 checkerboards (and card V3 perimeter tags, if adopted) — for straight lines in the output and exact card geometry off-centre.
+- [ ] **RAW lens-distortion model** from the P1.4 checkerboards (and the card V3 ChArUco back; V3 has no perimeter tags) — for straight lines in the output and exact card geometry off-centre.
 - [ ] Decision report (one HTML): Nereus v0 vs baselines in two classes — card-anchored (Nereus card mode vs GRVI) and card-free (Nereus table mode vs Olympus preset vs as-shot) — with frame counts per method × dive and per card condition, blind side-randomized before/after sheets (off-center, no-card with torch frames skipped, and a sample of reference frames), and a "needs V3 dataset" list. *(Not started. A review cut sheet exists (scratch); the report still needs sweep-bootstrap CIs, win rates, blind sheets and the needs-V3 list.)*
 - **Exit (decision gate, §20):** the report is produced by running the stages end to end with no code edits. **Nick's blind visual review decides first; the pre-registered numeric rule supports it.** Nick records **Go** (new dive with card V3, re-run the tool) or **No-go** (stop, write up why) here with the reason.
 
@@ -174,6 +174,14 @@ Needs the reshoot (OQ-29). Not a gate: it quantifies what better calibration buy
 - [ ] Full `calibrate`: CCM (linear and root-polynomial, ≥ 2 illuminants), dark frames + noise model, flat-field, intrinsics in air and in water from the checkerboards; `z` validated against the taped pool distances → `configs/calibration/tg7.yaml`. The reshoot photographs the **water-damaged** V2 card, so the daylight card reference uses only patches that pass QC against P9150343; an X-Rite chart (OQ-27) gives better truth where available.
 - [ ] Re-run the tool with the new calibration; the report shows S2b vs S2a per metric and per class.
 - **Exit:** the S2b report quantifies the change from the reshoot calibration with the same frames and protocol as S2a.
+
+#### Card V3 — design done, print gated on the S2a Go
+Detail: [`docs/reference_card_v3.md`](reference_card_v3.md). Designed with Nick 2026-09-27 (four layout rounds, simulated detection, four independent reviews; write-up linked from that doc).
+- [x] Design: 420 × 270 mm rigid matte card, four 63 mm tag25h9 corner tags on light grey, greys light / light-2 / mid (= surround) / black, 8 colours, ChArUco back. One YAML per physical card (`configs/cards/nereus_v3_c1…c4.yaml`, tag IDs 0–15); print masters rendered by `host_tools/render_card.py` into `tests/fixtures/reference_card_v3/`; `tests/unit/test_card_v3.py`.
+- [ ] Bench check on real N6 / AE3 frames of a paper print: blur, distortion, detection range; simulator calibrated against the TG-7 (OQ-43).
+- [ ] Acceptance criteria per experiment and the pool near-card size (OQ-44); vendor, substrate, inks + test coupon with a 5-day soak (OQ-45).
+- [ ] Measured-truth schema (OQ-46) and pipeline readiness: tag family, quad ratio and patch roles read from the card YAML, border-cut tag guard (OQ-47).
+- **Exit:** cards printed, checked with calipers, every patch measured dry and wet with the values in each card's YAML, and `locate` → `correct` running on a V3 frame.
 
 #### S3–S8 — Rig work (outline, gated on the S2a decision)
 Not started until S2a is **Go**; a no-go changes what the rig should test. Each gets full checklist items + exit criteria when scheduled.
@@ -221,7 +229,7 @@ nereus-camera-test-rig/
 │   ├── rig.example.yaml
 │   ├── experiments/{reference_card_above_water,reference_card_below_water,low_light,object_detection}.yaml
 │   ├── cameras/{imx708,openmv_n6,openmv_ae3}.yaml
-│   ├── cards/nereus_v2.yaml                  # Phase 8: card layout + truth (config, not code)
+│   ├── cards/{nereus_v2,nereus_v3_c1..c4}.yaml  # Phase 8: card layout + truth (config, not code)
 │   ├── calibration/<camera_id>.yaml          # Phase 8: per-camera L1 calibration
 │   └── licenses.yaml                         # Phase 8: reviewed licence table (§20)
 ├── src/nereus_camera_test_rig/
@@ -238,6 +246,7 @@ nereus-camera-test-rig/
 │   └── ae3/{boot,main,board_config}.py
 ├── host_tools/{discover_openmv,deploy_openmv,verify_rig,run_experiment,collect_results,compare_cameras,generate_report}.py
 ├── host_tools/color.py  host_tools/tg7/     # Phase 8: thin Mac CLI over color/stages.py; rawpy/exiftool live only here
+├── host_tools/render_card.py                # Phase 8: card YAML → print SVG/PDF (card V3)
 ├── scripts/{install_pi.sh,configure_pi_camera.sh,start_web.sh,test_imx708.sh,test_openmv_n6.sh,test_openmv_ae3.sh,collect_diagnostics.sh}
 ├── tests/{unit/, integration/, hardware/, fixtures/{reference_card_images,expected_detections}/, conftest.py}
 ├── experiments/.gitkeep
