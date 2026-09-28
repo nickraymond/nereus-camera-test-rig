@@ -2,6 +2,8 @@
 # Design and evidence: docs/reference_card_v3.md. Print files: python -m host_tools.render_card <this file>.
 # c1-c4 are identical except card_id and the tag-ID block; each physical card gets its own
 # MEASURED truth after printing (the design values below are placeholders until then, OQ-40).
+# c1 IS THE PRINTED CARD: 10 Sticker Mule copies ordered 2026-09-27; the exact files sent and
+# the reference template / example frame are in tests/fixtures/reference_card_v3/ (README there).
 #
 # Canonical frame = the whole trimmed card at exactly 10 px/mm (square pixels, unlike V2):
 # pixel i covers card mm [i/10, (i+1)/10) from the top-left of the trim, so every box below is

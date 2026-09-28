@@ -247,14 +247,166 @@ def render(card_path: Path, out_dir: Path, pdf: bool = True) -> list[Path]:
     return written
 
 
+STICKER_PPI = 300
+
+
+def to_trim_svg(side: Side, title: str) -> str:
+    """Artwork at exactly the trim size: no bleed, crop marks or cut line (sticker upload)."""
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{side.width:g}mm" '
+           f'height="{side.height:g}mm" viewBox="0 0 {side.width:g} {side.height:g}">',
+           f"<title>{title}</title>",
+           f'<rect x="0" y="0" width="{side.width:g}" height="{side.height:g}" '
+           f'fill="{_hex(side.background)}"/>']
+    for r in side.rects:
+        out.append(f'<rect id="{r.id}" x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" '
+                   f'height="{r.h:.3f}" fill="{_hex(r.rgb)}" shape-rendering="crispEdges"/>')
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def to_trim_pdf(side: Side, path: Path, title: str) -> None:
+    """Vector PDF, page = trim size exactly. Needs matplotlib."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    fig = plt.figure(figsize=(side.width / 25.4, side.height / 25.4))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, side.width)
+    ax.set_ylim(side.height, 0)
+    ax.set_axis_off()
+    col = lambda rgb: tuple(v / 255 for v in rgb)  # noqa: E731
+    ax.add_patch(Rectangle((0, 0), side.width, side.height, color=col(side.background), lw=0))
+    for r in side.rects:
+        ax.add_patch(Rectangle((r.x, r.y), r.w, r.h, facecolor=col(r.rgb), edgecolor="none", lw=0))
+    fig.savefig(path, metadata={"Title": title})
+    plt.close(fig)
+
+
+def sticker(card_path: Path, out_dir: Path) -> list[Path]:
+    """Front only, trim size, for a sticker printer (e.g. Sticker Mule): SVG, PDF, 300 ppi PNG.
+
+    The outer 4 mm of the card is uniform surround grey, so a cut that is slightly off only
+    trims grey. The printed size must be measured afterwards (physical_mm)."""
+    card = load_card(card_path)
+    side = front(card, load_yaml(card_path))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    title = f"{card.card_id} front {side.width:g} x {side.height:g} mm"
+    stem = out_dir / f"{card.card_id}_sticker_{side.width:g}x{side.height:g}mm"
+    svg, pdf, png = stem.with_suffix(".svg"), stem.with_suffix(".pdf"), stem.with_suffix(".png")
+    svg.write_text(to_trim_svg(side, title))
+    to_trim_pdf(side, pdf, title)
+    img = to_raster(side, STICKER_PPI / 25.4)
+    ok, buf = cv2.imencode(".png", img[..., ::-1],
+                           [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    png.write_bytes(_png_with_dpi(buf.tobytes(), STICKER_PPI))
+    return [svg, pdf, png]
+
+
+def _png_with_dpi(data: bytes, ppi: int) -> bytes:
+    """Insert a pHYs chunk so the PNG opens at its true physical size."""
+    import struct
+    import zlib
+
+    ppm = int(round(ppi / 0.0254))
+    body = b"pHYs" + struct.pack(">IIB", ppm, ppm, 1)
+    chunk = struct.pack(">I", 9) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+    return data[:33] + chunk + data[33:]  # after the 8-byte signature + 25-byte IHDR chunk
+
+
+def template(card_path: Path, out_dir: Path) -> Path:
+    """The canonical rectified card (canonical.width x height px): what patch boxes refer to.
+
+    Pixel i covers card mm [i / px_per_mm, (i + 1) / px_per_mm), so this is the front drawn at
+    px_per_mm — the V3 equivalent of V2's reference_card_template_3000x1000.png."""
+    card = load_card(card_path)
+    spec = load_yaml(card_path)
+    img = to_raster(front(card, spec), float(spec["canonical"]["px_per_mm"]))
+    assert img.shape[:2] == (card.canonical_h, card.canonical_w), img.shape
+    out_dir.mkdir(parents=True, exist_ok=True)
+    p = out_dir / f"{card.card_id}_canonical_{card.canonical_w}x{card.canonical_h}.png"
+    cv2.imwrite(str(p), img[..., ::-1], [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    return p
+
+
+# Example view: an OpenMV N6-like camera under water (1280 x 800, 933 px focal length x 1.33 flat
+# port), card at 1.0 m, turned 20 deg (yaw) and 10 deg (pitch). Geometry only: no water, noise or blur.
+EXAMPLE = {"width": 1280, "height": 800, "focal_px": 933.0 * 1.33, "z_m": 1.0, "yaw_deg": 20.0,
+           "pitch_deg": 10.0, "background_rgb": [70, 95, 105]}
+
+
+def example_view(card_path: Path, out_dir: Path) -> list[Path]:
+    """A synthetic camera frame of the card + its exact ground truth (JSON), for pipeline tests.
+
+    Ground truth: the canonical-px -> image-px homography, each tag's 4 corners (TL, TR, BR, BL
+    of the black border) and centre, and each patch's centre, all in image pixels."""
+    import json
+    import math
+
+    card = load_card(card_path)
+    spec = load_yaml(card_path)
+    e = EXAMPLE
+    px = float(spec["canonical"]["px_per_mm"])
+    a, b = math.radians(e["yaw_deg"]), math.radians(e["pitch_deg"])
+    Ry = np.array([[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]])
+    Rx = np.array([[1, 0, 0], [0, math.cos(b), -math.sin(b)], [0, math.sin(b), math.cos(b)]])
+    R = Ry @ Rx
+    K = np.array([[e["focal_px"], 0, e["width"] / 2], [0, e["focal_px"], e["height"] / 2], [0, 0, 1]])
+    # canonical px (pixel centres) -> card mm centred on the card -> camera
+    to_mm = np.array([[1 / px, 0, 0.5 / px - card.canonical_w / px / 2],
+                      [0, 1 / px, 0.5 / px - card.canonical_h / px / 2], [0, 0, 1]])
+    H = K @ np.column_stack([R[:, 0], R[:, 1], [0, 0, e["z_m"] * 1000]]) @ to_mm
+    H /= H[2, 2]
+    canon = cv2.cvtColor(to_raster(front(card, spec), px), cv2.COLOR_RGB2BGR)
+    scale = e["focal_px"] / (e["z_m"] * 1000) / px            # image px per canonical px (approx.)
+    canon = cv2.GaussianBlur(canon, (0, 0), max(0.5 / scale * 0.5, 0.1))  # anti-alias the downscale
+    bg = np.array(e["background_rgb"][::-1], np.float32)
+    img = cv2.warpPerspective(canon.astype(np.float32), H, (e["width"], e["height"]),
+                              flags=cv2.INTER_LINEAR, borderValue=bg.tolist())
+    img = np.clip(img + 0.5, 0, 255).astype(np.uint8)
+
+    def proj(pts):
+        return cv2.perspectiveTransform(np.asarray(pts, np.float64).reshape(-1, 1, 2), H).reshape(-1, 2)
+
+    tags = {}
+    for tid, tag in sorted(card.tags.items()):
+        (cx, cy), (ex, ey) = tag.center, tag.edge
+        c = [[cx - ex / 2, cy - ey / 2], [cx + ex / 2, cy - ey / 2], [cx + ex / 2, cy + ey / 2],
+             [cx - ex / 2, cy + ey / 2]]
+        tags[str(tid)] = {"corners": np.round(proj(c), 3).tolist(),
+                          "center": np.round(proj([tag.center])[0], 3).tolist()}
+    patches = {p.id: np.round(proj([[p.box.x + p.box.w / 2 - 0.5, p.box.y + p.box.h / 2 - 0.5]])[0],
+                              3).tolist() for p in card.patches}
+    truth = {"card": card.card_id, "card_yaml": f"configs/cards/{Path(card_path).name}",
+             "camera": {**e, "note": "pinhole, no distortion; geometry only (no water, noise, blur)"},
+             "homography_canonical_to_image": np.round(H, 9).tolist(),
+             "tags": tags, "patch_centers": patches}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = out_dir / f"{card.card_id}_example_{e['width']}x{e['height']}"
+    cv2.imwrite(str(stem.with_suffix(".png")), img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    stem.with_suffix(".json").write_text(json.dumps(truth, indent=1) + "\n")
+    return [stem.with_suffix(".png"), stem.with_suffix(".json")]
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cards", nargs="+", type=Path, help="card YAML file(s)")
     ap.add_argument("--out", type=Path, default=Path("results/cards"))
     ap.add_argument("--no-pdf", action="store_true", help="skip the matplotlib PDF")
+    ap.add_argument("--sticker", action="store_true",
+                    help="front only at trim size (no bleed / marks / cut line) + 300 ppi PNG")
+    ap.add_argument("--reference", action="store_true",
+                    help="canonical rectified template PNG + a synthetic example frame with ground truth")
     a = ap.parse_args(argv)
     for c in a.cards:
-        for p in render(c, a.out, pdf=not a.no_pdf):
+        if a.reference:
+            written = [template(c, a.out), *example_view(c, a.out)]
+        elif a.sticker:
+            written = sticker(c, a.out)
+        else:
+            written = render(c, a.out, pdf=not a.no_pdf)
+        for p in written:
             print(p)
     return 0
 

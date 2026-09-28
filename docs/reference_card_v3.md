@@ -7,7 +7,10 @@ Design session write-up, with every round, test and the independent review:
 
 The machine-readable source of truth is one YAML per physical card:
 [`configs/cards/nereus_v3_c1.yaml`](../configs/cards/nereus_v3_c1.yaml) … `_c4.yaml` (SPEC §20).
-They are identical except `card_id` and the tag-ID block. Print files are rendered from them:
+They are identical except `card_id` and the tag-ID block. **c1 is the printed card** (10 Sticker Mule
+copies, 2026-09-27); the exact files sent, the canonical rectified template and a synthetic example
+frame with ground truth are in [`tests/fixtures/reference_card_v3/`](../tests/fixtures/reference_card_v3/README.md).
+Print files are rendered from the YAMLs:
 
 ```bash
 python -m host_tools.render_card configs/cards/nereus_v3_c*.yaml --out tests/fixtures/reference_card_v3
@@ -71,6 +74,37 @@ Simulated patch range (card turned up to 40°; relative only, OQ-43): on the N6,
 | **calib.io custom** | UV print on 6 mm aluminium composite, matte, optional anti-reflection coating | Nick's quote ~$350 / card, ~3 weeks | Calibration-grade maker; same process as their stock boards | Cost; the anti-reflection coating mostly helps in air (first-surface reflection ≈ 4 % in air, ≈ 0.4 % against water), so under water its benefit is small |
 | **calib.io stock ChArUco** 400 × 300 mm, coarse, aluminium composite (CCT400300C) | 6 mm ACM, matte UV print, "up to 3 years" outdoors, 6.6 kg/m² ([product](https://calib.io/products/charuco-targets)) | €134, in stock | Lens intrinsics + distortion for the N6 / AE3 / TG-7 **now**, in air and in water; a direct check of the vendor's matte finish and flatness | Calibration only (no colour patches); default dictionary is 5×5 |
 
+**First print (Nick, 2026-09-27): 10 identical Sticker Mule copies of card c1** (tag IDs 0–3),
+front only; the calib.io stock 600 × 400 mm ChArUco board replaces the printed back for lens
+calibration. Export and order:
+
+```bash
+python -m host_tools.render_card configs/cards/nereus_v3_c1.yaml --sticker --out results/cards/sticker
+```
+
+- Upload `nereus_v3_c1_sticker_420x270mm.pdf` (vector; the 300 ppi PNG is the fallback) as a
+  **rectangle** sticker at **16.54 × 10.63 in** (420 × 270 mm). If the size box only takes one
+  decimal, 16.5 × 10.6 in keeps the aspect ratio within 0.1 %; the printed size is measured anyway.
+- Ask for the matte laminate. In the proof, the grey must reach all four edges (full bleed, no white
+  border) and the four corner tags must not be cropped; the outer 4 mm is plain grey, so a small
+  cutting error only trims grey.
+- All 10 copies share tag IDs 0–3: never put two of them in the same frame (the detector keys tags
+  by ID). A two-card pool setup needs a second design (c2, IDs 4–7).
+- Settings: **Rectangle** sticker (matte is the only finish), custom size, custom quantity 10. Not
+  clear, holographic, mirror, prismatic, glitter, kraft or bumper (glossy) material.
+- Mounting for underwater use:
+  1. Rigid, flat 3–6 mm ACM (Dibond), PVC or acrylic, ~5 mm larger than the sticker on every side;
+     clean with isopropyl alcohol. Not polyethylene / polypropylene (poor adhesion).
+  2. Apply dry (no soapy-water method): hinge along one edge, squeegee from the centre out.
+  3. Cure 48–72 h before immersion (Sticker Mule's FAQ: at least 24 h before submerging).
+  4. Seal the sticker edge with a thin clear edge sealer for vinyl graphics, on the grey border only.
+  5. Measure tag spacing with calipers after mounting (vinyl can stretch); measure 2–3 copies'
+     patches dry and wet (one print batch).
+  6. Sacrifice one copy as the test coupon: 5-day salt-water soak, check edge lift, bubbles, colour.
+  7. After dives: fresh-water rinse, dry flat, store out of the sun.
+- Underwater glare: matte helps most in air; shoot with the card tilted 10–20° off square and the
+  sun / strobe not mirrored into the lens. No clear-coat spray over the print.
+
 Matte surfaces look glossier and darker when wet (water fills the surface texture), whichever vendor
 prints the card; the wet measurement (checklist step 6) captures this.
 
@@ -97,11 +131,12 @@ prints the card; the wet measurement (checklist step 6) captures this.
 10. [ ] On the V3 dive, include shallow frames (0.5–4 m depth) as well as deep ones: the no-card depth
     table is fitted on 5–16 m, and 8 of its 9 losses to the camera JPEG are shallower (S2a, PR #44).
 
-## Pipeline changes needed before V3 data can be processed (OQ-47)
+## Pipeline support (OQ-47)
 
-`locate` calls the detector without the card's tag family and checks the tag quad against V2's
-ratio range (2.5–6.0; V3 is 1.83); `water_model` / `correct` / `metrics` / `report` hard-code V2
-patch ids (`gray_white`, `gray_dark`, `gray_mid_right`, `ANCHORS`, `RAMP`, `ALL_GREYS`). The V3
-YAMLs add `apriltag.quad_ratio`, `roles` (`wb_anchors`, `ramp`, `haze`), `tags[].edge_mm`,
-`canonical.px_per_mm`, `layout` and `back`, which the pipeline should read instead. The existing
-`color/card.py` loader already reads the V3 YAMLs unchanged (extra fields are ignored).
+The pipeline reads V3 cards from the S2a session's PRs #46 (card `roles`, `quad_ratio`, tag
+family → OpenCV dictionary, grey reflectance relative to paper white) and #47 (`locate` takes the
+family and ratio range from the card; a 2× detection pass for frames ≤ 3 MP, e.g. 1280 × 800
+OpenMV). `roles` is required from #46 on; the V3 YAMLs already carry it. The synthetic example
+frame in `tests/fixtures/reference_card_v3/` has exact ground truth for an end-to-end check.
+A guard against tags cut by the image border was tried and dropped (it rejected whole tags);
+see OQ-47.

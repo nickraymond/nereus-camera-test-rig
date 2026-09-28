@@ -385,7 +385,9 @@ Items for Nick are marked **(Nick)**.
   measured reflectance uncertainty, drift after immersion). A 420 × 270 mm card at 0.5 m fills
   ~81 % × 84 % of the N6 frame: it hides the far card in the brief's two-card pool setup (P4) and
   drives Arm A's auto-exposure (P3). Does the pool keep two cards, and does the near one need to be
-  smaller (≤ ~170 mm wide)?
+  smaller (≤ ~170 mm wide)? Note: `locate` handles one card per dataset config (one corner map);
+  a frame with two V3 cards (e.g. c1 + c2) needs locate per card YAML or a tag-ID → card lookup.
+  Current plan (Nick, 2026-09-27): c1 only, one card per frame.
 - **[OPEN] OQ-45 — Print vendor, substrate and ink recipes (Nick).** *Blocks printing V3.* UV print
   on 3 mm ACM or rigid PVC, matte, no optical brighteners, greys K-only. Not verified: the vendor's
   gamut for the 8 design colours, their ability to print K-only greys, flatness, and immersion
@@ -400,16 +402,19 @@ Items for Nick are marked **(Nick)**.
   design value beside it (`decide` shows both). V2: `configs/cards/nereus_v2.yaml`, 3 deck frames,
   scaled so grey 128 = 128. V3 cards need the same block from their dry reference shots (or an
   instrument reading) before their results are trusted.
-- **[RESOLVED] OQ-47 — Pipeline "card V3 readiness".** Resolved by PRs #46 (card `roles`) and #47
-  (`TagSpec`: family + quad-ratio range from the card YAML, 2× pass on frames ≤ 3 MP); the
-  border-cut guard was not adopted (it rejected whole TG-7 tags near the frame edge, SPEC §4 S2a).
-  Original question: *Before V3 data.* `locate.py` calls
-  `detect_tags` without the card's family (so tag25h9 is never detected) and uses V2's
-  `RATIO_RANGE` (2.5–6.0; V3's tag quad is 1.83); it has no guard for tags cut by the image border
-  (they decode with corners 22–58 px wrong in simulation); `water_model` / `correct` / `metrics` /
-  `report` hard-code V2 patch ids. Read `apriltag.family`, `apriltag.quad_ratio` and `roles` from
-  the card YAML instead. A 2× upsample in detection matters for 1280 × 800 OpenMV frames (N6 at
-  3 m: 33 → 92 % in the realistic simulation). Offered by the S2a session as one PR.
+- **[RESOLVED] OQ-47 — Pipeline "card V3 readiness".** *Before V3 data.* Resolved by the S2a
+  session's PRs #46 (card roles: `Card` reads `roles` {wb_anchors, ramp, haze}, `quad_ratio`, the
+  OpenCV dictionary from `apriltag.family`; grey reflectance relative to paper white, so a card
+  without a white patch works) and #47 (`locate` takes family and ratio range from the card —
+  `quad_ratio` × 0.627–1.506, exactly V2's old 2.5–6.0 — and gives frames ≤ 3 MP a 2× detection
+  pass). TG-7 results are byte-identical with V2's roles. The end-to-end test loading
+  `nereus_v3_c1..c4` through the card code and locating the c1 example frame is
+  `tests/unit/test_color_card_v3_e2e.py`. **Border-cut tags: a position guard was tried and
+  dropped** — a tag cut by 2–5 px decodes with its edge ~6 px inside the frame, while whole tags
+  near the edge sit 6–12 px from it, so a ½-cell margin rejected whole TG-7 tags (P9160475 tags 1
+  and 3, P9160572 tag 1). OpenCV already drops corners within 3 px of the border. If V3 frames
+  show cut tags, it needs another cue (e.g. checking the tag's outer black ring is complete in the
+  image).
 - **[RESOLVED-DECISION] OQ-48 — Light trap on the card.** Decision (Nick + design session,
   2026-09-27): not on the card. A hole to a black cavity would give a true zero for haze, but the
   per-frame affine's offset (S2a PR #44) already absorbs haze, measuring the printed black fixes the
