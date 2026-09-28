@@ -172,6 +172,28 @@ def block_mean_error(ref: np.ndarray, test: np.ndarray, block: int = 16,
 
 CROP = (1600, 900)  # bmcam001's field crop (native px), centred
 MAX_ANCHOR_CLIP = 0.01  # an anchor grey with more clipped pixels than this is skipped
+# Median over the card's patches of the within-box variation (max channel std / mean). Boxes on
+# their patches: ≤ 0.20 on all 270 located TG-7 frames (median 0.074, under water, damaged card
+# included). V2 boxes on a V1 print (nereus002, 2026-09-28): 0.50 — the boxes straddle patches.
+MAX_LAYOUT_CV = 0.30
+
+
+def layout_check(img: np.ndarray, H: np.ndarray, card) -> float:
+    """Median within-box variation of the card's patches; raises if the boxes do not sit on
+    uniform patches (wrong card YAML for this print, or a bad card location)."""
+    from .patches import _boxes, sample
+
+    cv = []
+    for p in card.patches:
+        st = sample(img, H, _boxes(card)[p.id])
+        if st.get("mean") and min(st["mean"]) > 0:
+            cv.append(float(np.max(np.asarray(st["std"]) / np.asarray(st["mean"]))))
+    med = float(np.median(cv)) if cv else float("inf")
+    if med > MAX_LAYOUT_CV:
+        raise ValueError(f"card patch boxes are not on uniform patches (median variation "
+                         f"{med:.2f} > {MAX_LAYOUT_CV}): is {card.card_id!r} the card in the "
+                         f"frame? (a different print or version has a different layout)")
+    return med
 
 
 def card_white_balance(frame, card) -> tuple[np.ndarray, dict[str, Any]]:
@@ -191,6 +213,7 @@ def card_white_balance(frame, card) -> tuple[np.ndarray, dict[str, Any]]:
     linear, saturated, cfa = normalize(frame)  # a ratio: no exposure normalization needed
     binned, clip = bin2x2(linear, cfa, saturated)
     H = mosaic_to_binned(frame.valid_crop) @ homography(card, np.asarray(rec["quad_raw"]))
+    layout_cv = layout_check(binned, H, card)
     boxes = _boxes(card)
     for anchor in card.roles.wb_anchors:
         st = sample(binned, H, boxes[anchor], clip=clip) if anchor in boxes else {}
@@ -199,25 +222,86 @@ def card_white_balance(frame, card) -> tuple[np.ndarray, dict[str, Any]]:
             wb = mean[1] / np.asarray(mean, dtype=np.float64)
             return wb, {"source": "card", "anchor": anchor, "anchor_mean": mean,
                         "anchor_px": st["n_px"], "tags_found": rec["tags_found"],
+                        "layout_cv": round(layout_cv, 4),
                         "quad_raw": rec["quad_raw"]}
     raise ValueError(f"no usable white-balance grey among {card.roles.wb_anchors} "
                      f"(missing, zero or clipped)")
 
 
+def _lab(xyz: np.ndarray, white: np.ndarray) -> np.ndarray:
+    t = np.asarray(xyz, np.float64) / white
+    d = 6 / 29
+    f = np.where(t > d ** 3, np.cbrt(t), t / (3 * d * d) + 4 / 29)
+    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]),
+                     200 * (f[..., 1] - f[..., 2])], axis=-1)
+
+
+def card_patch_error(ref: np.ndarray, test: np.ndarray, H: np.ndarray, card, anchor: str,
+                     xyz_from_camera: Optional[np.ndarray]) -> dict[str, Any]:
+    """How much each card patch's mean colour moves from ``ref`` to ``test`` (both binned
+    linear camera RGB; ``H`` maps canonical card px into them). Relative error per channel,
+    and ΔE2000 in CIELAB with the white set by the ``anchor`` grey — through the camera's
+    own ``xyz_from_camera`` matrix when known (DNG ColorMatrix1⁻¹), else treating white-balanced
+    camera RGB as linear sRGB (``lab_space`` says which). The same transform is applied to
+    both images, so this isolates the transport error."""
+    from .metrics import delta_e2000, linear_to_lab
+    from .patches import _boxes, sample
+    from .water_model import grey_reflectance
+
+    ids = [p.id for p in card.patches]
+    boxes = _boxes(card)
+    means = {}
+    for pid in ids:
+        a, b = sample(ref, H, boxes[pid]), sample(test, H, boxes[pid])
+        if a.get("n_px", 0) >= 20 and a.get("mean") and min(a["mean"]) > 0:
+            means[pid] = (np.asarray(a["mean"]), np.asarray(b["mean"]))
+    if anchor not in means:
+        return {"n": 0, "reason": f"anchor {anchor} not inside the crop"}
+    rho = grey_reflectance(card).get(anchor, 1.0)
+    if xyz_from_camera is not None:
+        M, space = np.asarray(xyz_from_camera), "camera ColorMatrix1"
+        white = M @ means[anchor][0] / rho
+        lab = {k: (_lab(M @ a, white), _lab(M @ b, white)) for k, (a, b) in means.items()}
+    else:
+        space = "white-balanced camera RGB as linear sRGB (approximate)"
+        g = rho / means[anchor][0]
+        lab = {k: (linear_to_lab(a * g), linear_to_lab(b * g)) for k, (a, b) in means.items()}
+    rel = {k: float(np.max(np.abs(b / a - 1))) for k, (a, b) in means.items()}
+    de = {k: float(delta_e2000(*lab[k])) for k in means}
+    return {"n": len(means), "lab_space": space,
+            "max_rel": round(max(rel.values()), 5),
+            "median_rel": round(float(np.median(list(rel.values()))), 5),
+            "max_de2000": round(max(de.values()), 3),
+            "median_de2000": round(float(np.median(list(de.values()))), 3),
+            "worst_patch": max(de, key=de.get),
+            "patches": {k: {"rel": round(rel[k], 5), "de2000": round(de[k], 3)} for k in means}}
+
+
 def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0),
-                    crop: Optional[tuple[int, int, int, int]] = None,
-                    wb: Optional[Sequence[float]] = None, card=None) -> dict[str, Any]:
+                    crop=None, wb: Optional[Sequence[float]] = None,
+                    card=None) -> dict[str, Any]:
     """Smoke check on one RAW (a ``RawFrame``): crop (default: centred ``CROP``) → black
     subtract → 2×2 bin → encode at each distance (and lossless) → decode → compare block
     means with the input. Writes the ``.jxl`` + ``.json`` files and ``summary.json``.
 
     White balance (it only sets the code spacing, and is divided back out): ``wb`` if given,
     else the grey on ``card`` (a loaded card, located on this frame), else the file's as-shot
-    WB, else grey world."""
+    WB, else grey world. With ``card``, each card patch's colour change is also reported
+    (``card_patch_error``); ``crop="card"`` centres the crop on the card.
+    """
+    from .patches import homography, mosaic_to_binned
     from .raw_io import RawFrame, bin2x2, normalize
 
     h, w = frame.mosaic.shape
-    if crop is None:
+    card_wb, card_info = card_white_balance(frame, card) if card is not None else (None, None)
+    if crop == "card":
+        if card_info is None:
+            raise ValueError('crop="card" needs a card')
+        cx, cy = np.asarray(card_info["quad_raw"]).mean(axis=0)
+        cw, ch = min(CROP[0], w), min(CROP[1], h)
+        crop = (int(np.clip(cx - cw / 2, 0, w - cw)) // 2 * 2,
+                int(np.clip(cy - ch / 2, 0, h - ch)) // 2 * 2, cw, ch)
+    elif crop is None:
         cw, ch = min(CROP[0], w), min(CROP[1], h)
         crop = ((w - cw) // 4 * 2, (h - ch) // 4 * 2, cw, ch)
     x, y, cw, ch = crop
@@ -230,7 +314,7 @@ def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0
     rgb = rgb[0] if isinstance(rgb, tuple) else rgb
     wb_info: dict[str, Any] = {"source": "given"}
     if wb is None and card is not None:
-        wb, wb_info = card_white_balance(frame, card)
+        wb, wb_info = card_wb, card_info
     elif wb is None and frame.as_shot_wb:
         wb, wb_info = np.asarray(frame.as_shot_wb), {"source": "as_shot"}
     elif wb is None:
@@ -242,6 +326,12 @@ def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0
             "iso": frame.iso, "fnumber": frame.fnumber, "white_balance": wb_info}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    H = xyz = None
+    if card is not None:
+        H = mosaic_to_binned((x, y)) @ homography(card, np.asarray(card_info["quad_raw"]))
+        cm = frame.color_matrix
+        if cm is not None and "ColorMatrix1" in str(frame.source.get("color_matrix", "")):
+            xyz = np.linalg.inv(cm)
     runs = {}
     for d in (0.0, *distances):
         name = "lossless" if d == 0 else f"d{d:g}"
@@ -250,6 +340,9 @@ def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0
         runs[name] = {"bytes": side["bytes"],
                       "block_mean_error": {k: round(v, 5) if isinstance(v, float) else v
                                            for k, v in block_mean_error(rgb, back).items()}}
+        if H is not None:
+            runs[name]["card_patches"] = card_patch_error(rgb, back, H, card,
+                                                          card_info["anchor"], xyz)
     summary = {"shape": list(rgb.shape), "raw_bytes_packed": cw * ch * 12 // 8,
                "white_balance": [float(v) for v in wb], "white_balance_info": wb_info,
                "runs": runs}

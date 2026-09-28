@@ -142,3 +142,22 @@ def test_card_white_balance_fails_clearly_without_a_card():
                      black_level=(64,) * 4, white_level=1023)
     with pytest.raises(ValueError, match="card not found"):
         lj.card_white_balance(blank, card)
+
+
+def test_layout_check_rejects_boxes_off_their_patches():
+    from nereus_camera_test_rig.color.card import load_card
+    from nereus_camera_test_rig.color.patches import homography, mosaic_to_binned
+    from nereus_camera_test_rig.color.raw_io import bin2x2, normalize
+
+    card = load_card(Path(__file__).resolve().parents[2] / "configs/cards/nereus_v2.yaml")
+    frame = bayer_card_frame()
+    _, info = lj.card_white_balance(frame, card)
+    assert info["layout_cv"] < 0.1  # boxes on their patches
+    linear, sat, cfa = normalize(frame)
+    binned, _ = bin2x2(linear, cfa, sat)
+    quad = np.asarray(info["quad_raw"])
+    tags = card.tags  # canonical tag-centre spacing → mosaic px per canonical px
+    scale = (quad[1, 0] - quad[0, 0]) / (tags[1].center[0] - tags[0].center[0])
+    quad = quad + [0.5 * card.patch("gray_mid").box.w * scale, 0.0]  # boxes straddle edges
+    with pytest.raises(ValueError, match="not on uniform patches"):
+        lj.layout_check(binned, mosaic_to_binned(None) @ homography(card, quad), card)
