@@ -68,6 +68,9 @@ def main(argv=None) -> int:
                    help="x,y,w,h in sensor px (default: centred 1600x900, bmcam001's crop)")
     p.add_argument("--wb", type=lambda v: tuple(float(c) for c in v.split(",")),
                    help="r,g,b gains that set the code spacing (default: the file's as-shot WB)")
+    p.add_argument("--card", type=Path,
+                   help="white-balance on this card's grey, located in the file (e.g. "
+                        "configs/cards/nereus_v2.yaml); overrides the as-shot WB")
     p.add_argument("--out", type=Path, default=REPO / "results" / "color" / "jxl_check")
     p = sub.add_parser("ingest", help="build the tool manifest for a dataset folder")
     p.add_argument("dataset_dir", type=Path)
@@ -140,10 +143,14 @@ def main(argv=None) -> int:
         if args.stage == "inspect":
             summary = stages.inspect(args.file, args.out)
         elif args.stage == "jxl-check":
+            from nereus_camera_test_rig.color.card import load_card
             from nereus_camera_test_rig.color.linear_jxl import roundtrip_check
 
+            if args.card and args.wb:
+                raise ValueError("give --wb or --card, not both")
             summary = roundtrip_check(stages.open_raw(args.file), args.out / args.file.stem,
-                                      args.distance, args.crop, args.wb)
+                                      args.distance, args.crop, args.wb,
+                                      load_card(args.card) if args.card else None)
         elif args.stage == "ingest":
             summary = ingest(args.dataset_dir, args.config, args.out, read_exif)
         elif args.stage == "measure-card":
