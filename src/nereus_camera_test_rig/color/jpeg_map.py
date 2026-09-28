@@ -28,7 +28,7 @@ import numpy as np
 
 from ..config import load_yaml
 from .jpeg_geometry import JpegMap, fit_robust, read_jpeg
-from .locate import SCALES, _detect
+from .locate import SCALES, TagSpec, _detect
 from .stages import run_parallel, verify_fresh, write_stage
 
 FRAME_TOL_PX = 4.0
@@ -36,13 +36,14 @@ MATCH_TOL_PX = 1.0
 BANDS = (0, 500, 1000, 1500, 2000, 2600)
 
 
-def jpeg_tags(jpeg: Path, tag_ids: list[int]) -> dict[str, list[float]]:
+def jpeg_tags(jpeg: Path, tag_ids: list[int],
+              family: str = TagSpec.family) -> dict[str, list[float]]:
     """{tag id: centre} of the card tags found on one camera JPEG (stored orientation)."""
     gray = read_jpeg(jpeg, cv2.IMREAD_GRAYSCALE)
     if gray is None:
         return {}
     return {str(i): [float(v) for v in t.center]
-            for i, (t, _) in _detect(gray, set(tag_ids), SCALES).items()}
+            for i, (t, _) in _detect(gray, set(tag_ids), SCALES, family=family).items()}
 
 
 def _stats(err: np.ndarray) -> dict[str, Any]:
@@ -74,7 +75,7 @@ def config_block(m: JpegMap, n_pairs: int, n_frames: int, exclude: dict) -> str:
 
 def jpeg_map(locate_dir: Path, dataset_config: Path,
              workers: Optional[int] = None) -> dict[str, Any]:
-    verify_fresh(locate_dir)
+    family = verify_fresh(locate_dir)["params"].get("tag_family", TagSpec.family)
     ingest_dir = locate_dir.parent / "ingest"
     dataset_dir = Path(verify_fresh(ingest_dir)["params"]["dataset_dir"])
     rows = {r["stem"]: r for r in csv.DictReader((ingest_dir / "manifest.csv").open())}
@@ -85,7 +86,8 @@ def jpeg_map(locate_dir: Path, dataset_config: Path,
                     if rec["tag_source"][i] == "raw"}
                 for s, rec in corners.items() if rows[s]["jpeg"]}
     stems = [s for s, t in raw_tags.items() if t]
-    jobs = [(dataset_dir / rows[s]["jpeg"], [int(i) for i in raw_tags[s]]) for s in stems]
+    jobs = [(dataset_dir / rows[s]["jpeg"], [int(i) for i in raw_tags[s]], family)
+            for s in stems]
     found = dict(zip(stems, run_parallel(jpeg_tags, jobs, workers or os.cpu_count() or 1)))
 
     pairs = [(s, i, raw_tags[s][i], c) for s in stems for i, c in found[s].items()]
@@ -135,7 +137,8 @@ def jpeg_map(locate_dir: Path, dataset_config: Path,
                                             configured.exclude_frames)}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     write_stage(out_dir, "jpeg_map", configs=[dataset_config], upstream=[locate_dir],
-                params={"scales": list(SCALES), "frame_tol_px": FRAME_TOL_PX,
+                params={"scales": list(SCALES), "tag_family": family,
+                        "frame_tol_px": FRAME_TOL_PX,
                         "match_tol_px": MATCH_TOL_PX, "tag_source": "raw only"})
     summary["out_dir"] = str(out_dir)
     return summary

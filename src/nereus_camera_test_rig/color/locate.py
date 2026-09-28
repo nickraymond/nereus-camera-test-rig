@@ -17,6 +17,12 @@ missed, or when a shot has no RAW; each tag records its source.
   versioned manual-corners file (``manual_corners`` in the dataset config, next to it; human
   work must survive a results/ or worktree cleanup). This stage only reads it, never writes.
 
+What to look for comes from the card YAML (``tag_spec``): the tag dictionary
+(``apriltag.family``) and the tag-quad width/height range (``apriltag.quad_ratio`` ×
+``RATIO_TOLERANCE``; V2 3.985 → 2.5–6.0). A tag cut by the edge of the searched image is
+dropped and listed in ``tags_at_border``. Frames up to ``SMALL_FRAME_PX`` (OpenMV 1280 × 800)
+also get a 2× pass.
+
 ≥ 3 corner tags → the tag-centre quad. A single missing corner is inferred from a homography
 fitted to the 12 corners of the 3 found tags (card geometry from the card YAML), which is
 exact under perspective; without card geometry it falls back to the parallelogram of
@@ -34,6 +40,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -42,7 +49,7 @@ from typing import Any, Callable, Optional
 import cv2
 import numpy as np
 
-from ..analysis.apriltag_detector import DetectionOutcome, TagDetection, detect_tags
+from ..analysis.apriltag_detector import DEFAULT_FAMILY, DetectionOutcome, TagDetection, detect_tags
 from ..analysis.reference_card import CardLocalizationError, infer_card_corners_from_tags
 from ..config import load_yaml
 from .card import load_card
@@ -55,8 +62,49 @@ SCALES = (1.0, 0.5, 0.25)
 WINDOW_SCALES = (1.0, 2.0, 3.0, 4.0)
 WINDOW_MAX_S = 120.0
 MAX_SCALED_PIXELS = 16e6  # never upscale a window past ~16 MP (a 4x full frame is 190 MP)
-RATIO_RANGE = (2.5, 6.0)  # tag-quad width / height; design 364.9 / 91.566 = 3.985
+RATIO_RANGE = (2.5, 6.0)  # tag-quad width / height, V2 (design 364.9 / 91.566 = 3.985)
+RATIO_TOLERANCE = (0.627, 1.506)  # × the card's quad ratio (V2: 3.985 → 2.5–6.0)
+BORDER_FRACTION = 0.07  # of the tag side (~½ cell): a tag with a corner this close is cut
+BORDER_PX = 3  # ... and never less than this
+SMALL_FRAME_PX = 3e6  # frames up to this size (OpenMV 1280 × 800) also get a 2× pass
 MANUAL_FILE = "manual_corners.json"
+
+
+@dataclass(frozen=True)
+class TagSpec:
+    """What ``locate`` looks for: the card's tag dictionary and tag-quad width/height range."""
+
+    family: str = DEFAULT_FAMILY
+    ratio_range: tuple[float, float] = RATIO_RANGE
+
+
+def tag_spec(card) -> TagSpec:
+    """From the card YAML (``apriltag.family``, ``apriltag.quad_ratio``)."""
+    ratio = card.quad_ratio
+    rng = (ratio * RATIO_TOLERANCE[0], ratio * RATIO_TOLERANCE[1]) if ratio else RATIO_RANGE
+    return TagSpec(card.aruco_dictionary, (round(rng[0], 4), round(rng[1], 4)))
+
+
+def frame_scales(shape, scales) -> tuple[float, ...]:
+    """``scales``, plus a 2× pass on small frames (tags there are often too few pixels)."""
+    if shape[0] * shape[1] <= SMALL_FRAME_PX and 2.0 not in scales:
+        return (scales[0], 2.0, *scales[1:])
+    return tuple(scales)
+
+
+def at_border(corners: np.ndarray, shape) -> bool:
+    """A tag cut by the image edge can still decode, with its corners wrong (20–60 px on real
+    frames, card-V3 review). Measured with OpenCV: a 120 px 25h9 tag cut by 2–5 px is found
+    with its edge 6 px (a third of a cell) inside the frame; cut deeper it does not decode.
+    An uncut tag sits at least its quiet zone from the edge (the V2 render: 21 px at 223 px).
+    So a tag whose corners come within ``BORDER_FRACTION`` of its side (~½ cell) counts as
+    cut."""
+    h, w = shape[:2]
+    c = np.asarray(corners)
+    side = min(np.linalg.norm(c[(i + 1) % 4] - c[i]) for i in range(4))
+    margin = max(BORDER_PX, BORDER_FRACTION * side)
+    return bool((c[:, 0] < margin).any() or (c[:, 1] < margin).any()
+                or (c[:, 0] > w - 1 - margin).any() or (c[:, 1] > h - 1 - margin).any())
 
 RawReader = Callable[[Path], RawFrame]
 
@@ -71,15 +119,21 @@ def raw_detection_image(frame: RawFrame) -> tuple[np.ndarray, tuple[int, int]]:
     return (img * 255 + 0.5).astype(np.uint8), (x, y)
 
 
-def _detect(gray: np.ndarray, card_ids: set, scales, shift=(0.0, 0.0)) -> dict:
-    """{tag_id: (TagDetection in shifted native coords, scale)} for card tags, finest first."""
+def _detect(gray: np.ndarray, card_ids: set, scales, shift=(0.0, 0.0),
+            family: str = DEFAULT_FAMILY, border: Optional[set] = None) -> dict:
+    """{tag_id: (TagDetection in shifted native coords, scale)} for card tags, finest first.
+    Tags cut by the image edge are skipped (their ids added to ``border`` if given)."""
     found: dict[int, tuple[TagDetection, float]] = {}
     for s in scales:
         if s > 1 and gray.shape[0] * gray.shape[1] * s * s > MAX_SCALED_PIXELS:
             continue
         img = gray if s == 1 else cv2.resize(
             gray, None, fx=s, fy=s, interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
-        for i, t in detect_tags(img, scales=(1,)).tags.items():
+        for i, t in detect_tags(img, family=family, scales=(1,)).tags.items():
+            if i in card_ids and at_border(t.corners, img.shape):
+                if border is not None:
+                    border.add(i)
+                continue
             if i in card_ids and i not in found:
                 corners = t.corners / s + np.asarray(shift)
                 found[i] = (TagDetection(i, corners, (float(corners[:, 0].mean()),
@@ -88,7 +142,7 @@ def _detect(gray: np.ndarray, card_ids: set, scales, shift=(0.0, 0.0)) -> dict:
     return found
 
 
-def plausible(quad: np.ndarray) -> bool:
+def plausible(quad: np.ndarray, ratio_range=RATIO_RANGE) -> bool:
     """Convex TL,TR,BR,BL quad with a card-like width/height ratio."""
     edges = [quad[(i + 1) % 4] - quad[i] for i in range(4)]
     cross = [float(edges[i][0] * edges[(i + 1) % 4][1] - edges[i][1] * edges[(i + 1) % 4][0])
@@ -97,7 +151,7 @@ def plausible(quad: np.ndarray) -> bool:
         return False
     width = (np.linalg.norm(quad[1] - quad[0]) + np.linalg.norm(quad[2] - quad[3])) / 2
     height = (np.linalg.norm(quad[3] - quad[0]) + np.linalg.norm(quad[2] - quad[1])) / 2
-    return height > 0 and RATIO_RANGE[0] <= width / height <= RATIO_RANGE[1]
+    return height > 0 and ratio_range[0] <= width / height <= ratio_range[1]
 
 
 def tag_geometry(card) -> tuple[float, float, float]:
@@ -133,7 +187,8 @@ def infer_quad_from_tag_corners(tags: dict, corner_map: dict[str, int],
 
 
 def _record(tags: dict, corner_map: dict, jpeg_map: JpegMap, method: str,
-            geometry: Optional[tuple] = None) -> dict[str, Any]:
+            geometry: Optional[tuple] = None, ratio_range=RATIO_RANGE,
+            border: frozenset = frozenset()) -> dict[str, Any]:
     """Build the JSON record from {id: (TagDetection in RAW coords, scale, source)}."""
     record: dict[str, Any] = {
         "tags_found": sorted(tags),
@@ -143,6 +198,8 @@ def _record(tags: dict, corner_map: dict, jpeg_map: JpegMap, method: str,
         "tag_centers_raw": {str(i): [round(c, 2) for c in tags[i][0].center]
                             for i in sorted(tags)},
     }
+    if border - set(tags):
+        record["tags_at_border"] = sorted(border - set(tags))  # seen, cut by the edge, unused
     try:
         quad, inferred = infer_card_corners_from_tags(
             DetectionOutcome(tags={i: t[0] for i, t in tags.items()}), corner_map, min_tags=3)
@@ -159,7 +216,7 @@ def _record(tags: dict, corner_map: dict, jpeg_map: JpegMap, method: str,
     except CardLocalizationError:
         return {**record, "located": False, "locate_method": None,
                 "reason": f"{len(tags)} of 4 card tags found (need 3)"}
-    if not plausible(quad):
+    if not plausible(quad, ratio_range):
         return {**record, "located": False, "locate_method": None,
                 "reason": "implausible tag-quad geometry (non-convex or bad aspect ratio)"}
     return {**record, "located": True,
@@ -207,25 +264,34 @@ def _jpeg_window(window, jpeg_map: JpegMap):
     return (*j.min(axis=0), *j.max(axis=0))
 
 
-def _search(raw_img, raw_origin, jpg, card_ids, jpeg_map, scales, window=None) -> dict:
-    """RAW pass, then the JPEG for tags the RAW missed. ``window`` is in RAW coords."""
+def _search(raw_img, raw_origin, jpg, card_ids, jpeg_map, scales, window=None,
+            spec: TagSpec = TagSpec()) -> tuple[dict, set]:
+    """RAW pass, then the JPEG for tags the RAW missed. ``window`` is in RAW coords.
+    Returns (tags, ids of tags skipped because an image edge cut them)."""
     tags: dict[int, tuple] = {}
+    border: set = set()
+
+    def scan(img):
+        return scales if window else frame_scales(img.shape, scales)
+
     if raw_img is not None:
         crop, shift = _crop(raw_img, raw_origin, window)
         if crop.size:
-            tags = {i: (*v, "raw") for i, v in _detect(crop, card_ids, scales, shift).items()}
+            tags = {i: (*v, "raw") for i, v in _detect(crop, card_ids, scan(raw_img), shift,
+                                                       spec.family, border).items()}
     if len(tags) < 4 and jpg is not None:
         crop, shift = _crop(jpg, (0, 0), _jpeg_window(window, jpeg_map))
         if crop.size:
-            for i, (t, s) in _detect(crop, card_ids, scales, shift).items():
+            for i, (t, s) in _detect(crop, card_ids, scan(jpg), shift, spec.family,
+                                     border).items():
                 tags.setdefault(i, (_to_raw(t, jpeg_map), s, "jpeg"))
-    return tags
+    return tags, border
 
 
 def locate_frame(raw: Optional[Path], jpeg: Optional[Path], corner_map: dict[str, int],
                  jpeg_map: JpegMap, raw_reader: Optional[RawReader] = None,
                  window: Optional[tuple] = None,
-                 geometry: Optional[tuple] = None) -> dict[str, Any]:
+                 geometry: Optional[tuple] = None, spec: TagSpec = TagSpec()) -> dict[str, Any]:
     """Locate the card in one shot, RAW first; ``window`` restricts to a RAW-coord box (b)."""
     try:
         raw_img, raw_origin, jpg = _images(raw, jpeg, raw_reader)
@@ -236,8 +302,10 @@ def locate_frame(raw: Optional[Path], jpeg: Optional[Path], corner_map: dict[str
         return {"located": False, "locate_method": None, "tags_found": [],
                 "reason": "no readable RAW or JPEG"}
     scales = WINDOW_SCALES if window else SCALES
-    tags = _search(raw_img, raw_origin, jpg, set(corner_map.values()), jpeg_map, scales, window)
-    return _record(tags, corner_map, jpeg_map, "window" if window else "apriltag", geometry)
+    tags, border = _search(raw_img, raw_origin, jpg, set(corner_map.values()), jpeg_map, scales,
+                           window, spec)
+    return _record(tags, corner_map, jpeg_map, "window" if window else "apriltag", geometry,
+                   spec.ratio_range, frozenset(border))
 
 
 def window_for(neighbour: dict) -> tuple[float, float, float, float]:
@@ -308,15 +376,16 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
         return raw, (dataset_dir / r["jpeg"] if r["jpeg"] else None)
 
     geometry = tag_geometry(card)
+    spec = tag_spec(card)
     frame = partial(locate_frame, corner_map=card.corner_map, jpeg_map=jmap,
-                    raw_reader=raw_reader, geometry=geometry)
+                    raw_reader=raw_reader, geometry=geometry, spec=spec)
     stems = list(rows)
     corners = dict(zip(stems, run_parallel(frame, [paths(rows[s]) for s in stems], workers)))
 
     retry = [(s, n) for s in stems if not corners[s]["located"]
              for n in [nearest_located(s, rows, corners, max_s)] if n]
     jobs = [(*paths(rows[s]), card.corner_map, jmap, raw_reader, window_for(corners[n]),
-             geometry) for s, n in retry]
+             geometry, spec) for s, n in retry]
     for (stem, n), rec in zip(retry, run_parallel(locate_frame, jobs, workers)):
         if rec["located"]:
             corners[stem] = {**rec, "neighbour": n}
@@ -354,7 +423,10 @@ def locate(ingest_dir: Path, card_path: Path, dataset_config: Path,
     write_stage(out_dir, "locate", configs=configs, upstream=[ingest_dir],
                 params={"source": "raw first, jpeg fallback" if raw_reader else "jpeg only",
                         "scales": list(SCALES), "window_scales": list(WINDOW_SCALES),
-                        "window_max_s": max_s, "min_tags": 3, "ratio_range": list(RATIO_RANGE),
+                        "window_max_s": max_s, "min_tags": 3,
+                        "tag_family": spec.family, "ratio_range": list(spec.ratio_range),
+                        "border_fraction": BORDER_FRACTION,
+                        "small_frame_px": SMALL_FRAME_PX,
                         "jpeg_from_raw": jmap.as_dict(),
                         "manual_corners": str(manual_path),
                         "manual_corners_sha256": sha256_file(manual_path) if manual else None})
