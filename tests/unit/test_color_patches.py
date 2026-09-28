@@ -135,7 +135,8 @@ def test_patches_stage_end_to_end(tmp_path):
                       "quad_jpeg": view_quad().tolist()},
                "U1": {"located": False}}
     (locate_dir / "corners.json").write_text(json.dumps(corners))
-    write_stage(locate_dir, "locate", upstream=[ingest_dir])
+    write_stage(locate_dir, "locate", upstream=[ingest_dir],
+                params={"jpeg_offset_in_raw": offset.tolist()})
 
     summary = patches(locate_dir, CARD_PATH, raw_reader=fake_reader, workers=1)
     assert summary["located_frames"] == 1 and summary["errors"] == {}

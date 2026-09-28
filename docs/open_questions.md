@@ -322,14 +322,25 @@ Items for Nick are marked **(Nick)**.
   through the dive (sunset, morning). The colour of the light is stable enough to use (ratios
   cancel it); absolute light levels are not transferable between frames or dives.
 
-- **[OPEN] OQ-42 — The TG-7 JPEG is lens-corrected; the RAW is not.** *S2a (JPEG baselines).*
-  Found by Nick on the v0.2 cut sheet, measured 2026-09-27: AprilTag centres detected separately
-  on RAW and JPEG agree to ~1 px near the centre but the JPEG's sit 16 px farther out at 950 px
-  radius and 125–140 px at 1800 px — in-camera barrel-distortion correction, although EXIF says
-  `DistortionCorrection: Off`. `locate` maps RAW → JPEG as a pure (8, 8) crop, so JPEG-baseline
-  patch samples are misplaced on off-centre cards. Fix in S2a: detect the card on the JPEG itself
-  (or fit the radial RAW → JPEG map). Whether the ORF maker notes carry the correction
-  parameters is unverified.
+- **[RESOLVED] OQ-42 — The TG-7 JPEG is radially remapped from the RAW.** *S2a (JPEG baselines).*
+  Found by Nick on the v0.2 cut sheet. Measured 2026-09-27 with the `jpeg-map` stage (AprilTag
+  centres found separately on RAW and JPEG, 548 pairs on 156 frames): the JPEG is a fixed radial
+  remap of the RAW, `jpeg = c_j + (raw − c_r)·(k0 + k1ρ² + k2ρ⁴)`, ρ = r/1000 px — median error
+  0.33 px, max 2.8 px, the same map on every dive (leave-one-dive-out max 3.9 px); a point moves
+  out by ~16 px at 950 px radius and ~130 px at 1800 px. EXIF says `DistortionCorrection: Off`
+  and the maker notes carry no parameters (exiftool 13.55). **Which image is rectilinear depends
+  on the medium:** a 16-corner card homography fits the RAW to ~1 px RMS under water but the JPEG
+  to ~13 px on wide cards; in air (3 deck frames) the JPEG fits to 0.6–1.0 px and the RAW to up to
+  11 px. So the camera applies an in-air lens correction to every JPEG, and under water the flat
+  port's refraction cancels the lens barrel, leaving the RAW near-projective. **Fix (SPEC §4 S2a):**
+  the map is dataset config (`jpeg_from_raw`); `locate` maps quads RAW → JPEG and JPEG-found tags
+  back to RAW; `patches` samples the JPEG on the RAW card area through the map. Two more bugs found
+  on the way: OpenCV applied EXIF Orientation to 2 card frames (P9150342, P9160565 are stored
+  rotated 90°) — JPEGs are now read in stored orientation; and 5 frames whose missing tags came
+  from the JPEG had RAW quads up to 37 px off. **Still unknown:** P9160648's JPEG is shifted 17 px
+  from its RAW as a whole (preset mode, 1/30 s, sensor-shift IS on) — excluded from JPEG scoring
+  (`exclude_frames`); whether the RAW needs a distortion model in air is left to the S2b
+  checkerboards.
 
 ### Card V3 (design 2026-09-27, `docs/reference_card_v3.md`)
 

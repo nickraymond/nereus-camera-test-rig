@@ -9,6 +9,7 @@ Usage::
     python -m host_tools.color ingest <dataset_dir> --config configs/datasets/<dataset>.yaml
     python -m host_tools.color locate results/color/<dataset_id>/ingest --config <dataset.yaml>
     python -m host_tools.color click results/color/<dataset_id>/locate --config <dataset.yaml>
+    python -m host_tools.color jpeg-map results/color/<dataset_id>/locate --config <dataset.yaml>
     python -m host_tools.color distance results/color/<dataset_id>/locate --config <dataset.yaml>
     python -m host_tools.color patches results/color/<dataset_id>/locate
     python -m host_tools.color qc results/color/<dataset_id>/patches --config <dataset.yaml>
@@ -31,12 +32,13 @@ if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
 
 from nereus_camera_test_rig.color import stages  # noqa: E402
+from nereus_camera_test_rig.color.correct import correct  # noqa: E402
 from nereus_camera_test_rig.color.distance import distance  # noqa: E402
 from nereus_camera_test_rig.color.ingest import ingest  # noqa: E402
+from nereus_camera_test_rig.color.jpeg_map import jpeg_map  # noqa: E402
 from nereus_camera_test_rig.color.locate import locate  # noqa: E402
 from nereus_camera_test_rig.color.patches import patches  # noqa: E402
 from nereus_camera_test_rig.color.qc import qc  # noqa: E402
-from nereus_camera_test_rig.color.correct import correct  # noqa: E402
 from nereus_camera_test_rig.color.report import report  # noqa: E402
 from nereus_camera_test_rig.color.water_model import fit  # noqa: E402
 from nereus_camera_test_rig.config import load_yaml  # noqa: E402
@@ -60,6 +62,9 @@ def main(argv=None) -> int:
     p.add_argument("ingest_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p = sub.add_parser("jpeg-map", help="fit + validate the RAW -> camera-JPEG pixel map")
+    p.add_argument("locate_dir", type=Path)
+    p.add_argument("--config", type=Path, required=True)
     p = sub.add_parser("distance", help="camera-to-card distance z per located frame (PnP)")
     p.add_argument("locate_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -115,6 +120,9 @@ def main(argv=None) -> int:
         elif args.stage == "report":
             summary = report(args.qc_dir, args.qc_dir.parent / "distance", args.config,
                              args.card)
+        elif args.stage == "jpeg-map":
+            summary = jpeg_map(args.locate_dir, args.config)
+            print(summary.pop("config_block"), file=sys.stderr)
         elif args.stage == "qc":
             summary = qc(args.patches_dir, args.config, args.card)
         elif args.stage == "patches":

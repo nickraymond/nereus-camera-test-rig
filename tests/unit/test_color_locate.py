@@ -17,6 +17,8 @@ from nereus_camera_test_rig.analysis.reference_card import (
     infer_card_corners_from_tags,
     localize_card,
 )
+from nereus_camera_test_rig.color.card import load_card
+from nereus_camera_test_rig.color.jpeg_geometry import JpegMap
 from nereus_camera_test_rig.color.locate import (
     MANUAL_FILE,
     locate,
@@ -26,7 +28,6 @@ from nereus_camera_test_rig.color.locate import (
     tag_geometry,
     window_for,
 )
-from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.raw_io import RawFrame
 from nereus_camera_test_rig.color.stages import StaleInputError, verify_fresh, write_stage
 
@@ -34,6 +35,7 @@ REPO = Path(__file__).resolve().parents[2]
 RENDER = REPO / "tests" / "fixtures" / "reference_card" / "Nereus_Reef_Reference_Card_V2.png"
 CARD = REPO / "configs" / "cards" / "nereus_v2.yaml"
 CORNERS = {"tl": 0, "tr": 1, "bl": 2, "br": 3}
+CROP0, CROP8 = JpegMap.offset(0, 0), JpegMap.offset(8, 8)  # plain-crop RAW -> JPEG maps
 # Tag centres detected in the 3000x1941 render (fixture README).
 TRUE = {0: (232.5, 652.5), 1: (2767.5, 652.5), 2: (232.5, 1288.5), 3: (2767.5, 1288.5)}
 
@@ -64,7 +66,7 @@ def test_default_still_requires_all_four_tags():
 
 
 def test_locate_frame_on_the_card_render(tmp_path):
-    rec = locate_frame(None, RENDER, CORNERS, offset=(8, 8))
+    rec = locate_frame(None, RENDER, CORNERS, jpeg_map=CROP8)
     assert rec["located"] and rec["locate_method"] == "apriltag4"
     assert set(rec["found_at_scale"].values()) == {1.0}  # finest scale wins
     quad = np.array(rec["quad_jpeg"])
@@ -81,7 +83,7 @@ def test_locate_frame_infers_a_painted_out_tag(tmp_path):
                   (255, 255, 255), -1)
     path = tmp_path / "masked.png"
     cv2.imwrite(str(path), img)
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec["locate_method"] == "apriltag3" and rec["inferred_corners"] == ["br"]
     assert rec["quad_jpeg"][2] == pytest.approx(list(TRUE[3]), abs=2.0)
 
@@ -104,8 +106,8 @@ def test_three_tags_under_strong_perspective_use_the_tag_corner_homography(tmp_p
         np.float32([[TRUE[0], TRUE[1], TRUE[3], TRUE[2]]]), view)[0]
     idx = {0: 0, 3: 2}[dropped]
     geometry = tag_geometry(load_card(CARD))
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0), geometry=geometry)
-    old = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0, geometry=geometry)
+    old = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec["locate_method"] == "apriltag3" and rec["inference"] == "homography_tag_corners"
     assert old["inference"] == "parallelogram"
     err = np.linalg.norm(np.array(rec["quad_jpeg"][idx]) - truth[idx])
@@ -117,7 +119,7 @@ def test_three_tags_under_strong_perspective_use_the_tag_corner_homography(tmp_p
 def test_locate_frame_without_tags_is_recorded_not_dropped(tmp_path):
     path = tmp_path / "blank.png"
     cv2.imwrite(str(path), np.full((400, 600, 3), 128, np.uint8))
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec == {"tags_found": [], "tag_source": {}, "found_at_scale": {},
                    "tag_side_px_min": {}, "tag_centers_raw": {}, "located": False,
                    "locate_method": None, "reason": "0 of 4 card tags found (need 3)"}
@@ -159,7 +161,7 @@ def test_downscaled_pass_rescues_a_card_too_large_for_native_detection(tmp_path)
     big = cv2.GaussianBlur(big, (0, 0), 6)  # large, soft tags: the TG-7 near-frame case
     path = tmp_path / "big.png"
     cv2.imwrite(str(path), big)
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec["located"], rec
     assert min(rec["found_at_scale"].values()) < 1.0
     expected = np.array([TRUE[0], TRUE[1], TRUE[3], TRUE[2]]) * 3
@@ -183,7 +185,7 @@ def raw_from_image(img_bgr: np.ndarray) -> RawFrame:
 
 def test_raw_first_detection_records_the_source(tmp_path):
     reader = lambda p: raw_from_image(cv2.imread(str(RENDER)))  # noqa: E731
-    rec = locate_frame(Path("x.orf"), None, CORNERS, offset=(8, 8), raw_reader=reader)
+    rec = locate_frame(Path("x.orf"), None, CORNERS, jpeg_map=CROP8, raw_reader=reader)
     assert rec["locate_method"] == "apriltag4"
     assert set(rec["tag_source"].values()) == {"raw"}
     expected = np.array([TRUE[0], TRUE[1], TRUE[3], TRUE[2]])
@@ -198,7 +200,7 @@ def test_jpeg_fills_a_tag_the_raw_missed(tmp_path):
     cv2.rectangle(masked, (int(x) - 150, int(y) - 150), (int(x) + 150, int(y) + 150),
                   (255, 255, 255), -1)
     reader = lambda p: raw_from_image(masked)  # noqa: E731
-    rec = locate_frame(Path("x.orf"), RENDER, CORNERS, offset=(0, 0), raw_reader=reader)
+    rec = locate_frame(Path("x.orf"), RENDER, CORNERS, jpeg_map=CROP0, raw_reader=reader)
     assert rec["locate_method"] == "apriltag4" and rec["inferred_corners"] == []
     assert rec["tag_source"] == {"0": "raw", "1": "jpeg", "2": "raw", "3": "raw"}
 
@@ -206,9 +208,9 @@ def test_jpeg_fills_a_tag_the_raw_missed(tmp_path):
 def test_window_search_only_looks_inside_the_window(tmp_path):
     reader = lambda p: raw_from_image(cv2.imread(str(RENDER)))  # noqa: E731
     around_card = (100.0, 500.0, 2900.0, 1450.0)
-    inside = locate_frame(Path("x.orf"), None, CORNERS, (0, 0), reader, window=around_card)
+    inside = locate_frame(Path("x.orf"), None, CORNERS, CROP0, reader, window=around_card)
     assert inside["locate_method"] == "window4"
-    empty = locate_frame(Path("x.orf"), None, CORNERS, (0, 0), reader,
+    empty = locate_frame(Path("x.orf"), None, CORNERS, CROP0, reader,
                          window=(0.0, 0.0, 200.0, 200.0))
     assert not empty["located"]
 
