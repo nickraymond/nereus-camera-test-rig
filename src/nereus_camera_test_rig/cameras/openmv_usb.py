@@ -322,7 +322,19 @@ class OpenMvUsbCamera(CameraDevice):
         or does not come back within ``timeout``.
         """
         started = time.monotonic()
-        self._command("reset_board")
+        try:
+            self._command("reset_board")
+        except OpenMvTimeout as exc:
+            # The ack can be lost when the board resets before its CDC buffer drains —
+            # the port vanishes mid-read (pyserial SerialException, an OSError) or goes
+            # silent. That is the reset we asked for; only a structured refusal (e.g.
+            # firmware without reset_board) is an error. Measured on the N6 (nereus002,
+            # 2026-09-28): ~1 in 8 resets right after a 1 MB capture_raw lost the ack.
+            logger.info("reset_board ack not received (serial=%r: %s) — board is resetting",
+                        self._serial_number, exc.message)
+        except OSError as exc:
+            logger.info("reset_board: port dropped before the ack (serial=%r: %s) — board "
+                        "is resetting", self._serial_number, exc)
         if not self._owns_transport:
             # Injected transport (tests/loopback): no real USB to re-enumerate — just
             # re-handshake over the same transport.
