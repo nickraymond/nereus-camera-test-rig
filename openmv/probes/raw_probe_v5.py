@@ -11,7 +11,12 @@ after. On the AE3 this is a camera session: reset the board before AND after (on
 per boot on v5, PR #70), and wait >= 35 s between mpremote sessions.
 """
 # OpenMV v5 RAW probe (read-only; run with mpremote). Prints facts, saves one raw frame to /flash.
-import csi, gc, time, os
+import gc
+import os
+import time
+
+import csi
+
 print("#C", [c for c in dir(csi) if c.isupper()])
 c = csi.CSI()
 print("#M", [m for m in dir(c) if not m.startswith("_")])
