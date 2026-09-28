@@ -184,6 +184,11 @@ Detail: [`docs/reference_card_v3.md`](reference_card_v3.md). Designed with Nick 
 - [ ] Measured-truth schema (OQ-46) and pipeline readiness: tag family, quad ratio and patch roles read from the card YAML, border-cut tag guard (OQ-47).
 - **Exit:** cards printed, checked with calipers, every patch measured dry and wet with the values in each card's YAML, and `locate` → `correct` running on a V3 frame.
 
+#### Field transport — linear JPEG XL prototype (Nick, 2026-09-28)
+Codec only, for the next field deployment's "RAW to the cloud" path; no BM / cellular code (§2).
+- [x] `color/linear_jxl.py`: linear RGB (black-subtracted, 2×2-binned RAW) → per-channel gains (the WB, scaled so nothing clips) + square-root curve + pedestal → 10-bit JPEG XL via libjxl's `cjxl`, with a JSON sidecar (gains, curve, bits, SHA-256, capture metadata); `decode` checks the checksum and inverts exactly to linear RGB. Smoke: `python -m host_tools.color jxl-check <raw>`. *(TG-7 P9150344, 15.5 m, 1600×900 crop: d1.0 → 42–47 KB, 32 px region means p99 0.6–1.8 %, median 0.1 %; lossless 709 KB. Unit tests: exact lossless codes, lossy region means p99 < 2 %, no near-black bias, truncated file rejected.)*
+- [ ] Same check on IMX708 DNGs and on the field Pi (OQ-49).
+
 #### S3–S8 — Rig work (outline, gated on the S2a decision)
 Not started until S2a is **Go**; a no-go changes what the rig should test. Each gets full checklist items + exit criteria when scheduled.
 - **S3 — RAW capture on the rig** (brief P0): IMX708 `rpicam-still --raw` (DNG + JPEG, one exposure); OpenMV allowlisted `capture_raw` (Bayer + width/height/CFA/bit depth/black level + read-back exposure/gain/WB); locked recipes; lock check; OQ-19 firmware decision (OQ-21…24). Capture changes behind `raw: true` flags. *Demo:* one command → 3 cameras × RAW + ISP JPEG + metadata.

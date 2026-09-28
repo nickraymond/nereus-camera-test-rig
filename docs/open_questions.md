@@ -416,6 +416,18 @@ Items for Nick are marked **(Nick)**.
   unknown-black problem, and trapped air, wet flocking and a bolt-on part are real underwater risks.
   If the haze model needs validating, test a trap as a separate pool experiment.
 
+### Field transport (prototype 2026-09-28, `color/linear_jxl.py`)
+
+- **[OPEN] OQ-49 — Linear JPEG XL on the field camera.** The prototype (RAW → black subtract
+  → 2×2 bin → WB gains + square-root curve → 10-bit JPEG XL, inverted in the cloud) is
+  measured only on one TG-7 ORF on the Mac: d1.0 → 42–47 KB for a 1600×900 crop, region
+  means within p99 0.6–1.8 %. Unknown: (1) libjxl on the bmcam Pi (Debian `libjxl-tools`
+  version, encode time and memory on that Pi model); (2) the same numbers on IMX708 DNGs
+  (10-bit, 1.4 µm pixels; needs OQ-24); (3) whether 2×2 binning (half resolution) is
+  acceptable or the cloud needs a demosaiced full-resolution crop (size not measured);
+  (4) how the backend stores and decodes the files. The codec is transport only — no BM /
+  cellular code in this repo (SPEC §2).
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
