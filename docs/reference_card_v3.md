@@ -131,11 +131,12 @@ prints the card; the wet measurement (checklist step 6) captures this.
 10. [ ] On the V3 dive, include shallow frames (0.5–4 m depth) as well as deep ones: the no-card depth
     table is fitted on 5–16 m, and 8 of its 9 losses to the camera JPEG are shallower (S2a, PR #44).
 
-## Pipeline changes needed before V3 data can be processed (OQ-47)
+## Pipeline support (OQ-47)
 
-`locate` calls the detector without the card's tag family and checks the tag quad against V2's
-ratio range (2.5–6.0; V3 is 1.83); `water_model` / `correct` / `metrics` / `report` hard-code V2
-patch ids (`gray_white`, `gray_dark`, `gray_mid_right`, `ANCHORS`, `RAMP`, `ALL_GREYS`). The V3
-YAMLs add `apriltag.quad_ratio`, `roles` (`wb_anchors`, `ramp`, `haze`), `tags[].edge_mm`,
-`canonical.px_per_mm`, `layout` and `back`, which the pipeline should read instead. The existing
-`color/card.py` loader already reads the V3 YAMLs unchanged (extra fields are ignored).
+The pipeline reads V3 cards from the S2a session's PRs #46 (card `roles`, `quad_ratio`, tag
+family → OpenCV dictionary, grey reflectance relative to paper white) and #47 (`locate` takes the
+family and ratio range from the card; a 2× detection pass for frames ≤ 3 MP, e.g. 1280 × 800
+OpenMV). `roles` is required from #46 on; the V3 YAMLs already carry it. The synthetic example
+frame in `tests/fixtures/reference_card_v3/` has exact ground truth for an end-to-end check.
+A guard against tags cut by the image border was tried and dropped (it rejected whole tags);
+see OQ-47.
