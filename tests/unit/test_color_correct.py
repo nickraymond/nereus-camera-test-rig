@@ -167,3 +167,21 @@ def test_card_affine_column_scores_leave_one_patch_out():
     maps, _ = frame_maps(j, np.zeros((50, 50, 3)) + HAZE + 1e-6)
     s = score(j, maps, CARD, np.eye(3))["raw_card_affine"]
     assert s["n_de"] == 12 and s["de2000_median"] < 1.0
+
+
+def test_card_slope_wb_balances_the_light_not_the_haze():
+    # strong blue-green haze: grey 128 is mostly backscatter, so balancing on it over-boosts red
+    haze = np.array([0.002, 0.2, 0.15])
+    means = card_means(haze=haze)
+    j = job(means)
+    maps, _ = frame_maps(j, np.zeros((50, 50, 3)) + haze + 1e-6)
+    slope, anchor = np.asarray(maps["raw_card_slope_wb"][1]), np.asarray(maps["raw_card_wb"][1])
+    # the slope gain neutralizes the light itself; green (brightness) matches card WB
+    np.testing.assert_allclose(slope * LIGHT, slope[1] * LIGHT[1], rtol=1e-9)
+    assert slope[1] == pytest.approx(anchor[1])
+    assert slope[0] < anchor[0]  # less red gain than balancing on the hazy grey
+    assert maps["raw_card_slope_wb"][0] == [0.0] * 3
+    assert score(j, maps, CARD, np.eye(3))["raw_card_slope_wb"]["n_de"] == 12
+    # no usable ramp → no slope column
+    maps, _ = frame_maps({**j, "ramp": None}, np.zeros((50, 50, 3)) + haze)
+    assert "raw_card_slope_wb" not in maps
