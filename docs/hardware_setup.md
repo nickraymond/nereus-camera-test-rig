@@ -42,6 +42,19 @@ python -m host_tools.color grvi results/color/<dataset_id>/locate --config <data
 Verified 2026-09-27: backend `03272be` (staging), numpy 2.5.1, OpenCV 5.0.0, scipy 1.18.1,
 Pillow 12.3.0; GRVI peaks at ~4.2 GB per 12 MP frame, so the stage runs 4 frames at a time.
 
+### Linear JPEG XL transport (prototype, `color/linear_jxl.py`)
+
+```bash
+brew install jpeg-xl   # cjxl / djxl (libjxl) — Mac
+python -m host_tools.color jxl-check <file.orf|file.dng> [--distance 1.0] [--wb r,g,b]
+```
+
+Verified 2026-09-28: libjxl 0.11.1 (Homebrew `jpeg-xl` 0.11.1_3), 10-bit PPM round trip
+exact. `jxl-check` writes `results/color/jxl_check/<stem>/{lossless,d…}.jxl` + sidecar
+`.json` + `summary.json`; expect the lossless run's block-mean p99 < 0.2 % and a d1 file of
+~40–50 KB for a 1600×900 crop. On the field Pi the package is expected to be Debian's
+`libjxl-tools` — **not verified** (OQ-49).
+
 ### Licences (SPEC §20 — permissive-only for shipped code)
 
 - **rawpy** bundles LibRaw (LGPL-2.1 / CDDL). It is `internal_only`: Mac analysis tools
@@ -52,5 +65,7 @@ Pillow 12.3.0; GRVI peaks at ~4.2 GB per 12 MP frame, so the stage runs 4 frames
   `dev_only`: fine on the Mac, but a shipped Pi / backend image needs an OpenCV build
   without FFmpeg (OQ-36). `make license-check-shipped` proves it — on the Mac it is
   expected to fail with "built with FFmpeg".
+- **libjxl** (`cjxl` / `djxl`) is BSD-3-Clause with a patent grant; `color/linear_jxl.py`
+  calls the command-line tools as a subprocess (no Python binding, nothing bundled).
 - Adding a dependency to base or `[color]` means adding a reviewed entry to
   `configs/licenses.yaml`; `make test` fails until you do.
