@@ -347,7 +347,9 @@ Items for Nick are marked **(Nick)**.
   measured reflectance uncertainty, drift after immersion). A 420 × 270 mm card at 0.5 m fills
   ~81 % × 84 % of the N6 frame: it hides the far card in the brief's two-card pool setup (P4) and
   drives Arm A's auto-exposure (P3). Does the pool keep two cards, and does the near one need to be
-  smaller (≤ ~170 mm wide)?
+  smaller (≤ ~170 mm wide)? Note: `locate` handles one card per dataset config (one corner map);
+  a frame with two V3 cards (e.g. c1 + c2) needs locate per card YAML or a tag-ID → card lookup.
+  Current plan (Nick, 2026-09-27): c1 only, one card per frame.
 - **[OPEN] OQ-45 — Print vendor, substrate and ink recipes (Nick).** *Blocks printing V3.* UV print
   on 3 mm ACM or rigid PVC, matte, no optical brighteners, greys K-only. Not verified: the vendor's
   gamut for the 8 design colours, their ability to print K-only greys, flatness, and immersion
