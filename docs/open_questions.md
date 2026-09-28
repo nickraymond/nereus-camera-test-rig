@@ -451,6 +451,15 @@ Items for Nick are marked **(Nick)**.
   (4) how the backend stores and decodes the files. The codec is transport only — no BM /
   cellular code in this repo (SPEC §2).
 
+- **[OPEN] OQ-50 — The rig's card is V1; the web colour check assumes V2.** The card on
+  `nereus002` is a "Reef Reference Card V1" print (2026-09-28). Its tags match V2's (same IDs,
+  same physical tag frame), so both are located, but the patch layout differs. Phase 8 tools read
+  the card YAML and now fail loudly on a layout mismatch (`linear_jxl.layout_check`); pass
+  `--card configs/cards/nereus_v1.yaml`. `web/color_check.py` (Phase 6, intentionally not
+  changed) hard-codes V2 boxes and design values, so its grey / colour ΔE on V1 frames is
+  meaningless (grey 27, colour 45 on the first rig run). Options: point it at a card YAML, or
+  label it V2-only. V2 prints no longer exist (Nick); V3 is in production.
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
