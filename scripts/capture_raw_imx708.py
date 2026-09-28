@@ -7,9 +7,11 @@ Run ON the rig Pi from the repo root (stdlib only, no venv needed):
 
 1. **Meter:** one auto shot (`--metadata`); read back ExposureTime, AnalogueGain, ColourGains,
    LensPosition — what auto-exposure / AWB / AF chose.
-2. **Lock:** analogue gain fixed at ``--gain`` (default 1.0); shutter = metered exposure ×
-   metered gain / gain (the same total exposure), then × 2^stop for each ``--stops``; WB fixed
-   to the metered ColourGains, focus fixed to the metered LensPosition.
+2. **Lock:** analogue gain fixed at ``--gain`` (default 1.0 = as low as the sensor goes); a
+   quick probe shot reads back the gain the camera really applies — the sensor clamps to its
+   range (IMX708 on ``nereus002``: 1.0 → 1.1228, 2026-09-28) — and that gain is used. Shutter
+   = metered exposure × metered gain / applied gain (the same total exposure), then × 2^stop
+   for each ``--stops``; WB fixed to the metered ColourGains, focus to the metered LensPosition.
 3. **Capture** each stop with ``--raw`` (JPEG + DNG from one exposure) and ``--metadata``.
 4. **Verify** every shot: JPEG + DNG exist, the DNG size fits the sensor mode (16-bit), and the
    read-back ExposureTime / AnalogueGain / ColourGains / LensPosition match what was asked.
@@ -82,24 +84,34 @@ def main(argv=None) -> int:
     run([args.rpicam, "-n", "-t", str(args.meter_ms), *size, "-o", str(out / "meter.jpg"),
          "--metadata", str(out / "meter.json"), "--metadata-format", "json"], timeout)
     m = metadata(out / "meter.json")
-    exposure_us = float(m["ExposureTime"]) * float(m["AnalogueGain"]) / args.gain
+    total_us = float(m["ExposureTime"]) * float(m["AnalogueGain"])  # exposure × gain
     red, blue = (float(v) for v in m["ColourGains"])
     lens = m.get("LensPosition")
+    locks = ["--awb", "custom", "--awbgains", f"{red:.4f},{blue:.4f}"]
+    if lens is not None:
+        locks += ["--autofocus-mode", "manual", "--lens-position", f"{float(lens):.4f}"]
+
+    # probe (JPEG only): which gain does the sensor actually apply for the one we ask?
+    run([args.rpicam, "-n", "-t", str(args.shot_ms), *size, "-o", str(out / "probe.jpg"),
+         "--metadata", str(out / "probe.json"), "--metadata-format", "json",
+         "--shutter", str(round(total_us / args.gain)), "--gain", f"{args.gain:.4f}", *locks],
+        timeout)
+    gain = float(metadata(out / "probe.json")["AnalogueGain"])
+    if not close(args.gain, gain, "AnalogueGain"):
+        print(f"-- gain {args.gain:g} not available: the sensor applies {gain:g}; using it")
+    exposure_us = total_us / gain
 
     shots, ok_all = [], True
     for stop in args.stops:
         name = f"stop_{stop:+g}"
-        want = {"ExposureTime": round(exposure_us * 2 ** stop), "AnalogueGain": args.gain,
+        want = {"ExposureTime": round(exposure_us * 2 ** stop), "AnalogueGain": gain,
                 "ColourGains": [red, blue]}
-        cmd = [args.rpicam, "-n", "-t", str(args.shot_ms), *size, "--raw",
-               "-o", str(out / f"{name}.jpg"), "--metadata", str(out / f"{name}.json"),
-               "--metadata-format", "json", "--shutter", str(want["ExposureTime"]),
-               "--gain", f"{args.gain:.4f}", "--awb", "custom",
-               "--awbgains", f"{red:.4f},{blue:.4f}"]
         if lens is not None:
             want["LensPosition"] = float(lens)
-            cmd += ["--autofocus-mode", "manual", "--lens-position", f"{float(lens):.4f}"]
-        run(cmd, timeout)
+        run([args.rpicam, "-n", "-t", str(args.shot_ms), *size, "--raw",
+             "-o", str(out / f"{name}.jpg"), "--metadata", str(out / f"{name}.json"),
+             "--metadata-format", "json", "--shutter", str(want["ExposureTime"]),
+             "--gain", f"{gain:.4f}", *locks], timeout)
         got = metadata(out / f"{name}.json")
         dng = out / f"{name}.dng"
         checks = {"jpeg_exists": (out / f"{name}.jpg").is_file(), "dng_exists": dng.is_file()}
@@ -117,7 +129,7 @@ def main(argv=None) -> int:
         print(f"PASS {name}" if passed else f"FAIL {name}: {', '.join(failed)}")
 
     summary = {"utc": stamp, "host": socket.gethostname(), "rpicam": version,
-               "mode": args.mode, "gain": args.gain,
+               "mode": args.mode, "gain_requested": args.gain, "gain_applied": gain,
                "meter": {k: m.get(k) for k in ("ExposureTime", "AnalogueGain", "DigitalGain",
                                                "ColourGains", "LensPosition", "Lux")},
                "locked_exposure_us_at_stop0": round(exposure_us), "shots": shots,
