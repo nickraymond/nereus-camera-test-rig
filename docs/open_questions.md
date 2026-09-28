@@ -332,6 +332,12 @@ Items for Nick are marked **(Nick)**.
   reflectance is uncertain (0.027 on one near-surface frame, ≈ 0.076 on deep frames). Until the
   card is measured (daylight reference shots, X-Rite, OQ-27), ΔE00 is provisional and haze cannot
   be separated from print non-linearity. The V3 dive plan includes the dry reference shots.
+  **Measured 2026-09-27 (in air, 3 deck frames, WB on grey, camera daylight matrix):** the print is
+  far less saturated than the design file — yellow / orange / red-orange 30–40 C\* lower, earth
+  tones 15–30. A colour matrix fitted to the design values adds that chroma back to the whole
+  scene (the v0.3 "yellow cast" Nick rejected in the blind review); fitted to the in-air reading
+  it does not. Until the card is measured with an instrument, the in-air reading is the better
+  truth for fitting; the V3 dive's dry reference shots are the minimum, a spectro reading better.
 - **[OPEN] OQ-41 — Light changes between frames.** *S2a fit.* Exposure-normalized brightness jumps
   up to 3× between consecutive frames on shallow sunny dives (caustics), and dives 1–2 drift
   through the dive (sunset, morning). The colour of the light is stable enough to use (ratios
