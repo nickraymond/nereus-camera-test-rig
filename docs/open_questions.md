@@ -166,19 +166,39 @@ From the design brief §11 (`docs/DESIGN_edge_color_correction.md`) plus gaps fo
 planning (2026-09-26). "Blocks" names the Phase 8 sprint (SPEC §4) that needs the answer.
 Items for Nick are marked **(Nick)**.
 
-- **[PARTIAL] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.*
-  **N6 probed on real hardware 2026-09-28** (`nereus002`, OpenMV v5.0.1, `csi` module,
-  `openmv/probes/raw_probe_v5.py`): `csi.BAYER` is the only raw format (no 10/12-bit constant) —
-  **8-bit Bayer**, 1 byte/px, HD 1280×800 = 1,024,000 B; `auto_exposure` / `auto_gain` /
-  `auto_whitebal` lock; `exposure_us()` (5,560) and `gain_db()` (0.0) read back; `rgb_gain_db()`
-  reports (3.1, 0, 6.0) dB — whether those ISP gains touch the Bayer data is unknown; `auto_blc`
-  / `blc_regs` exist (black level: to measure with a dark frame). Per-2×2-position means
-  56.9 / 80.6 / 80.5 / 40.7 → greens at TR/BL, so RGGB or BGGR (decide on the card).
-  Heap 25.6 MB free, flash 2.7 MB free. `mpremote fs cp` of the 1 MB frame took > 90 s → use
-  the rig's framed `get_file`. The AE3 gave the same 8-bit HD frames in Nick's September runs
-  (`isp_run.py`, `csi`). *Still to do:* CFA from the card, `get_file` time for 1 MB (OQ-23),
-  dark-frame black level, the AE3 probe (one session per boot), then an allowlisted
-  `capture_raw` (Bayer → `/flash` → `get_file`, sidecar with W/H/CFA/bits/exposure/gain).
+- **[RESOLVED 2026-09-28] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.*
+  **Answer (both boards, real hardware on `nereus002`, OpenMV v5.0.1, `csi`,
+  `openmv/probes/raw_probe2_v5.py`, V1 card in air):**
+  - **CFA = BGGR** on both boards, for the bytes as `img.bytearray()` delivers them (same
+    orientation as the ISP JPEG — checked against a `capture_image` frame). Decided on the card:
+    after grey WB, all 7 colour patch hues land within 9° of the V1 measured truth; median
+    ΔE00 (WB'd camera RGB as sRGB, no matrix) BGGR 10.0 vs RGGB 24.7 (N6), 8.3 vs 25.7 (AE3).
+  - **8-bit**, HD 1280×800, 1,024,000 B; **black level 0** — the sensor subtracts black on chip
+    and clips: at the shortest exposure (80 µs, 3.15 dB) the per-site means are 0.3–1.1 and
+    the mode is 0 (N6 47 %, AE3 39 % of samples). No pedestal, so dark-noise is clipped at 0
+    (a small positive bias in near-black patches). A lens-covered frame would pin the noise
+    floor; not needed for the black level. `blc_regs` → "not supported"; `auto_blc` needs an
+    argument (untouched).
+  - **ISP WB gains are not in the Bayer data.** Grey on the raw is far from neutral (card WB
+    needs R +6.9 / B +2.3 dB on the N6, +6.0 / +2.8 dB on the AE3). Forcing
+    `auto_whitebal(False, rgb_gain_db=(0,0,0))` is silently ignored (read-back and Bayer means
+    unchanged). The N6's `rgb_gain_db()` (2.7, 0, 6.5 dB) equals the grey-world gains of the
+    raw with the **top-left (blue) site listed first** — do not read its first element as red.
+    The AE3 reports (−inf, 0, −inf): no WB gains. So as-shot WB for OpenMV RAW comes from the
+    card (or a stored calibration), never from `rgb_gain_db`.
+  - **Minimum analogue gain 3.15 dB** (asking for 0 dB reads back 3.152157; the auto value reads
+    0.0 until locked), **minimum exposure 80 µs** (asking for 1 µs). Lock pattern (from Nick's
+    `s28_board_burst.py`): `auto_exposure(False, exposure_us=e)`, `auto_gain(False, gain_db=g)`,
+    `auto_whitebal(False)`, then flush 3 frames; never `csi.framerate()` (wedges the board).
+  - Free heap after a frame: N6 25.6 MB, **AE3 4.1 MB**. Flash free: N6 1.7 MB with two frames
+    stored (4.2 MB total), AE3 3.8 MB (8.4 MB total) — one frame at a time on the N6.
+  - The in-air test scene clipped (max 255 on every site at the auto exposure): the S3 locked
+    recipe must meter for the card, not the window.
+  *First probe (N6, `raw_probe_v5.py`):* `csi.BAYER` is the only raw format (no 10/12-bit
+  constant); per-2×2 means 56.9 / 80.6 / 80.5 / 40.7 put the greens at TR/BL; `mpremote fs cp`
+  of the 1 MB frame took > 90 s → use the rig's framed `get_file` (OQ-23). The AE3 gave the
+  same 8-bit HD frames in Nick's September runs (`isp_run.py`). *Next:* allowlisted
+  `capture_raw` (S3).
   *Earlier notes:* What the
   repo already tells us:
   - **AE3:** `sensor.BAYER` was accepted by `set_pixformat` during the 2026-07-15 bring-up
@@ -201,7 +221,11 @@ Items for Nick are marked **(Nick)**.
   answerable from code: the current path configures one pixformat and takes one
   `snapshot()`. If one exposure can't give both, capture back-to-back and record it
   (brief §7 P0).
-- **[NEEDS-HARDWARE] OQ-23 — USB transfer time for a raw frame.** *Blocks S3 (soak cadence
+- **[RESOLVED 2026-09-28] OQ-23 — USB transfer time for a raw frame.** **Answer (`nereus002`,
+  rig `get_file`, 512 B board chunks, SHA-256 verified):** 1,024,000 B in **0.77 s on the N6**
+  (~1.3 MB/s) and **0.91 s on the AE3** (~1.1 MB/s), repeatable across two frames each —
+  well inside `TRANSFER_TIMEOUT` (30 s), and > 100× faster than `mpremote fs cp`. *Original:*
+  *Blocks S3 (soak cadence
   in S7).* Transfer is not timed separately, but the host's capture `duration_seconds`
   includes `_retrieve_file` (`cameras/openmv_usb.py`), and `TRANSFER_TIMEOUT = 30.0` s bounds
   it — a 2 MB frame must finish inside that. Expected payload is 1.0 MB (8-bit) or 2.0 MB (16-bit) per HD frame over
