@@ -22,7 +22,8 @@ The visual sheets — column cut sheet and blind side-randomized review — are 
 ``decision_sheets``. Saved blind answers — ``<dataset config>_blind_answers.json`` next to the
 dataset config, or its ``blind_answers`` key; versioned human work — are scored here.
 
-Output: ``decide/{decision.json, index.html, cutsheet.html, blind.html, stage.json}``.
+Output: ``decide/{decision.json, index.html, cutsheet.html, blind.html, blind_<review>.html,
+stage.json}``.
 """
 
 from __future__ import annotations
@@ -39,7 +40,16 @@ import numpy as np
 from ..config import load_yaml
 from .card import load_card
 from .correct import COLUMNS, _truth_linear
-from .decision_sheets import Images, blind_pairs, blind_sheet, cut_frames, cut_sheet, score_blind
+from .decision_sheets import (
+    REVIEWS,
+    Images,
+    blind_pairs,
+    blind_sheet,
+    cut_frames,
+    cut_sheet,
+    review_frames,
+    score_blind,
+)
 from .report import STYLE
 from .stages import verify_fresh, write_stage
 from .water_model import fit_settings
@@ -289,18 +299,26 @@ def render(result: dict, provenance: dict) -> str:
                     f"<td>{_e(v['psi_median'])}</td><td>{_e(v['de2000_median'])}</td></tr>"
                     for s, ms in sorted(result["flash"].items()) for m, v in ms.items())
     needs = "".join(f"<li>{_e(x)}</li>" for x in result["needs_v3"])
-    blind = result.get("blind")
-    if blind:
-        review = "".join(f"<tr><td>{_e(cls)}</td><td>{v['nereus']}</td><td>{v['baseline']}</td>"
-                         f"<td>{v['tie']}</td><td>{_pct(v['prefer_nereus'])}</td>"
-                         f"<td class=\"v {'pass' if v['rule_pass'] else 'fail'}\">"
-                         f"{'pass' if v['rule_pass'] else 'fail'}</td></tr>"
-                         for cls, v in blind.items())
-        review = ("<table><thead><tr><th>class</th><th>prefer Nereus</th><th>prefer baseline"
-                  "</th><th>no preference</th><th>Nereus share</th><th>≥ 70 %</th></tr>"
-                  f"</thead><tbody>{review}</tbody></table>")
-    else:
-        review = "<p class=\"note\"><b>Blind review not done yet.</b></p>"
+    review = ""
+    for r in result.get("reviews", []):
+        link = (f'<p class="note"><a href="{r["file"]}">{_e(r["title"])}</a> — {r["pairs"]} '
+                f'pairs, sides randomized, method names hidden. Answers: '
+                f'<code>{_e(r["answers"])}</code>.</p>')
+        scored = (result.get("blind") or {}).get(r["name"])
+        if not scored:
+            review += link + "<p class=\"note\"><b>Not answered yet.</b></p>"
+            continue
+        rows = "".join(
+            f"<tr><td>{_e(LABELS.get(v['candidate'], v['candidate']))}</td>"
+            f"<td>{_e(LABELS.get(v['reference'], v['reference']))}</td>"
+            f"<td>{v['prefer_candidate_n']}</td><td>{v['prefer_reference_n']}</td>"
+            f"<td>{v['tie']}</td><td>{_pct(v['prefer_candidate'])}</td>"
+            f"<td class=\"v {'pass' if v['rule_pass'] else 'fail'}\">"
+            f"{'pass' if v['rule_pass'] else 'fail'}</td></tr>" for v in scored.values())
+        review += link + ("<table><thead><tr><th>candidate</th><th>reference</th><th>prefer "
+                          "candidate</th><th>prefer reference</th><th>no preference</th>"
+                          "<th>candidate share</th><th>≥ 70 %</th></tr></thead><tbody>"
+                          f"{rows}</tbody></table>")
     rule = result["rule"]
     prov = "".join(f"<tr><td>{_e(k)}</td><td><code>{_e(v)}</code></td></tr>"
                    for k, v in provenance.items())
@@ -319,8 +337,8 @@ from a sweep-level bootstrap ({rule['n_boot']} resamples). Rule (SPEC §20): Ner
 ≥ {rule['win_min']:.0%}. {_e(rule['note'])} Card-anchored columns are scored on the 12 colour
 patches only (their greys are used); card-free columns on the greys (ψ) and colours (ΔE00).
 GRVI solves on every card patch, so its card-anchored scores are in-sample.</p>
-<h2>Visual review</h2><p class="note"><a href="blind.html">Blind review</a>
-({result.get('blind_pairs', 0)} pairs, sides randomized, method names hidden) — decides the gate.
+<h2>Visual review</h2><p class="note">The <b>gate</b> review decides S2a; the others are
+comparisons you choose (<code>decide --blind-compare REF:CAND</code>).
 <a href="cutsheet.html">Cut sheet</a> — every method side by side on {result.get('cut_frames', 0)}
 frames.</p>{review}
 {"".join(sections)}
@@ -335,7 +353,9 @@ camera's outputs are scored.</p><table><thead><tr><th>frame</th><th>method</th><
 </main></body></html>"""
 
 
-def decide(correct_dir: Path, dataset_config: Path, card_path: Path) -> dict[str, Any]:
+def decide(correct_dir: Path, dataset_config: Path, card_path: Path,
+           extra_reviews: dict | None = None) -> dict[str, Any]:
+    """``extra_reviews``: {name: comparisons} blind reviews on top of ``REVIEWS``."""
     record = verify_fresh(correct_dir)
     root = correct_dir.parent
     scores = json.loads((correct_dir / "scores.json").read_text())
@@ -355,11 +375,20 @@ def decide(correct_dir: Path, dataset_config: Path, card_path: Path) -> dict[str
 
     cfg = load_yaml(dataset_config)
     configs = [dataset_config, card_path]
-    answers = dataset_config.parent / cfg.get("blind_answers",
-                                              f"{dataset_config.stem}_blind_answers.json")
-    if answers.is_file():
-        result["blind"] = score_blind(json.loads(answers.read_text()))
-        configs.append(answers)
+    reviews = {**REVIEWS, **(extra_reviews or {})}
+
+    def answers_path(name: str) -> Path:
+        if name == "gate":
+            return dataset_config.parent / cfg.get("blind_answers",
+                                                   f"{dataset_config.stem}_blind_answers.json")
+        return dataset_config.parent / f"{dataset_config.stem}_blind_answers_{name}.json"
+
+    result["blind"] = {}
+    for name, review in reviews.items():
+        if answers_path(name).is_file():
+            result["blind"][name] = score_blind(json.loads(answers_path(name).read_text()),
+                                                review)
+            configs.append(answers_path(name))
     ingest_dir = root / "ingest"
     rows = {r["stem"]: r for r in csv.DictReader((ingest_dir / "manifest.csv").open())}
     card = load_card(card_path)
@@ -370,14 +399,24 @@ def decide(correct_dir: Path, dataset_config: Path, card_path: Path) -> dict[str
                     patches, truth)
     rendered = {p.stem for p in (correct_dir / "images" / "raw_depth_wb_haze").glob("*.jpg")}
     frames = cut_frames(rows, scores, rendered)
-    pairs = blind_pairs(rows, scores, rendered)
-    result.update(cut_frames=len(frames), blind_pairs=len(pairs))
+    result["cut_frames"] = len(frames)
     (out_dir / "cutsheet.html").write_text(cut_sheet(images, frames, rows, scores))
-    try:
-        shown = answers.resolve().relative_to(Path.cwd())
-    except ValueError:
-        shown = answers.resolve()
-    (out_dir / "blind.html").write_text(blind_sheet(images, pairs, str(shown)))
+    per_frame = review_frames(rows, scores, rendered)
+    result["reviews"] = []
+    for name, review in reviews.items():
+        path = answers_path(name)
+        try:
+            shown = path.resolve().relative_to(Path.cwd())
+        except ValueError:
+            shown = path.resolve()
+        file = "blind.html" if name == "gate" else f"blind_{name}.html"
+        title = "S2a blind review" if name == "gate" else f"blind review · {name}"
+        page, n = blind_sheet(images, blind_pairs(per_frame, review), str(shown), name, title)
+        (out_dir / file).write_text(page)
+        result["reviews"].append({"name": name, "file": file, "title": title, "pairs": n,
+                                  "answers": str(shown),
+                                  "comparisons": [dict(c) for c in review]})
+    result["blind_pairs"] = next(r["pairs"] for r in result["reviews"] if r["name"] == "gate")
     provenance = {"dataset": root.name, "correct stage git": record["git"],
                   "GRVI backend commit": correct_summary.get("grvi_backend_sha")}
     (out_dir / "decision.json").write_text(json.dumps(result, indent=1) + "\n")
@@ -385,7 +424,9 @@ def decide(correct_dir: Path, dataset_config: Path, card_path: Path) -> dict[str
     write_stage(out_dir, "decide", configs=configs, upstream=[correct_dir],
                 params=result["rule"])
     return {"out_dir": str(out_dir), "needs_v3": result["needs_v3"],
-            "cut_frames": len(frames), "blind_pairs": len(pairs), "blind": result.get("blind"),
+            "cut_frames": len(frames), "blind_pairs": result["blind_pairs"],
+            "reviews": {r["name"]: r["pairs"] for r in result["reviews"]},
+            "blind": result.get("blind"),
             "verdicts": {cls: [f"{METRIC_NAMES[c['metric']]} {LABELS[c['nereus']]} vs "
                                f"{LABELS[c['baseline']]}: {c['verdict']}"
                                for c in v["comparisons"]]

@@ -7,9 +7,11 @@ blind, side-randomized review that decides the gate.
   depth matrix (v0.3), per-frame card affine, RAW + depth WB − haze (no card), the same +
   depth matrix (v0.3), GRVI. Frames: the middle frame of every sweep, every off-centre and
   no-card frame (torch frames have no Nereus output), every preset frame.
-- **Blind review** (``decide/blind.html``): pairs of images with the method names hidden and the
-  sides randomized — card-free: camera JPEG vs Nereus no card (off-centre, no-card, one frame per
-  sweep); card-anchored: GRVI vs RAW + card WB (one frame per sweep where GRVI found the card).
+- **Blind reviews** (``REVIEWS``): pairs of images with the method names hidden and the sides
+  randomized. ``gate`` (``decide/blind.html``) decides S2a — camera JPEG vs Nereus no card
+  (off-centre, no-card, one frame per sweep) and GRVI vs RAW + card WB (one frame per sweep
+  where GRVI found the card); ``v02_v03`` (``blind_v02_v03.html``) compares v0.2 with the v0.3
+  depth matrix, with and without the card; ``custom_review`` builds any REF:CAND pair.
   Choices are kept in the browser and downloaded as JSON. The side of each pair comes from a hash
   of (seed, class, frame), never from the page, so the key is stable across re-runs and does
   not depend on which pairs are listed. Saved answers (``<dataset config>_blind_answers.json``
@@ -38,12 +40,34 @@ THUMB_W, BLIND_W = 300, 640
 CUT_COLUMNS = ("camera", "jpeg_card_wb", "raw_card_wb", "raw_card_wb_haze", "raw_card_wb_ccm",
                "raw_card_affine",
                "raw_depth_wb_haze", "raw_depth_wb_haze_ccm", "grvi_cheeca_v3")
-BLIND = {"card_free": ("camera", "raw_depth_wb_haze"),
-         "card_anchored": ("grvi_cheeca_v3", "raw_card_wb")}  # (baseline, Nereus)
+# Blind reviews: named sets of comparisons. Each compares a reference and a candidate method on
+# a frame set ("card": one frame per sweep; "free": that plus off-centre and no-card frames).
+# The comparison id seeds the sides, so a review's key never changes when others are added.
+REVIEWS = {
+    "gate": ({"id": "card_free", "frames": "free", "reference": "camera",
+              "candidate": "raw_depth_wb_haze"},
+             {"id": "card_anchored", "frames": "card", "reference": "grvi_cheeca_v3",
+              "candidate": "raw_card_wb"}),
+    "v02_v03": ({"id": "v02_v03_card", "frames": "card", "reference": "raw_card_wb",
+                 "candidate": "raw_card_wb_ccm"},
+                {"id": "v02_v03_no_card", "frames": "free", "reference": "raw_depth_wb_haze",
+                 "candidate": "raw_depth_wb_haze_ccm"}),
+}
+
+
+def custom_review(spec: str) -> tuple[str, tuple[dict, ...]]:
+    """``REF:CAND[:card|free]`` (method names as in ``correct``) → a one-comparison review."""
+    parts = spec.split(":")
+    if len(parts) not in (2, 3) or (len(parts) == 3 and parts[2] not in ("card", "free")):
+        raise ValueError(f"blind comparison {spec!r}: expected REF:CAND[:card|free]")
+    ref, cand = parts[:2]
+    name = f"{ref}_vs_{cand}"
+    return name, ({"id": name, "frames": parts[2] if len(parts) == 3 else "free",
+                   "reference": ref, "candidate": cand},)
 
 
 def nereus_side(cls: str, stem: str) -> str:
-    """'A' or 'B': where the Nereus image of this pair is shown."""
+    """'A' or 'B': where the candidate image of comparison ``cls`` is shown for ``stem``."""
     return "AB"[hashlib.sha256(f"{SEED}:{cls}:{stem}".encode()).digest()[0] & 1]
 
 
@@ -108,23 +132,24 @@ def cut_frames(rows: dict, scores: dict, rendered: set) -> list[str]:
     return sorted(picked, key=lambda s: rows[s]["time_utc"])
 
 
-def blind_pairs(rows: dict, scores: dict, rendered: set) -> list[tuple[str, str]]:
-    """[(class, stem)] for the blind review."""
-    pairs = []
-    mids = {}
+def review_frames(rows: dict, scores: dict, rendered: set) -> dict[str, list[str]]:
+    """{"card": the middle frame of every sweep, "free": those plus every off-centre and
+    no-card frame with a Nereus output} — no flash or preset frames, in capture order."""
+    mids: dict[str, list] = {}
     for s in sorted(scores, key=lambda s: rows[s]["time_utc"]):
         if rows[s]["sweep_id"] and not scores[s].get("flash"):
             mids.setdefault(rows[s]["sweep_id"], []).append(s)
-    mid = [sorted(v)[len(v) // 2] for v in mids.values()]
+    card = [sorted(v)[len(v) // 2] for v in mids.values()]
     free = sorted({s for s in rendered if not rows[s]["sweep_id"]
                    and rows[s]["category"] != PRESET_CATEGORY
-                   and not scores.get(s, {}).get("flash")} | set(mid),
+                   and not scores.get(s, {}).get("flash")} | set(card),
                   key=lambda s: rows[s]["time_utc"])
-    pairs += [("card_free", s) for s in free if s in rendered]
-    found = [s for s in mid if not scores[s]["methods"].get("grvi_cheeca_v3", {})
-             .get("grvi_no_card", True)]
-    pairs += [("card_anchored", s) for s in found]
-    return pairs
+    return {"card": card, "free": [s for s in free if s in rendered]}
+
+
+def blind_pairs(frames: dict[str, list[str]], review) -> list[tuple[dict, str]]:
+    """[(comparison, stem)] for a review."""
+    return [(c, s) for c in review for s in frames[c["frames"]]]
 
 
 def _page(title: str, body: str, script: str = "") -> str:
@@ -195,51 +220,64 @@ document.getElementById('dl').addEventListener('click', () => {
 </script>"""
 
 
-def blind_sheet(images: Images, pairs: list[tuple[str, str]], answers_file: str) -> str:
+def blind_sheet(images: Images, pairs: list[tuple[dict, str]], answers_file: str,
+                name: str = "gate", title: str = "S2a blind review") -> tuple[str, int]:
+    """(page, number of pairs shown). A pair is shown only when both images exist."""
     blocks = []
-    for i, (cls, stem) in enumerate(pairs, 1):
-        base, ours = BLIND[cls]
-        side = nereus_side(cls, stem)
-        left, right = (ours, base) if side == "A" else (base, ours)
+    for comp, stem in pairs:
+        side = nereus_side(comp["id"], stem)
+        left, right = ((comp["candidate"], comp["reference"]) if side == "A"
+                       else (comp["reference"], comp["candidate"]))
         a, b = _encode(images.get(stem, left), BLIND_W), _encode(images.get(stem, right), BLIND_W)
         if not a or not b:
             continue
-        name = f"{cls}:{stem}"
-        opts = "".join(f'<label><input type="radio" name="{name}" value="{v}"> {t}</label>'
+        field = f"{comp['id']}:{stem}"
+        opts = "".join(f'<label><input type="radio" name="{field}" value="{v}"> {t}</label>'
                        for v, t in (("A", "A looks more natural"), ("B", "B looks more natural"),
                                     ("=", "no preference")))
-        blocks.append(f'<fieldset><legend>{i} · {html.escape(stem)}</legend><div class="pair">'
-                      f'<figure><figcaption>A</figcaption><img alt="A" '
+        blocks.append(f'<fieldset><legend>{len(blocks) + 1} · {html.escape(stem)}</legend>'
+                      f'<div class="pair"><figure><figcaption>A</figcaption><img alt="A" '
                       f'src="data:image/jpeg;base64,{a}"></figure><figure><figcaption>B'
                       f'</figcaption><img alt="B" src="data:image/jpeg;base64,{b}"></figure>'
                       f'</div><div class="choice">{opts}</div></fieldset>')
-    body = ("<h1>Phase 8 · S2a blind review</h1><p class=\"note\">For each pair, pick the image "
-            "whose colours look more like the real scene. Method names are hidden and the sides "
-            "are randomized. Choices stay in this browser; when done, download them, save the file "
-            f"as <code>{html.escape(answers_file)}</code>, commit it, and re-run "
+    body = (f"<h1>Phase 8 · {html.escape(title)}</h1><p class=\"note\">For each pair, pick the "
+            "image whose colours look more like the real scene. Method names are hidden and the "
+            "sides are randomized. Choices stay in this browser; when done, download them, save "
+            f"the file as <code>{html.escape(answers_file)}</code>, commit it, and re-run "
             "<code>decide</code>.</p><p><b id=\"count\">0</b> of " + str(len(blocks))
             + " answered · <button id=\"dl\" type=\"button\">Download answers</button></p>"
             + "".join(blocks))
-    return _page("S2a Blind Review", body, BLIND_JS).replace(
-        "<body>", f'<body data-seed="{SEED}" '
-                  f'data-file="{html.escape(Path(answers_file).name)}">', 1)
+    # the gate keeps its original browser key, so answers already clicked survive a rebuild
+    key = "s2a-blind-answers" if name == "gate" else f"s2a-blind-answers-{name}"
+    page = _page(title, body, BLIND_JS.replace("'s2a-blind-answers'", f"'{key}'"))
+    return page.replace("<body>", f'<body data-seed="{SEED}" '
+                                  f'data-file="{html.escape(Path(answers_file).name)}">',
+                        1), len(blocks)
 
 
-def score_blind(answers: dict) -> dict[str, Any]:
-    """Share of answered pairs (ties excluded) where Nereus was preferred, per class."""
+def score_blind(answers: dict, review) -> dict[str, Any]:
+    """Per comparison of ``review``: answered pairs (ties apart) preferring the candidate."""
     if answers.get("seed") != SEED:
         raise ValueError(f"blind answers were made with seed {answers.get('seed')!r}, "
                          f"not {SEED!r}: the key does not match")
+    comps = {c["id"]: c for c in review}
     out: dict[str, Any] = {}
     for name, choice in answers["answers"].items():
-        cls, stem = name.split(":", 1)
-        c = out.setdefault(cls, {"nereus": 0, "baseline": 0, "tie": 0})
+        cid, stem = name.split(":", 1)
+        if cid not in comps:
+            raise ValueError(f"blind answer {name!r} is not part of this review "
+                             f"({sorted(comps)})")
+        c = out.setdefault(cid, {"reference": comps[cid]["reference"],
+                                 "candidate": comps[cid]["candidate"],
+                                 "prefer_candidate_n": 0, "prefer_reference_n": 0, "tie": 0})
         if choice == "=":
             c["tie"] += 1
+        elif choice == nereus_side(cid, stem):
+            c["prefer_candidate_n"] += 1
         else:
-            c["nereus" if choice == nereus_side(cls, stem) else "baseline"] += 1
+            c["prefer_reference_n"] += 1
     for c in out.values():
-        n = c["nereus"] + c["baseline"]
-        c["prefer_nereus"] = round(c["nereus"] / n, 3) if n else None
-        c["rule_pass"] = n > 0 and c["nereus"] / n >= 0.70
+        n = c["prefer_candidate_n"] + c["prefer_reference_n"]
+        c["prefer_candidate"] = round(c["prefer_candidate_n"] / n, 3) if n else None
+        c["rule_pass"] = n > 0 and c["prefer_candidate_n"] / n >= 0.70
     return out

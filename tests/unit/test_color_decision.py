@@ -22,7 +22,13 @@ from nereus_camera_test_rig.color.decision import (
     sweep_bootstrap,
     with_grvi_found,
 )
-from nereus_camera_test_rig.color.decision_sheets import SEED, nereus_side, score_blind
+from nereus_camera_test_rig.color.decision_sheets import (
+    REVIEWS,
+    SEED,
+    custom_review,
+    nereus_side,
+    score_blind,
+)
 from nereus_camera_test_rig.color.stages import verify_fresh, write_stage
 
 CARD_PATH = Path(__file__).resolve().parents[2] / "configs" / "cards" / "nereus_v2.yaml"
@@ -145,7 +151,7 @@ def test_decide_stage_writes_numbers_and_pages(tmp_path):
     assert any("Dive 1" in x for x in out["needs_v3"])
     assert any("fitted on 5–16 m; 1 scored frames lie outside" in x for x in out["needs_v3"])
     page = (root / "decide" / "index.html").read_text()
-    assert "Card-anchored" in page and "Blind review not done yet" in page
+    assert "Card-anchored" in page and "Not answered yet" in page
     # 10 sweep middles + the no-card frame (card-free), 10 sweep middles (card-anchored)
     assert out["blind_pairs"] == 21 and out["cut_frames"] == 12
     blind = re.sub(r"base64,[^\"]+", "", (root / "decide" / "blind.html").read_text())
@@ -165,13 +171,15 @@ def test_saved_blind_answers_are_scored_against_the_key(tmp_path):
         else "A"
     (tmp_path / "answers.json").write_text(json.dumps({"seed": SEED, "answers": answers}))
     out = decide(correct_dir, cfg, CARD_PATH)
-    assert out["blind"]["card_free"] == {"nereus": 10, "baseline": 0, "tie": 0,
-                                         "prefer_nereus": 1.0, "rule_pass": True}
-    assert out["blind"]["card_anchored"]["baseline"] == 1
-    assert out["blind"]["card_anchored"]["rule_pass"] is False
+    gate = out["blind"]["gate"]
+    assert gate["card_free"] == {"reference": "camera", "candidate": "raw_depth_wb_haze",
+                                 "prefer_candidate_n": 10, "prefer_reference_n": 0, "tie": 0,
+                                 "prefer_candidate": 1.0, "rule_pass": True}
+    assert gate["card_anchored"]["prefer_reference_n"] == 1
+    assert gate["card_anchored"]["rule_pass"] is False
     assert str((tmp_path / "answers.json").resolve()) in verify_fresh(root / "decide")["configs"]
     with pytest.raises(ValueError, match="seed"):
-        score_blind({"seed": "other", "answers": {}})
+        score_blind({"seed": "other", "answers": {}}, REVIEWS["gate"])
 
 
 def test_blind_sides_are_stable_and_balanced():
@@ -184,3 +192,33 @@ def test_card_free_is_never_compared_with_card_anchored_columns():
     result = decide_numbers(synthetic())
     for c in result["classes"]["card_free"]["comparisons"]:
         assert c["baseline"] in ("camera_jpeg", "olympus_preset_jpeg")
+
+
+def test_chosen_reviews_get_their_own_page_key_and_answers(tmp_path):
+    root, correct_dir, cfg = _stage_fixture(tmp_path)
+    scores = json.loads((correct_dir / "scores.json").read_text())
+    for d in ("raw_card_wb_ccm", "raw_depth_wb_haze_ccm"):  # v0.3 images
+        (correct_dir / "images" / d).mkdir(parents=True)
+        for s in list(scores) + ["N1"]:
+            cv2.imwrite(str(correct_dir / "images" / d / f"{s}.jpg"),
+                        np.full((60, 80, 3), 128, np.uint8))
+    name, custom = custom_review("camera:raw_card_wb_ccm:card")
+    assert name == "camera_vs_raw_card_wb_ccm" and custom[0]["frames"] == "card"
+    stems = [f"F{i}" for i in range(0, 40, 4)]
+    answers = {f"v02_v03_card:{s}": nereus_side("v02_v03_card", s) for s in stems[:7]}
+    answers.update({f"v02_v03_card:{s}": "AB"[nereus_side("v02_v03_card", s) == "A"]
+                    for s in stems[7:]})
+    (tmp_path / "dataset_blind_answers_v02_v03.json").write_text(
+        json.dumps({"seed": SEED, "answers": answers}))
+    out = decide(correct_dir, cfg, CARD_PATH, {name: custom})
+    assert out["reviews"] == {"gate": 21, "v02_v03": 21, name: 10}
+    v3 = out["blind"]["v02_v03"]["v02_v03_card"]
+    assert (v3["prefer_candidate_n"], v3["prefer_reference_n"]) == (7, 3) and v3["rule_pass"]
+    page = (root / "decide" / "blind_v02_v03.html").read_text()
+    assert "s2a-blind-answers-v02_v03" in page and "dataset_blind_answers_v02_v03.json" in page
+    assert "'s2a-blind-answers'" in (root / "decide" / "blind.html").read_text()  # gate kept
+    assert "blind_v02_v03.html" in (root / "decide" / "index.html").read_text()
+    with pytest.raises(ValueError, match="not part of this review"):
+        score_blind({"seed": SEED, "answers": {"other:F0": "A"}}, custom)
+    with pytest.raises(ValueError, match="REF:CAND"):
+        custom_review("camera")
