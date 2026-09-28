@@ -22,7 +22,8 @@ Flash frames (the Olympus preset fired its flash) are scored on the camera's out
 (``flash: true``), since the flash breaks the water model; every preset frame records its
 nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset comparison.
 
-- Anchor grey: grey 128, else its right half, else grey 74 (whichever qc kept).
+- Anchor grey: the card's ``roles.wb_anchors``, first one qc kept (V2: grey 128, its right half,
+  grey 74).
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
   channel, capped at the **dark floor** — the ``DARK_PERCENTILE`` of the image centre
   (``CENTRE`` of each side; the corners are vignetted). How often the cap binds is logged.
@@ -65,7 +66,7 @@ from .ccm import MIN_AFFINE_PATCHES, affine_leave_one_out, fit_affine, leave_one
 from .metrics import score_linear, score_srgb8, srgb8_to_linear
 from .raw_io import RawFrame, bin2x2, normalize
 from .stages import run_parallel, verify_fresh, write_stage
-from .water_model import ANCHORS, fit_settings, grey_reflectance, ramp_fit
+from .water_model import fit_settings, grey_reflectance, ramp_fit
 
 DARK_PERCENTILE = 0.5
 CENTRE = 0.6
@@ -88,8 +89,6 @@ CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
                              "raw_card_wb_haze", "raw_card_wb_ccm", "raw_card_affine"),
            "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze",
                          "raw_depth_wb_haze_loso", "raw_depth_wb_haze_ccm")}
-ALL_GREYS = ("gray_white", "gray_light", "gray_mid", "gray_mid_left", "gray_mid_right",
-             "gray_dark", "gray_black")
 PRESET_CATEGORY = "2_underwater_preset"
 
 
@@ -195,7 +194,7 @@ def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, An
             means.update({pid: srgb8_to_linear(encode8(v))
                           for pid, v in job["affine"]["loo"].items()})
         stds = {pid: apply_std(job["raw_stds"][pid], gain, M) for pid in means}
-        neutral = ALL_GREYS if method in CLASSES["card_anchored"] else ()
+        neutral = card.grey_ids if method in CLASSES["card_anchored"] else ()
         out[method] = score_linear(means, card, neutralized=neutral, anchor=lm,
                                    exclude=excluded, stds=stds)
     jm, js = job.get("jpeg_means"), job.get("jpeg_stds")
@@ -208,11 +207,11 @@ def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, An
             gain = job["anchor_truth"] / np.maximum(lin[anchor], 1e-9)
             out["jpeg_card_wb"] = score_srgb8({k: encode8(v * gain).tolist()
                                                for k, v in lin.items()},
-                                              card, neutralized=ALL_GREYS, anchor=anchor,
+                                              card, neutralized=card.grey_ids, anchor=anchor,
                                               exclude=excluded)
     gm = job.get("grvi_means") or (jm if job.get("grvi_no_card") else None)
     if gm:
-        out["grvi_cheeca_v3"] = score_srgb8(gm, card, neutralized=ALL_GREYS, anchor=lm,
+        out["grvi_cheeca_v3"] = score_srgb8(gm, card, neutralized=card.grey_ids, anchor=lm,
                                             exclude=excluded)
         out["grvi_cheeca_v3"]["grvi_no_card"] = bool(job.get("grvi_no_card"))
     return out
@@ -223,7 +222,7 @@ def card_job(stem: str, row: dict, q: dict, patches: dict, grvi: Optional[dict],
     """Scoring inputs of one card frame: qc-kept patch means per source (RAW, camera JPEG,
     GRVI output), the anchor grey and the card-ramp fit."""
     keep = {pid for pid, p in q["patches"].items() if p["usable"]}
-    anchor = next((a for a in ANCHORS if a in keep), None)
+    anchor = next((a for a in card.roles.wb_anchors if a in keep), None)
     jpeg = (patches.get("jpeg") or {"patches": {}})["patches"]
     job: dict[str, Any] = {
         "stem": stem, "category": row["category"], "depth_m": float(row["depth_m"]),
@@ -237,7 +236,7 @@ def card_job(stem: str, row: dict, q: dict, patches: dict, grvi: Optional[dict],
         raw_stats = patches["raw"]["patches"]
         k = patches["raw"]["exposure_factor"]
         job.update(
-            ramp=ramp_fit(raw_stats, keep, rho),
+            ramp=ramp_fit(raw_stats, keep, rho, card.roles.ramp),
             raw_means={pid: s["mean_norm"] for pid, s in raw_stats.items()
                        if pid in keep and s.get("mean_norm")},
             raw_stds={pid: (np.asarray(s["std"]) / k).tolist() for pid, s in
@@ -448,7 +447,7 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
          "training_frames": len(obs), "held_out_dive": ccm}, indent=1) + "\n")
     write_stage(out_dir, "correct", configs=[calibration, dataset_config, card_path],
                 upstream=[fit_dir] + ([grvi_dir] if grvi else []),
-                params={"version": "v0.3", "anchors": list(ANCHORS),
+                params={"version": "v0.3", "anchors": list(card.roles.wb_anchors),
                         "table_source_dives": sources,
                         "dark_percentile": DARK_PERCENTILE,
                         "centre": CENTRE, "target_p99": TARGET_P99})

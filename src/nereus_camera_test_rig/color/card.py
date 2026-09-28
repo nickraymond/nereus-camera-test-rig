@@ -63,6 +63,21 @@ class Tag:
 
 
 @dataclass(frozen=True)
+class Roles:
+    """Which patches do what (card YAML ``roles``), so no stage hard-codes a card's patch ids.
+
+    ``wb_anchors``: greys to white-balance on, in preference order (first usable wins).
+    ``ramp``: non-black greys for the straight-line light + haze fit; an entry may be a list of
+    alternatives (first usable wins — e.g. a half standing in for a damaged whole).
+    ``haze``: the black patch (backscatter; its print reflectance is not trusted).
+    """
+
+    wb_anchors: tuple[str, ...]
+    ramp: tuple[tuple[str, ...], ...]
+    haze: Optional[str]
+
+
+@dataclass(frozen=True)
 class Card:
     card_id: str
     path: Path
@@ -78,6 +93,24 @@ class Card:
     truth_source: str
     patches: tuple[Patch, ...]
     sub_patches: tuple[SubPatch, ...]
+    roles: Roles
+    quad_ratio: Optional[float] = None  # tag-centre quad width / height
+
+    @property
+    def aruco_dictionary(self) -> str:
+        """OpenCV ArUco dictionary for ``tag_family`` (``tag25h9`` → ``DICT_APRILTAG_25h9``)."""
+        fam = self.tag_family
+        return fam if fam.startswith("DICT_") else f"DICT_APRILTAG_{fam.removeprefix('tag')}"
+
+    @property
+    def grey_ids(self) -> tuple[str, ...]:
+        """Every neutral region: the grey patches and their sub-patches."""
+        greys = [p.id for p in self.group("grey")]
+        return tuple(greys + [s.id for s in self.sub_patches if s.parent in greys])
+
+    def parent_of(self, region_id: str) -> str:
+        """The patch a sub-patch belongs to (a patch is its own parent)."""
+        return next((s.parent for s in self.sub_patches if s.id == region_id), region_id)
 
     @property
     def physically_measured(self) -> bool:
@@ -162,6 +195,18 @@ def load_card(path: str | Path) -> Card:
             raise CardError(f"{sw}: box {list(vars(box).values())} is outside parent {parent!r}")
         subs.append(SubPatch(str(_get(raw, "id", sw)), parent, box))
 
+    regions = set(by_id) | {s.id for s in subs}
+    rw = f"{where}: roles"
+    raw_roles = _get(data, "roles", where)
+    anchors = tuple(str(a) for a in _get(raw_roles, "wb_anchors", rw))
+    ramp = tuple(tuple(str(a) for a in (e if isinstance(e, list) else [e]))
+                 for e in _get(raw_roles, "ramp", rw))
+    haze = raw_roles.get("haze")
+    unknown = sorted({a for a in anchors + sum(ramp, ()) + ((haze,) if haze else ())}
+                     - regions)
+    if unknown:
+        raise CardError(f"{rw}: unknown patch ids {unknown}")
+
     truth = _get(data, "truth", where)
     physical = dict(_get(data, "physical_mm", where))
     physical_source = str(physical.pop("source", "unspecified"))
@@ -180,4 +225,14 @@ def load_card(path: str | Path) -> Card:
         truth_source=str(_get(truth, "source", where)),
         patches=tuple(patches),
         sub_patches=tuple(subs),
+        roles=Roles(anchors, ramp, None if haze is None else str(haze)),
+        quad_ratio=_quad_ratio(april, physical),
     )
+
+
+def _quad_ratio(april: dict, physical: dict) -> Optional[float]:
+    """``apriltag.quad_ratio``, else the tag-centre spacing x / y from ``physical_mm``."""
+    if april.get("quad_ratio") is not None:
+        return float(april["quad_ratio"])
+    x, y = physical.get("tag_center_spacing_x"), physical.get("tag_center_spacing_y")
+    return float(x) / float(y) if x and y else None

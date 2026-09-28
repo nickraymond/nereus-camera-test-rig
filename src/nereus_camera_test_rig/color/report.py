@@ -63,7 +63,7 @@ def score_before(patches: dict, qc: dict, card: Card) -> dict[str, dict]:
         keep = {pid for pid, p in q["patches"].items() if p["usable"]}
         stats = {pid: s for pid, s in jpeg["patches"].items() if pid in keep and s.get("mean")}
         excluded = [pid for pid in q["patches"] if pid not in keep]
-        anchor = "gray_mid" if "gray_mid" in keep else "gray_mid_right"
+        anchor = next((a for a in card.roles.wb_anchors if a in keep), card.roles.wb_anchors[0])
         s = score_srgb8({k: v["mean"] for k, v in stats.items()}, card, neutralized=(),
                         anchor=anchor, exclude=excluded,
                         stds={k: v["std"] for k, v in stats.items()})

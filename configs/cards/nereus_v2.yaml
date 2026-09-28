@@ -37,6 +37,14 @@ apriltag:
   family: tag36h11            # OpenCV DICT_APRILTAG_36h11
   corner_map: {tl: 0, tr: 1, bl: 2, br: 3}
 
+# What each patch is used for (stages read this; none hard-codes patch ids). V2: white-balance
+# on grey 128, its right half when the whole is excluded (the left half is water-damaged),
+# grey 74 last; the ramp takes one of grey 128 / its right half; black is the haze patch.
+roles:
+  wb_anchors: [gray_mid, gray_mid_right, gray_dark]
+  ramp: [gray_white, gray_light, gray_dark, [gray_mid, gray_mid_right]]
+  haze: gray_black
+
 canonical:                     # rectified frame: tag-centre quad expanded about its centre
   width: 3000
   height: 1000

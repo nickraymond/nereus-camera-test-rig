@@ -11,7 +11,6 @@ import pytest
 
 from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.correct import (
-    ALL_GREYS,
     apply,
     apply_std,
     dark_floor,
@@ -41,11 +40,11 @@ def card_means(light=LIGHT, haze=HAZE):
 
 def test_ramp_fit_recovers_light_and_haze():
     raw = {pid: {"mean_norm": v} for pid, v in card_means().items()}
-    fit = ramp_fit(raw, set(raw), RHO)
+    fit = ramp_fit(raw, set(raw), RHO, CARD.roles.ramp)
     np.testing.assert_allclose(fit["A"], LIGHT, atol=1e-9)
     np.testing.assert_allclose(fit["H"], HAZE, atol=1e-9)
     assert "gray_black" not in fit["greys"]
-    assert ramp_fit(raw, {"gray_dark"}, RHO) is None  # one grey: no line
+    assert ramp_fit(raw, {"gray_dark"}, RHO, CARD.roles.ramp) is None  # one grey: no line
 
 
 def test_depth_table_leaves_the_frames_own_dive_out(tmp_path):
@@ -76,7 +75,8 @@ def test_dark_floor_ignores_the_vignetted_corners():
 def job(means):
     return {"anchor": "gray_mid", "anchor_truth": float(srgb8_to_linear(128)), "excluded": [],
             "raw_means": means, "raw_stds": {k: [1e-4] * 3 for k in means},
-            "ramp": ramp_fit({k: {"mean_norm": v} for k, v in means.items()}, set(means), RHO),
+            "ramp": ramp_fit({k: {"mean_norm": v} for k, v in means.items()}, set(means), RHO,
+                             CARD.roles.ramp),
             "depth_m": 8.0, "category": "1_reference_A_iso100",
             "table": {"ln_rg": [float(np.log(LIGHT[0] / LIGHT[1])), 0.0],
                       "ln_bg": [float(np.log(LIGHT[2] / LIGHT[1])), 0.0]}}
@@ -95,7 +95,7 @@ def test_card_haze_method_recovers_the_card_and_classes_share_patches():
     # card-anchored methods are all scored on colour patches only (every grey held out)
     for m in ("raw_card_wb", "raw_card_wb_haze"):
         assert scores[m]["n_psi"] == 0 and scores[m]["n_de"] == 12
-    assert set(ALL_GREYS) >= {p.id for p in CARD.group("grey")}
+    assert set(CARD.grey_ids) >= {p.id for p in CARD.group("grey")}
 
 
 def test_grvi_column_is_card_anchored_and_falls_back_to_the_camera_jpeg():
