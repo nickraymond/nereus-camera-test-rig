@@ -190,6 +190,12 @@ def fit_dive(obs: list[dict]) -> dict[str, Any]:
     return out
 
 
+# Minimum reflectance span of the greys in a ramp fit (a conditioning guard). 0.08, not 0.1:
+# with the measured V2 print, grey 74 reads 0.117 and grey 128 0.216 (span 0.099) — the only
+# two greys left on the water-damaged card — and 0.1 dropped 78 frames' light estimates.
+RAMP_MIN_SPAN = 0.08
+
+
 def ramp_fit(raw: dict, keep: set, rho: dict, ramp) -> Optional[dict[str, Any]]:
     """Per-channel straight line through the usable greys: I = A·ρ + H.
 
@@ -197,12 +203,12 @@ def ramp_fit(raw: dict, keep: set, rho: dict, ramp) -> Optional[dict[str, Any]]:
     haze. Uses the card's ``roles.ramp`` greys (one of each set of alternatives; V2: white,
     grey 200, grey 74 and grey 128 or its right half) — never black, whose print reflectance is
     not known (colour review 2026-09-27: the single-frame black estimate over-predicted haze
-    ~3×). Needs ≥ 2 greys spanning ≥ 0.1 in reflectance.
+    ~3×). Needs ≥ 2 greys spanning ≥ ``RAMP_MIN_SPAN`` in reflectance.
     """
     ids = [first_usable(alts, keep.__contains__) for alts in ramp]
     ids = [p for p in ids if p and raw.get(p, {}).get("mean_norm")]
     x = np.array([rho[p] for p in ids])
-    if len(ids) < 2 or np.ptp(x) < 0.1:
+    if len(ids) < 2 or np.ptp(x) < RAMP_MIN_SPAN:
         return None
     Y = np.array([raw[p]["mean_norm"] for p in ids])
     X = np.c_[x, np.ones_like(x)]
