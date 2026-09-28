@@ -105,7 +105,9 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 
 ## Video (Pi)
 
-- **[RESOLVED-CONSTRAINT] OQ-17 — Video codec on the Pi 5.** The Pi 5 has **no
+- **[RESOLVED-CONSTRAINT] OQ-17 — Video codec on the Pi 5.** *Pi 5 only:* the Zero 2 W rig
+  (`nereus002`, OQ-15) has a hardware H.264 encoder — re-check `rpicam-vid` codecs there when
+  video is next needed. The Pi 5 has **no
   hardware H.264 encoder**, and `nereus000`'s `rpicam-vid` was built **without libav**
   (`--codec libav` → "Unrecognised codec"; `--codec h264` → "Unable to find an
   appropriate H.264 codec"). Working dependency-free codecs are `mjpeg` and `yuv420`.
@@ -137,10 +139,16 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   imported it (the planned HEIC-encode port was never built) and its wheels carry a GPLv2
   classifier (SPEC §20 licence policy). If HEIC is needed later, add it to an internal-only
   extra with a `configs/licenses.yaml` review; it must not enter the shipped closure.
-- **[RESOLVED] OQ-15 — Target Pi model / OS version.** `nereus000` = Raspberry Pi 5
-  (BCM2712), Debian 13 "trixie", aarch64, Python 3.13, kernel 6.18. More memory/CPU than the
-  Pi Zero 2W the prior art was tuned for, so the isolated-subprocess memory workarounds are
-  less critical here (keep them anyway — cheap insurance).
+- **[CHANGED 2026-09-28] OQ-15 — Target Pi model / OS version.** **The rig is now `nereus002`,
+  a Raspberry Pi Zero 2 W** with the IMX708, N6 and AE3 (Nick, 2026-09-28): the field units are
+  Zero 2 W class and the Pi 5 will not be used for field testing, so no Pi 5 support is needed.
+  Zero 2 W constraints to plan for: 512 MB RAM (the prior art's isolated-subprocess memory
+  workarounds matter again; measure OpenCV card analysis on 12 MP frames), one USB OTG data
+  port (a powered hub for the two OpenMV boards), VC4 ISP. OS, arch (32/64-bit), kernel and
+  Python version: record at bring-up. *History:* Phases 1–6 were built and verified on
+  `nereus000` = Raspberry Pi 5 (BCM2712), Debian 13 "trixie", aarch64, Python 3.13, kernel
+  6.18. That Pi has since been repurposed (not the rig), so every hardware result from it is
+  re-verified on `nereus002` before S3.
 - **[OPEN] OQ-16 — `opencv-contrib-python` on the Pi.** ArUco requires the contrib build;
   confirm it installs cleanly on the target Pi OS/arch (wheels availability).
 
@@ -178,15 +186,16 @@ Items for Nick are marked **(Nick)**.
   it — a 2 MB frame must finish inside that. Expected payload is 1.0 MB (8-bit) or 2.0 MB (16-bit) per HD frame over
   the existing length-framed path (512 B board-side chunks, SHA-256 verified). Measure on
   both boards; log it in `capture.json`.
-- **[NEEDS-HARDWARE] OQ-24 — `rpicam-still --raw` on the Pi 5.** *Blocks S3; the S0 DNG
+- **[NEEDS-HARDWARE] OQ-24 — `rpicam-still --raw` on the rig Pi (`nereus002`, Zero 2 W; was
+  "on the Pi 5").** *Blocks S3; the S0 DNG
   demo needs one sample.* Does it write a DNG from the same frame as the JPEG, and do the
   DNG's tags match the exposure/gains in `--metadata`? The adapter never passes `--raw`
   today (`cameras/imx708.py` builds `--width/--height/--metadata` + optional controls), but
   it already records ExposureTime / AnalogueGain / ColourGains from `--metadata` (OQ-10),
   so there is a ready comparison. Also unverified: that `tifffile` reads the rpicam DNG.
-  For S0: one manual `rpicam-still --raw` capture on `nereus000` (no code change) gives the
+  For S0: one manual `rpicam-still --raw` capture on the rig (no code change) gives the
   sample; the full answer is S3.
-- **[NEEDS-HARDWARE] OQ-25 — Pi 5 processing time for full-res IMX708 RAW through physics
+- **[NEEDS-HARDWARE] OQ-25 — Zero 2 W (rig / field Pi) processing time for full-res IMX708 RAW through physics
   v0.** *Informational, S3+.* Measure once `color/pipeline.py` exists. Fallback if too slow:
   the 2304×1296 binned sensor mode (brief §10).
 - **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
@@ -296,13 +305,13 @@ Items for Nick are marked **(Nick)**.
   pipeline needs only core / imgproc / calib3d / objdetect (ArUco AprilTag) — no video.
   Options to verify: (a) build OpenCV from source with FFmpeg/video I/O off
   (`-DWITH_FFMPEG=OFF` etc.) for the Pi and backend images; (b) a distro package, only if
-  its linked libraries check out. Each option must still import on the Pi 5 (aarch64,
-  Python 3.13) and keep `DICT_APRILTAG_36h11`. Mac analysis tools may keep the PyPI wheel
+  its linked libraries check out. Each option must still import on the rig Pi (Zero 2 W,
+  OQ-15) and keep `DICT_APRILTAG_36h11`. Mac analysis tools may keep the PyPI wheel
   (internal use). The acceptance test exists: `make license-check-shipped` runs the
   `cv2_without_ffmpeg` probe (`cv2.getBuildInformation()` must not report `FFMPEG: YES`);
   on the Mac PyPI wheel it fails as expected. Also pending: run it on the Pi to review what
-  the Linux numpy wheel bundles (OpenBLAS / gfortran runtime) — blocked 2026-09-26 by an
-  SSH host-key mismatch for `nereus000` (not bypassed; owner to confirm the key).
+  the Linux numpy wheel bundles (OpenBLAS / gfortran runtime) (on `nereus002`; the 2026-09-26 block
+  was `nereus000`, which is no longer the rig).
 - **[OPEN] OQ-37 — TG-7 `ShadingCompensation2: On`.** *S2a.* The ORFs report
   `ShadingCompensation: Off` but `ShadingCompensation2: On`. Unverified whether the camera
   JPEG is shading- (vignetting-) corrected while the RAW is not. Matters for comparing

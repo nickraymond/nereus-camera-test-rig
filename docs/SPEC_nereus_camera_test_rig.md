@@ -122,6 +122,11 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 - [x] Side-by-side outputs, AprilTag pass/fail, annotated + cropped images, per-file and full-ZIP download. *(Plus, at owner request: a view-time color-patch check — grey-ramp/color ΔE + color cast vs the V2 card design values sampled through the real rectification pipeline — and a shareable cut-sheet export as PNG/PDF.)*
 - [x] **Exit:** A capture can be triggered and reviewed in the browser and downloaded as a ZIP. ✅ verified live on `nereus000` over Tailscale (2026-07-16): `http://nereus000:8080` reachable from the Mac; a browser-form capture produced `exp_20260716T224301Z_reference_card_above_water` with all three cameras completing (4/4 tags each), reviewed side-by-side, ZIP downloaded (18 files). *Also 13 Mac web tests green against coordinator-produced §13 folders. Live color check immediately surfaced real findings: AE3 strong green cast (grey ΔE 39.7), N6 underexposed (mean luma 95), IMX708 mounted inverted.*
 
+### Rig move to `nereus002` (Pi Zero 2 W, 2026-09-28)
+Phases 1–6 were verified on `nereus000` (Pi 5), since repurposed. The rig is now `nereus002`, a Pi Zero 2 W with the IMX708, N6 and AE3 on a powered USB hub (OQ-15; no Pi 5 support needed).
+- [ ] Bring-up: SSH key, `scripts/install_pi.sh`, deploy, record OS / arch / RAM / rpicam version (OQ-15).
+- [ ] Re-verify on `nereus002`: `./scripts/test_imx708.sh`, `./scripts/test_openmv_n6.sh`, `./scripts/test_openmv_ae3.sh`, `./scripts/test_experiment.sh`, web review + ZIP. Record capture and analysis time and peak memory on 12 MP frames (512 MB RAM).
+
 ### Phase 7 — Evaluation experiments
 - [ ] Repeatable experiment profiles: above-water card, below-water card, artificial + ambient light, low light, turbidity, fixed-distance resolution, purple-ball dataset collection, static video clips.
 - **Exit:** Each profile runs from a config file and produces a self-contained, comparable result folder.
