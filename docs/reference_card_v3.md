@@ -63,6 +63,17 @@ Simulated patch range (card turned up to 40°; relative only, OQ-43): on the N6,
 - Double-sided: front = `nereus_v3_cN_front`, back = `nereus_v3_cN_back` (the back label names the
   card). Order a test coupon first.
 
+## Vendor options (checked 2026-09-27)
+
+| Route | What you get | Cost / lead | For | Against |
+|---|---|---|---|---|
+| **Sticker Mule** rectangle sticker, mounted on 3–6 mm ACM or acrylic | Vinyl + protective laminate (215 g/m², solvent inks), matte on die-cut; rectangles up to 36 × 24 in; 10 per design minimum ([max size](https://www.stickermule.com/support/largest-sticker-you-can-make), [FAQ](https://www.stickermule.com/support/faq/custom-stickers)) | Low; fast | Cheap prototypes; all plastic, so no paper to wick water (the V2 failure) | No colour management or K-only greys; laminate / adhesive can lift at the edges; mounting can bubble or stretch (measure tag spacing after mounting); continuous immersion not explicitly rated |
+| **calib.io custom** | UV print on 6 mm aluminium composite, matte, optional anti-reflection coating | Nick's quote ~$350 / card, ~3 weeks | Calibration-grade maker; same process as their stock boards | Cost; the anti-reflection coating mostly helps in air (first-surface reflection ≈ 4 % in air, ≈ 0.4 % against water), so under water its benefit is small |
+| **calib.io stock ChArUco** 400 × 300 mm, coarse, aluminium composite (CCT400300C) | 6 mm ACM, matte UV print, "up to 3 years" outdoors, 6.6 kg/m² ([product](https://calib.io/products/charuco-targets)) | €134, in stock | Lens intrinsics + distortion for the N6 / AE3 / TG-7 **now**, in air and in water; a direct check of the vendor's matte finish and flatness | Calibration only (no colour patches); default dictionary is 5×5 |
+
+Matte surfaces look glossier and darker when wet (water fills the surface texture), whichever vendor
+prints the card; the wet measurement (checklist step 6) captures this.
+
 ## Print and measurement checklist
 
 1. [ ] Test coupon from the chosen vendor: the 4 greys + 8 colours + one tag, same substrate and inks.

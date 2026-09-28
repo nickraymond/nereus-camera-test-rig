@@ -351,7 +351,10 @@ Items for Nick are marked **(Nick)**.
 - **[OPEN] OQ-45 — Print vendor, substrate and ink recipes (Nick).** *Blocks printing V3.* UV print
   on 3 mm ACM or rigid PVC, matte, no optical brighteners, greys K-only. Not verified: the vendor's
   gamut for the 8 design colours, their ability to print K-only greys, flatness, and immersion
-  durability (test coupon + 5-day soak first).
+  durability (test coupon + 5-day soak first). Options (docs/reference_card_v3.md, "Vendor
+  options"): a Sticker Mule vinyl sticker mounted on a rigid board (cheap prototypes, no colour
+  control) or a calib.io custom card (UV print on 6 mm ACM, Nick's quote ~$350 / card, ~3 weeks).
+  Nick is evaluating a calib.io stock ChArUco board (400 × 300 mm, €134) first.
 - **[OPEN] OQ-46 — Measured card truth in the card YAML.** *Before the V3 dive.* `color/card.py`
   accepts only integer sRGB `truth`. Measured values (reflectance or Lab, dry and wet, per physical
   card) need a schema addition, e.g. `truth: design | measured` with per-patch measured values and
