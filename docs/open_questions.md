@@ -338,6 +338,12 @@ Items for Nick are marked **(Nick)**.
   scene (the v0.3 "yellow cast" Nick rejected in the blind review); fitted to the in-air reading
   it does not. Until the card is measured with an instrument, the in-air reading is the better
   truth for fitting; the V3 dive's dry reference shots are the minimum, a spectro reading better.
+  **Flare caveat (2026-09-27, `measure-card`, PR #50):** scaled so grey 128 = 128, the in-air
+  reading puts white at 268 and **black at 83** on the 8-bit scale — the grey ramp is compressed at
+  both ends. A matte black print should read far lower, so flare or glare on the deck frames
+  likely lifts the dark end (and pales dark colours). The measured greys and dark patches are
+  therefore upper bounds; a flare-free reading (shaded, black surround, or an instrument) is
+  needed before black is trusted for haze.
 - **[OPEN] OQ-41 — Light changes between frames.** *S2a fit.* Exposure-normalized brightness jumps
   up to 3× between consecutive frames on shallow sunny dives (caustics), and dives 1–2 drift
   through the dive (sunset, morning). The colour of the light is stable enough to use (ratios
@@ -387,11 +393,17 @@ Items for Nick are marked **(Nick)**.
   options"): a Sticker Mule vinyl sticker mounted on a rigid board (cheap prototypes, no colour
   control) or a calib.io custom card (UV print on 6 mm ACM, Nick's quote ~$350 / card, ~3 weeks).
   Nick is evaluating a calib.io stock ChArUco board (400 × 300 mm, €134) first.
-- **[OPEN] OQ-46 — Measured card truth in the card YAML.** *Before the V3 dive.* `color/card.py`
-  accepts only integer sRGB `truth`. Measured values (reflectance or Lab, dry and wet, per physical
-  card) need a schema addition, e.g. `truth: design | measured` with per-patch measured values and
-  their source. The S2a session agreed to add a `truth:` option once dry reference shots exist.
-- **[OPEN] OQ-47 — Pipeline "card V3 readiness".** *Before V3 data.* `locate.py` calls
+- **[RESOLVED] OQ-46 — Measured card truth in the card YAML.** *Before the V3 dive.* Resolved by
+  PR #50 (2026-09-27): the `measure-card` stage reads the card on in-air frames (dataset
+  `card_reference_frames`) and prints a `measured:` block, reviewed and pasted into the card YAML;
+  `color/card.py` then uses the measured values as the truth everywhere and keeps each patch's
+  design value beside it (`decide` shows both). V2: `configs/cards/nereus_v2.yaml`, 3 deck frames,
+  scaled so grey 128 = 128. V3 cards need the same block from their dry reference shots (or an
+  instrument reading) before their results are trusted.
+- **[RESOLVED] OQ-47 — Pipeline "card V3 readiness".** Resolved by PRs #46 (card `roles`) and #47
+  (`TagSpec`: family + quad-ratio range from the card YAML, 2× pass on frames ≤ 3 MP); the
+  border-cut guard was not adopted (it rejected whole TG-7 tags near the frame edge, SPEC §4 S2a).
+  Original question: *Before V3 data.* `locate.py` calls
   `detect_tags` without the card's family (so tag25h9 is never detected) and uses V2's
   `RATIO_RANGE` (2.5–6.0; V3's tag quad is 1.83); it has no guard for tags cut by the image border
   (they decode with corners 22–58 px wrong in simulation); `water_model` / `correct` / `metrics` /
