@@ -186,8 +186,16 @@ Items for Nick are marked **(Nick)**.
   it — a 2 MB frame must finish inside that. Expected payload is 1.0 MB (8-bit) or 2.0 MB (16-bit) per HD frame over
   the existing length-framed path (512 B board-side chunks, SHA-256 verified). Measure on
   both boards; log it in `capture.json`.
-- **[NEEDS-HARDWARE] OQ-24 — `rpicam-still --raw` on the rig Pi (`nereus002`, Zero 2 W; was
-  "on the Pi 5").** *Blocks S3; the S0 DNG
+- **[RESOLVED 2026-09-28] OQ-24 — `rpicam-still --raw` on the rig Pi (`nereus002`, Zero 2 W; was
+  "on the Pi 5").** **Answer (real hardware, `scripts/capture_raw_imx708.py`):** one exposure
+  gives JPEG + DNG; with `--mode 4608:2592` the DNG is full resolution, 16-bit, uncompressed,
+  BGGR, black 64 / white 1023 (10-bit), 24,029,068 B (without `--mode` the September captures
+  were 2304×1296 binned). The DNG's ExposureTime and ISO match `--metadata`; AsShotNeutral is
+  the inverse of the locked ColourGains to ~1 %. The raw sits in a **SubIFD** with the colour
+  tags in IFD0 — `read_dng` missed them until PR #60. No **FNumber** tag: the fixed aperture
+  must come from the camera's calibration file. The sensor's lowest analogue gain is
+  **1.1228** (1.0 is clamped; read back). `tifffile` reads it (`NEREUS_IMX708_DNG` test).
+  *Original question:* *Blocks S3; the S0 DNG
   demo needs one sample.* Does it write a DNG from the same frame as the JPEG, and do the
   DNG's tags match the exposure/gains in `--metadata`? The adapter never passes `--raw`
   today (`cameras/imx708.py` builds `--width/--height/--metadata` + optional controls), but
@@ -435,9 +443,10 @@ Items for Nick are marked **(Nick)**.
 - **[OPEN] OQ-49 — Linear JPEG XL on the field camera.** The prototype (RAW → black subtract
   → 2×2 bin → WB gains + square-root curve → 10-bit JPEG XL, inverted in the cloud) is
   measured only on one TG-7 ORF on the Mac: d1.0 → 42–47 KB for a 1600×900 crop, region
-  means within p99 0.6–1.8 %. Unknown: (1) libjxl on the bmcam Pi (Debian `libjxl-tools`
-  version, encode time and memory on that Pi model); (2) the same numbers on IMX708 DNGs
-  (10-bit, 1.4 µm pixels; needs OQ-24); (3) whether 2×2 binning (half resolution) is
+  means within p99 0.6–1.8 %. **(1) and (2) answered 2026-09-28 on `nereus002` (Zero 2 W):**
+  Debian `libjxl-tools` 0.11.2; `cjxl` 1.6 s (effort 7) / 0.8 s (effort 5) per 800×450
+  10-bit frame, decode 0.1 s, `jxl-check` peak RSS 134 MB; IMX708 full-res DNGs, d1.0 →
+  28–38 KB, region p99 1.8–3.2 % (lower at higher exposure). Still unknown: (3) whether 2×2 binning (half resolution) is
   acceptable or the cloud needs a demosaiced full-resolution crop (size not measured);
   (4) how the backend stores and decodes the files. The codec is transport only — no BM /
   cellular code in this repo (SPEC §2).

@@ -46,7 +46,7 @@ Pillow 12.3.0; GRVI peaks at ~4.2 GB per 12 MP frame, so the stage runs 4 frames
 
 ```bash
 brew install jpeg-xl   # cjxl / djxl (libjxl) — Mac
-python -m host_tools.color jxl-check <file.orf|file.dng> [--distance 1.0] [--wb r,g,b]
+python -m host_tools.color jxl-check <file.orf|file.dng> [--jxl-distance 1.0] [--wb r,g,b]
 ```
 
 Verified 2026-09-28: libjxl 0.11.1 (Homebrew `jpeg-xl` 0.11.1_3), 10-bit PPM round trip

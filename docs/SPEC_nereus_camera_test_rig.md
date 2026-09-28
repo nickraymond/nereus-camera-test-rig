@@ -124,8 +124,8 @@ Ordered deliverables. Each phase ends with **Exit criteria** that must pass befo
 
 ### Rig move to `nereus002` (Pi Zero 2 W, 2026-09-28)
 Phases 1–6 were verified on `nereus000` (Pi 5), since repurposed. The rig is now `nereus002`, a Pi Zero 2 W with the IMX708, N6 and AE3 on a powered USB hub (OQ-15; no Pi 5 support needed).
-- [ ] Bring-up: SSH key, `scripts/install_pi.sh`, deploy, record OS / arch / RAM / rpicam version (OQ-15).
-- [ ] Re-verify on `nereus002`: `./scripts/test_imx708.sh`, `./scripts/test_openmv_n6.sh`, `./scripts/test_openmv_ae3.sh`, `./scripts/test_experiment.sh`, web review + ZIP. Record capture and analysis time and peak memory on 12 MP frames (512 MB RAM).
+- [x] Bring-up: SSH key, `scripts/install_pi.sh`, deploy, record OS / arch / RAM / rpicam version (OQ-15). *(2026-09-28: Debian 13 trixie, aarch64 (64-bit), kernel 6.18.34, Python 3.13.5, 415 MB RAM, `rpicam-apps` 1.12, `imx708_wide`; repo at `~/nereus-camera-test-rig`, venv with `[dev,analysis,serial,web,color]` from wheels (OpenCV 5.0.0, numpy 2.5.3), `libjxl-tools` 0.11.2. Nick's field software (`~/ADIN_SPI_OpenMV`, workbench on :8088) shares the cameras: stop its recipe with `POST :8088/api/stop` before rig work.)*
+- [~] Re-verify on `nereus002`: `./scripts/test_imx708.sh`, `./scripts/test_openmv_n6.sh`, `./scripts/test_openmv_ae3.sh`, `./scripts/test_experiment.sh`, web review + ZIP. Record capture and analysis time and peak memory on 12 MP frames (512 MB RAM). *(IMX708 PASS 2026-09-28: 4608×2592 JPEG + metadata in 5.4 s. The OpenMV scripts deploy the rig's capture service to the boards, which also carry Nick's workbench files — waiting on Nick's OK. The board now enumerating next to the AE3 has serial `020023000450433547373200`, not the Phase 3 N6 `005537493543`.)*
 
 ### Phase 7 — Evaluation experiments
 - [ ] Repeatable experiment profiles: above-water card, below-water card, artificial + ambient light, low light, turbidity, fixed-distance resolution, purple-ball dataset collection, static video clips.
@@ -192,7 +192,7 @@ Detail: [`docs/reference_card_v3.md`](reference_card_v3.md). Designed with Nick 
 #### Field transport — linear JPEG XL prototype (Nick, 2026-09-28)
 Codec only, for the next field deployment's "RAW to the cloud" path; no BM / cellular code (§2).
 - [x] `color/linear_jxl.py`: linear RGB (black-subtracted, 2×2-binned RAW) → per-channel gains (the WB, scaled so nothing clips) + square-root curve + pedestal → 10-bit JPEG XL via libjxl's `cjxl`, with a JSON sidecar (gains, curve, bits, SHA-256, capture metadata); `decode` checks the checksum and inverts exactly to linear RGB. Smoke: `python -m host_tools.color jxl-check <raw>`. *(TG-7 P9150344, 15.5 m, 1600×900 crop: d1.0 → 42–47 KB, 32 px region means p99 0.6–1.8 %, median 0.1 %; lossless 709 KB. Unit tests: exact lossless codes, lossy region means p99 < 2 %, no near-black bias, truncated file rejected.)*
-- [ ] Same check on IMX708 DNGs and on the field Pi (OQ-49).
+- [x] Same check on IMX708 DNGs and on the field Pi (OQ-49). *(2026-09-28, `nereus002`: `scripts/capture_raw_imx708.py` DNGs, full res, centred 1600×900 crop: d1.0 → 28 / 32 / 38 KB, region p99 3.2 / 2.3 / 1.8 % at −1 / 0 / +1 stop. On the Zero 2 W: `jxl-check` 15.5 s end to end, peak RSS 134 MB; `cjxl` alone on the 800×450 10-bit frame 1.6 s at effort 7, 0.8 s at effort 5 (same size), decode 0.1 s.)*
 
 #### S3–S8 — Rig work (outline, gated on the S2a decision)
 Not started until S2a is **Go**; a no-go changes what the rig should test. Each gets full checklist items + exit criteria when scheduled.
