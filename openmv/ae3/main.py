@@ -9,8 +9,8 @@ dispatches to the shared services, and replies with structured JSON (+ framed bi
 Ensemble part; its firmware has **no ``pyb`` module**, so ``pyb.USB_VCP()`` (used by the
 N6) is unavailable *on any AE3 firmware* — ``pyb`` is STM32-specific. The AE3's USB CDC is
 reached instead through the standard MicroPython console streams ``sys.stdin.buffer`` /
-``sys.stdout.buffer`` with a ``select.poll`` for non-blocking reads. ``_UsbVcp`` below
-wraps those to expose the same ``any()`` / ``read(n)`` / ``write(bytes)`` interface the
+``sys.stdout.buffer`` with a ``select.poll`` for non-blocking reads.
+``usb_console.UsbConsole`` (shared with the N6 on v5 firmware) wraps those to expose the same ``any()`` / ``read(n)`` / ``write(bytes)`` interface the
 shared ``capture_service`` and the dispatch loop expect — so this is the *only*
 board-specific code, and the shared services stay untouched (CLAUDE.md §6/§36).
 
@@ -24,53 +24,13 @@ redeploy regain control. The host protocol is JSON text and never sends 0x03. Bi
 flows board -> host.
 """
 
-import select
-import sys
 import time
 
 import board_config
 import capture_service
 import command_protocol as cp
 import device_info
-
-
-class _UsbVcp:
-    """USB CDC shim exposing a ``pyb.USB_VCP``-like interface over the console streams.
-
-    ``any()`` reports whether at least one byte is readable (non-blocking, via poll);
-    ``read(n)`` returns up to ``n`` currently-available bytes without blocking; ``write``
-    sends raw bytes to the host, looping over partial writes so full JPEG payloads are
-    delivered intact (§10). Reads go one byte at a time guarded by the poll so a read can
-    never block the service — command lines are short, and the outer loop drains quickly.
-    """
-
-    def __init__(self):
-        self._in = sys.stdin.buffer
-        self._out = sys.stdout.buffer
-        self._poll = select.poll()
-        self._poll.register(self._in, select.POLLIN)
-
-    def any(self):
-        return 1 if self._poll.poll(0) else 0
-
-    def read(self, n):
-        out = bytearray()
-        while len(out) < n and self._poll.poll(0):
-            b = self._in.read(1)
-            if not b:
-                break
-            out += b
-        return bytes(out)
-
-    def write(self, data):
-        mv = memoryview(data)
-        total = 0
-        n = len(mv)
-        while total < n:
-            w = self._out.write(mv[total:])
-            if w:
-                total += w
-            # w is None/0 when the CDC would block; retry until the host drains it.
+from usb_console import UsbConsole
 
 
 def _send(usb, message):
@@ -115,7 +75,7 @@ def _handle_line(usb, line):
 
 def run():
     """Read-dispatch loop. Accumulates bytes and processes complete newline lines."""
-    usb = _UsbVcp()
+    usb = UsbConsole()
     buffer = b""
     while True:
         chunk = usb.read(256)

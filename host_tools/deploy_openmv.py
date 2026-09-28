@@ -40,6 +40,7 @@ _COMMON = [
     ("openmv/common/command_protocol.py", "command_protocol.py"),
     ("openmv/common/device_info.py", "device_info.py"),
     ("openmv/common/capture_service.py", "capture_service.py"),
+    ("openmv/common/usb_console.py", "usb_console.py"),
 ]
 BOARD_MANIFESTS = {
     "n6": _COMMON + [
