@@ -240,7 +240,7 @@ nereus-camera-test-rig/
 │   ├── rig.example.yaml
 │   ├── experiments/{reference_card_above_water,reference_card_below_water,low_light,object_detection}.yaml
 │   ├── cameras/{imx708,openmv_n6,openmv_ae3}.yaml
-│   ├── cards/{nereus_v2,nereus_v3_c1..c4}.yaml  # Phase 8: card layout + truth (config, not code)
+│   ├── cards/{nereus_v1,nereus_v2,nereus_v3_c1..c4}.yaml  # Phase 8: card layout + truth (config, not code); V1 = the nereus002 rig card
 │   ├── calibration/<camera_id>.yaml          # Phase 8: per-camera L1 calibration
 │   └── licenses.yaml                         # Phase 8: reviewed licence table (§20)
 ├── src/nereus_camera_test_rig/

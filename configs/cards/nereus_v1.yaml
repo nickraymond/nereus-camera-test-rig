@@ -1,0 +1,109 @@
+# Nereus Reef Reference Card V1 — the card on the nereus002 rig (2026-09-28).
+#
+# Source: the vector print master bm_cam_legacy/tools/Nereus_Reef_Reference_Card_V1_11x17_RGB_vector_crop_bleed.pdf
+#   (bm_cam_legacy 4b88669). The card is a form XObject 1417.323 x 472.441 pt (500 x 166.667 mm)
+#   placed on the 17x11 in page at scale 0.82, so it prints 410.000 x 136.667 mm — the same outer
+#   size as V2. Patch boxes and truth are the PDF's own rectangles and fills (``re B*``), mapped into
+#   the canonical frame through the tag centres; they agree within 1-3 px with bm_cam_legacy's
+#   provisional template (reference_card_template_v1/template_layout.json @ dbb50fb, hand-measured
+#   from a render), whose target_srgb was sampled from that render.
+# Tags: tag36h11 IDs 0-3, the same corner map as V2; tag frame identical to V2 (centre spacing
+#   364.900 x 91.566 mm, edge 32.0 mm). Canonical 2000x840 = the tag-centre quad expanded 1.25 x 2.0
+#   (as bm_reference_card_quality_v2). Canonical px are NOT square (1.268 x 1.325 px per form pt).
+# ASSUMPTION: printed at 100 % of the page (no fit-to-page); a tape check of the card width
+#   (410 mm) would confirm it.
+
+card_id: nereus_v1
+schema_version: 1
+
+apriltag:
+  family: tag36h11            # OpenCV DICT_APRILTAG_36h11
+  corner_map: {tl: 0, tr: 1, bl: 2, br: 3}
+
+# White-balance on grey 128 (grey 200, grey 74 as fall-backs); the ramp takes the four non-black
+# greys; black is the haze patch. (bm_cam_legacy's V1 notes: balance on greys 200/128/74, keep white
+# and black for QA — they clip easily.)
+roles:
+  wb_anchors: [gray_mid, gray_light, gray_dark]
+  ramp: [gray_white, gray_light, gray_mid, gray_dark]
+  haze: gray_black
+
+canonical:
+  width: 2000
+  height: 840
+  expand_x: 1.25
+  expand_y: 2.0
+
+tags:                          # canonical px: centre [x, y], edge [x_len, y_len]
+  0: {center: [199.9, 209.75], edge: [140.2, 146.6]}
+  1: {center: [1799.1, 209.75], edge: [140.2, 146.6]}
+  2: {center: [199.9, 629.25], edge: [140.2, 146.6]}
+  3: {center: [1799.1, 629.25], edge: [140.2, 146.6]}
+
+physical_mm:
+  source: vector_print_master_v1_082_page_scale
+  tag_center_spacing_x: 364.900
+  tag_center_spacing_y: 91.567
+  tag_edge: 31.996
+  card_width: 410.000
+  card_height: 136.667
+
+truth:
+  source: design_pdf_v1_fills
+  space: srgb8                 # 8-bit sRGB design values
+
+patches:                       # box: [x, y, w, h] in canonical px
+  - {id: gray_white, group: grey, label: white_reference, box: [137, 309, 111, 150], truth: [255, 255, 255]}
+  - {id: gray_light, group: grey, label: neutral_gray_light, box: [256, 309, 111, 150], truth: [200, 200, 200]}
+  - {id: gray_mid, group: grey, label: neutral_gray_mid, box: [374, 309, 111, 150], truth: [128, 128, 128]}
+  - {id: gray_dark, group: grey, label: neutral_gray_dark, box: [493, 309, 111, 150], truth: [74, 74, 74]}
+  - {id: gray_black, group: grey, label: black_reference, box: [611, 309, 111, 150], truth: [0, 0, 0]}
+  - {id: cream, group: color, label: pale_cream, box: [1158, 309, 92, 94], truth: [255, 249, 230]}
+  - {id: tan, group: color, label: pale_tan, box: [1258, 309, 92, 94], truth: [239, 212, 167]}
+  - {id: ochre, group: color, label: tan_orange, box: [1359, 309, 92, 94], truth: [217, 169, 109]}
+  - {id: orange, group: color, label: orange, box: [1460, 309, 92, 94], truth: [216, 146, 54]}
+  - {id: brown, group: color, label: burnt_orange, box: [1560, 309, 92, 94], truth: [185, 109, 42]}
+  - {id: dark_brown, group: color, label: brown, box: [1661, 309, 92, 94], truth: [99, 55, 25]}
+  - {id: coral_pink, group: color, label: coral_pink, box: [1761, 309, 92, 94], truth: [245, 160, 160]}
+  - {id: red_orange, group: color, label: red_orange, box: [1158, 416, 92, 94], truth: [240, 74, 24]}
+  - {id: yellow, group: color, label: yellow, box: [1258, 416, 92, 94], truth: [247, 185, 30]}
+  - {id: green, group: color, label: green, box: [1359, 416, 92, 94], truth: [108, 176, 80]}
+  - {id: cyan, group: color, label: cyan, box: [1460, 416, 92, 94], truth: [92, 200, 208]}
+  - {id: blue, group: color, label: blue, box: [1560, 416, 92, 94], truth: [12, 102, 199]}
+  - {id: magenta, group: color, label: magenta, box: [1661, 416, 92, 94], truth: [180, 70, 163]}
+
+# The printed card as measured (SPEC §20: real-world measurements over design files, Nick
+# 2026-09-27). Read on nereus002 (IMX708 wide, 2026-09-28) in air, indoor window light: three
+# locked RAW exposures (-1/0/+1 stop, 4608x2592, gain 1.12; results/raw_imx708/20260928T174147Z),
+# card located on the RAW, white-balanced on grey 128, camera -> XYZ through the DNG's own
+# ColorMatrix1 (D65, from the Pi tuning — unverified), Bradford-adapted to D65, linear sRGB,
+# scaled so grey 128 = its design value, median over the three exposures (spread <= 3.6 counts,
+# except blue). Greys are stored neutral at their measured luminance (their small tints come from
+# the matrix). Findings: colours median dE00 6.9 from design (V2's print: 13.4); the grey ramp is
+# compressed like V2's (white 227, black 67 with grey 128 = 128) — flare / glare in a bright room
+# likely lifts the dark end. **Blue is unreliable:** its red goes negative through the matrix
+# (-13, spread 17 over the exposures) and is stored as 0. Replace with an instrument reading or a
+# calibrated IMX708 matrix (S4) when available.
+measured:
+  source: measured_imx708_nereus002_in_air_20260928
+  method: in air, WB on gray_mid, DNG ColorMatrix1 + Bradford to D65, median over 3 exposures, scaled so gray_mid = its design value
+  reference_frames: [stop_-1, stop_+0, stop_+1]
+  values:                # 8-bit sRGB scale; greys neutral
+    gray_white: [227.3, 227.3, 227.3]
+    gray_light: [179.9, 179.9, 179.9]
+    gray_mid: [128.0, 128.0, 128.0]
+    gray_dark: [90.6, 90.6, 90.6]
+    gray_black: [67.3, 67.3, 67.3]
+    cream: [225.0, 218.1, 211.8]
+    tan: [225.4, 196.4, 159.5]
+    ochre: [205.3, 160.6, 112.6]
+    orange: [206.3, 144.7, 76.5]
+    brown: [187.5, 121.3, 72.5]
+    dark_brown: [108.8, 77.4, 64.2]
+    coral_pink: [217.9, 135.9, 151.0]
+    red_orange: [217.1, 82.8, 65.6]
+    yellow: [223.1, 166.0, 68.8]
+    green: [109.9, 159.8, 97.1]
+    cyan: [91.2, 174.7, 183.0]
+    blue: [0.0, 117.3, 181.3]
+    magenta: [153.6, 66.1, 133.4]
