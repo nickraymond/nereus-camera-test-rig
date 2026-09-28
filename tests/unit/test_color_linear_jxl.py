@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -93,3 +94,51 @@ def test_bad_inputs_and_missing_tools_are_clear(tmp_path, monkeypatch):
     monkeypatch.setattr(lj.shutil, "which", lambda name: None)
     with pytest.raises(lj.JxlError, match="brew install jpeg-xl"):
         lj.encode(scene(), WB, tmp_path / "x.jxl")
+
+
+def bayer_card_frame(light=(0.1, 0.7, 0.55), black=64, white=1023):
+    """A GRBG 10-bit RawFrame of the V2 card render on a mid-grey scene, lit by ``light``."""
+    import cv2
+
+    from nereus_camera_test_rig.color.metrics import srgb8_to_linear
+    from nereus_camera_test_rig.color.raw_io import RawFrame
+
+    root = Path(__file__).resolve().parents[1] / "fixtures" / "reference_card"
+    card = cv2.imread(str(root / "Nereus_Reef_Reference_Card_V2.png"))[..., ::-1]
+    card = cv2.resize(card, (1200, int(1200 * card.shape[0] / card.shape[1])),
+                      interpolation=cv2.INTER_AREA)
+    scene = np.full((900, 1600, 3), 0.18)
+    y0, x0 = (900 - card.shape[0]) // 2, 200
+    scene[y0:y0 + card.shape[0], x0:x0 + card.shape[1]] = srgb8_to_linear(card)
+    lit = scene * np.asarray(light)
+    mosaic = np.empty((900, 1600))
+    mosaic[0::2, 0::2], mosaic[1::2, 1::2] = lit[0::2, 0::2, 1], lit[1::2, 1::2, 1]  # G
+    mosaic[0::2, 1::2], mosaic[1::2, 0::2] = lit[0::2, 1::2, 0], lit[1::2, 0::2, 2]  # R, B
+    counts = np.round(black + mosaic * (white - black)).astype(np.uint16)
+    return RawFrame(mosaic=counts, cfa="GRBG", black_level=(black,) * 4, white_level=white,
+                    as_shot_wb=(1.0, 1.0, 1.0), source={"path": "synthetic.dng"})
+
+
+def test_card_white_balance_recovers_the_light(tmp_path):
+    from nereus_camera_test_rig.color.card import load_card
+
+    card = load_card(Path(__file__).resolve().parents[2] / "configs/cards/nereus_v2.yaml")
+    light = np.array([0.1, 0.7, 0.55])
+    wb, info = lj.card_white_balance(bayer_card_frame(tuple(light)), card)
+    assert info["anchor"] == "gray_mid" and info["tags_found"] == [0, 1, 2, 3]
+    np.testing.assert_allclose(wb, light[1] / light, rtol=0.02)
+    if shutil.which("cjxl") and shutil.which("djxl"):
+        s = lj.roundtrip_check(bayer_card_frame(tuple(light)), tmp_path, (1.0,), card=card)
+        assert s["white_balance_info"]["source"] == "card"
+        assert s["runs"]["lossless"]["block_mean_error"]["p99"] < 0.005
+
+
+def test_card_white_balance_fails_clearly_without_a_card():
+    from nereus_camera_test_rig.color.card import load_card
+    from nereus_camera_test_rig.color.raw_io import RawFrame
+
+    card = load_card(Path(__file__).resolve().parents[2] / "configs/cards/nereus_v2.yaml")
+    blank = RawFrame(mosaic=np.full((400, 600), 300, np.uint16), cfa="GRBG",
+                     black_level=(64,) * 4, white_level=1023)
+    with pytest.raises(ValueError, match="card not found"):
+        lj.card_white_balance(blank, card)

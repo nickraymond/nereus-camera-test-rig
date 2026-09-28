@@ -171,14 +171,49 @@ def block_mean_error(ref: np.ndarray, test: np.ndarray, block: int = 16,
 
 
 CROP = (1600, 900)  # bmcam001's field crop (native px), centred
+MAX_ANCHOR_CLIP = 0.01  # an anchor grey with more clipped pixels than this is skipped
+
+
+def card_white_balance(frame, card) -> tuple[np.ndarray, dict[str, Any]]:
+    """R, G, B gains that neutralize the card's first usable ``roles.wb_anchors`` grey, with
+    the card located on this frame's RAW (``locate_frame``, RAW green channel)."""
+    from .jpeg_geometry import JpegMap
+    from .locate import locate_frame, tag_geometry, tag_spec
+    from .patches import _boxes, homography, mosaic_to_binned, sample
+    from .raw_io import bin2x2, normalize
+
+    geometry = tag_geometry(card) if card.physically_measured else None
+    rec = locate_frame(Path(str(frame.source.get("path", "frame"))), None, card.corner_map,
+                       JpegMap.offset(0, 0), raw_reader=lambda _path: frame,
+                       geometry=geometry, spec=tag_spec(card))
+    if not rec["located"]:
+        raise ValueError(f"card not found for white balance: {rec.get('reason')}")
+    linear, saturated, cfa = normalize(frame)  # a ratio: no exposure normalization needed
+    binned, clip = bin2x2(linear, cfa, saturated)
+    H = mosaic_to_binned(frame.valid_crop) @ homography(card, np.asarray(rec["quad_raw"]))
+    boxes = _boxes(card)
+    for anchor in card.roles.wb_anchors:
+        st = sample(binned, H, boxes[anchor], clip=clip) if anchor in boxes else {}
+        mean = st.get("mean")
+        if mean and min(mean) > 0 and max(st.get("clip_frac") or [0]) <= MAX_ANCHOR_CLIP:
+            wb = mean[1] / np.asarray(mean, dtype=np.float64)
+            return wb, {"source": "card", "anchor": anchor, "anchor_mean": mean,
+                        "anchor_px": st["n_px"], "tags_found": rec["tags_found"],
+                        "quad_raw": rec["quad_raw"]}
+    raise ValueError(f"no usable white-balance grey among {card.roles.wb_anchors} "
+                     f"(missing, zero or clipped)")
 
 
 def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0),
                     crop: Optional[tuple[int, int, int, int]] = None,
-                    wb: Optional[Sequence[float]] = None) -> dict[str, Any]:
+                    wb: Optional[Sequence[float]] = None, card=None) -> dict[str, Any]:
     """Smoke check on one RAW (a ``RawFrame``): crop (default: centred ``CROP``) → black
     subtract → 2×2 bin → encode at each distance (and lossless) → decode → compare block
-    means with the input. Writes the ``.jxl`` + ``.json`` files and ``summary.json``."""
+    means with the input. Writes the ``.jxl`` + ``.json`` files and ``summary.json``.
+
+    White balance (it only sets the code spacing, and is divided back out): ``wb`` if given,
+    else the grey on ``card`` (a loaded card, located on this frame), else the file's as-shot
+    WB, else grey world."""
     from .raw_io import RawFrame, bin2x2, normalize
 
     h, w = frame.mosaic.shape
@@ -193,13 +228,18 @@ def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0
     linear, _, cfa = normalize(sub)
     rgb = bin2x2(linear, cfa)
     rgb = rgb[0] if isinstance(rgb, tuple) else rgb
-    if wb is None:  # as-shot WB if the file has one, else grey world — only sets code spacing
-        wb = (np.asarray(frame.as_shot_wb) if frame.as_shot_wb
-              else rgb.reshape(-1, 3).mean(0)[1] / np.maximum(rgb.reshape(-1, 3).mean(0), 1e-9))
+    wb_info: dict[str, Any] = {"source": "given"}
+    if wb is None and card is not None:
+        wb, wb_info = card_white_balance(frame, card)
+    elif wb is None and frame.as_shot_wb:
+        wb, wb_info = np.asarray(frame.as_shot_wb), {"source": "as_shot"}
+    elif wb is None:
+        m = rgb.reshape(-1, 3).mean(0)
+        wb, wb_info = m[1] / np.maximum(m, 1e-9), {"source": "grey_world"}
     meta = {"source": str(frame.source.get("path", "")), "cfa": frame.cfa, "crop": list(crop),
             "binning": "2x2", "black_level": list(frame.black_level),
             "white_level": frame.white_level, "exposure_s": frame.exposure_s,
-            "iso": frame.iso, "fnumber": frame.fnumber}
+            "iso": frame.iso, "fnumber": frame.fnumber, "white_balance": wb_info}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     runs = {}
@@ -211,6 +251,7 @@ def roundtrip_check(frame, out_dir: Path, distances: Sequence[float] = (0.5, 1.0
                       "block_mean_error": {k: round(v, 5) if isinstance(v, float) else v
                                            for k, v in block_mean_error(rgb, back).items()}}
     summary = {"shape": list(rgb.shape), "raw_bytes_packed": cw * ch * 12 // 8,
-               "white_balance": [float(v) for v in wb], "runs": runs}
+               "white_balance": [float(v) for v in wb], "white_balance_info": wb_info,
+               "runs": runs}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
     return summary
