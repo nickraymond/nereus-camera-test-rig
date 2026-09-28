@@ -127,3 +127,11 @@ def test_reset_board_is_allowlisted():
     action, cid, settings = cp.validate_request(cp.make_request("reset_board", "cid"))
     assert action == "reset_board"
     assert settings == {}
+
+
+def test_capture_raw_is_allowlisted():
+    # Bayer RAW at a locked exposure (Phase 8 S3, OQ-21).
+    assert cp.is_allowed("capture_raw")
+    action, _, settings = cp.validate_request(
+        cp.make_request("capture_raw", "cid", {"warmup_ms": 1500}))
+    assert action == "capture_raw" and settings == {"warmup_ms": 1500}

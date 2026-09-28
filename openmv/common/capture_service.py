@@ -131,6 +131,77 @@ def capture_image(board_config, settings):
     return out
 
 
+def _finite(v):
+    """JSON-safe float: the AE3 reports ``rgb_gain_db()`` as (-inf, 0, -inf)."""
+    v = float(v)
+    return v if v == v and v not in (float("inf"), float("-inf")) else None
+
+
+def capture_raw(board_config, settings):
+    """Bayer RAW to STORAGE_DIR at a locked exposure, return output metadata (S3, OQ-21).
+
+    Uses the v5 ``csi`` module (``csi.BAYER`` is the only raw format: 8 bit, 1 byte/px).
+    Autos run for ``warmup_ms``, then exposure / gain are locked at the metered values —
+    or at ``exposure_us`` / ``gain_db`` when given — and WB is frozen, then 3 frames are
+    flushed (a changed exposure can leave two stale frames buffered; Nick's
+    ``s28_board_burst.py``) before the snapshot, so the read-back values describe this
+    frame. The ISP WB gains are *not* in the Bayer data and ``rgb_gain_db()`` lists the
+    top-left site first (OQ-21): it is reported as-is, for diagnosis only. On the AE3 this
+    is a camera session: ``reset_board`` first (one session per boot on v5). Never calls
+    ``csi.framerate()`` (wedges the board).
+    """
+    import csi
+
+    name = _safe_basename(settings.get("filename") or "capture.bayer")
+    fs_name = settings.get("framesize", board_config.RAW_DEFAULT_FRAMESIZE)
+    attr = board_config.RAW_FRAMESIZES.get(fs_name)
+    if attr is None:
+        raise cp.ProtocolError(
+            cp.ERR_CAPTURE_FAILED, "unsupported raw framesize: " + repr(fs_name)
+        )
+    warmup_ms = int(settings.get("warmup_ms", board_config.DEFAULT_WARMUP_MS))
+
+    cam = csi.CSI()
+    cam.reset()
+    cam.pixformat(csi.BAYER)
+    cam.framesize(getattr(csi, attr))
+    t0 = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), t0) < warmup_ms:
+        cam.snapshot()
+    metered = {"exposure_us": cam.exposure_us(), "gain_db": _finite(cam.gain_db())}
+    exposure_us = int(settings.get("exposure_us") or metered["exposure_us"])
+    gain_db = float(settings.get("gain_db") or metered["gain_db"] or 0.0)
+    cam.auto_exposure(False, exposure_us=exposure_us)
+    cam.auto_gain(False, gain_db=gain_db)
+    cam.auto_whitebal(False)
+    for _ in range(3):
+        cam.snapshot()
+    img = cam.snapshot()
+
+    path = STORAGE_DIR + "/" + name
+    with open(path, "wb") as f:
+        f.write(img.bytearray())
+    return {
+        "filename": name,
+        "width": img.width(),
+        "height": img.height(),
+        "format": "bayer",
+        "framesize": fs_name,
+        "cfa": board_config.RAW_CFA,
+        "bits": board_config.RAW_BITS,
+        "black_level": board_config.RAW_BLACK_LEVEL,
+        "white_level": (1 << board_config.RAW_BITS) - 1,
+        "exposure_us": cam.exposure_us(),
+        "gain_db": _finite(cam.gain_db()),
+        "requested": {"exposure_us": exposure_us, "gain_db": gain_db},
+        "metered": metered,
+        "isp_rgb_gain_db": [_finite(v) for v in cam.rgb_gain_db()],
+        "size_bytes": os.stat(path)[6],
+        "sha256": _sha256_file(path),
+        "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
+    }
+
+
 def reset_board(usb, command_id):
     """Ack the command, then hard-reset the MCU (never returns).
 
