@@ -144,3 +144,55 @@ def test_sticker_export_is_trim_size_and_decodes(tmp_path):
     assert img.shape == (3189, 4961)  # 420 x 270 mm at 300 ppi
     small = cv2.resize(img, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
     assert sorted(detect_tags(small, family="DICT_APRILTAG_25h9", scales=(1,)).tags) == [0, 1, 2, 3]
+
+
+def test_c1_reference_template_matches_the_yaml():
+    """The canonical rectified card PNG is the front at px_per_mm and carries each patch's truth."""
+    cv2 = pytest.importorskip("cv2")
+    import numpy as np
+
+    from host_tools.render_card import front, to_raster
+
+    card, spec = load_card(CARDS[0]), load_yaml(CARDS[0])
+    committed = cv2.imread(str(PRINT_DIR / "nereus_v3_c1_canonical_4200x2700.png"))[..., ::-1]
+    assert committed.shape == (card.canonical_h, card.canonical_w, 3)
+    assert np.array_equal(committed, to_raster(front(card, spec), spec["canonical"]["px_per_mm"]))
+    for p in card.patches:
+        b = p.box
+        assert tuple(committed[b.y + b.h // 2, b.x + b.w // 2]) == p.truth, p.id
+
+
+def test_c1_example_frame_ground_truth_matches_detection():
+    """The synthetic example decodes tags 0-3 within 1.5 px of its ground-truth JSON."""
+    cv2 = pytest.importorskip("cv2")
+    import json
+
+    import numpy as np
+
+    from nereus_camera_test_rig.analysis.apriltag_detector import detect_tags
+
+    img = cv2.imread(str(PRINT_DIR / "nereus_v3_c1_example_1280x800.png"), cv2.IMREAD_GRAYSCALE)
+    truth = json.loads((PRINT_DIR / "nereus_v3_c1_example_1280x800.json").read_text())
+    found = detect_tags(img, family="DICT_APRILTAG_25h9", scales=(1,)).tags
+    assert sorted(found) == [0, 1, 2, 3]
+    for tid, t in truth["tags"].items():
+        err = min(np.abs(np.roll(found[int(tid)].corners, s, 0) - np.array(t["corners"])).max()
+                  for s in range(4))
+        assert err < 1.5, (tid, err)
+    # the homography reproduces the recorded tag centres
+    H = np.array(truth["homography_canonical_to_image"])
+    card = load_card(CARDS[0])
+    for tid, tag in card.tags.items():
+        p = H @ [tag.center[0], tag.center[1], 1.0]
+        assert np.allclose(p[:2] / p[2], truth["tags"][str(tid)]["center"], atol=0.01)
+
+
+def test_c1_sticker_record_matches_the_yaml():
+    """The committed print record is what the c1 YAML renders (the SVG is byte-stable)."""
+    pytest.importorskip("cv2")
+    from host_tools.render_card import front, to_trim_svg
+
+    card, spec = load_card(CARDS[0]), load_yaml(CARDS[0])
+    side = front(card, spec)
+    committed = (PRINT_DIR / "sticker" / "nereus_v3_c1_sticker_420x270mm.svg").read_text()
+    assert committed == to_trim_svg(side, f"{card.card_id} front {side.width:g} x {side.height:g} mm")

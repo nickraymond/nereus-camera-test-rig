@@ -7,7 +7,10 @@ Design session write-up, with every round, test and the independent review:
 
 The machine-readable source of truth is one YAML per physical card:
 [`configs/cards/nereus_v3_c1.yaml`](../configs/cards/nereus_v3_c1.yaml) … `_c4.yaml` (SPEC §20).
-They are identical except `card_id` and the tag-ID block. Print files are rendered from them:
+They are identical except `card_id` and the tag-ID block. **c1 is the printed card** (10 Sticker Mule
+copies, 2026-09-27); the exact files sent, the canonical rectified template and a synthetic example
+frame with ground truth are in [`tests/fixtures/reference_card_v3/`](../tests/fixtures/reference_card_v3/README.md).
+Print files are rendered from the YAMLs:
 
 ```bash
 python -m host_tools.render_card configs/cards/nereus_v3_c*.yaml --out tests/fixtures/reference_card_v3

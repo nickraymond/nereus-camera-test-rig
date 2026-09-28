@@ -315,6 +315,80 @@ def _png_with_dpi(data: bytes, ppi: int) -> bytes:
     return data[:33] + chunk + data[33:]  # after the 8-byte signature + 25-byte IHDR chunk
 
 
+def template(card_path: Path, out_dir: Path) -> Path:
+    """The canonical rectified card (canonical.width x height px): what patch boxes refer to.
+
+    Pixel i covers card mm [i / px_per_mm, (i + 1) / px_per_mm), so this is the front drawn at
+    px_per_mm — the V3 equivalent of V2's reference_card_template_3000x1000.png."""
+    card = load_card(card_path)
+    spec = load_yaml(card_path)
+    img = to_raster(front(card, spec), float(spec["canonical"]["px_per_mm"]))
+    assert img.shape[:2] == (card.canonical_h, card.canonical_w), img.shape
+    out_dir.mkdir(parents=True, exist_ok=True)
+    p = out_dir / f"{card.card_id}_canonical_{card.canonical_w}x{card.canonical_h}.png"
+    cv2.imwrite(str(p), img[..., ::-1], [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    return p
+
+
+# Example view: an OpenMV N6-like camera under water (1280 x 800, 933 px focal length x 1.33 flat
+# port), card at 1.0 m, turned 20 deg (yaw) and 10 deg (pitch). Geometry only: no water, noise or blur.
+EXAMPLE = {"width": 1280, "height": 800, "focal_px": 933.0 * 1.33, "z_m": 1.0, "yaw_deg": 20.0,
+           "pitch_deg": 10.0, "background_rgb": [70, 95, 105]}
+
+
+def example_view(card_path: Path, out_dir: Path) -> list[Path]:
+    """A synthetic camera frame of the card + its exact ground truth (JSON), for pipeline tests.
+
+    Ground truth: the canonical-px -> image-px homography, each tag's 4 corners (TL, TR, BR, BL
+    of the black border) and centre, and each patch's centre, all in image pixels."""
+    import json
+    import math
+
+    card = load_card(card_path)
+    spec = load_yaml(card_path)
+    e = EXAMPLE
+    px = float(spec["canonical"]["px_per_mm"])
+    a, b = math.radians(e["yaw_deg"]), math.radians(e["pitch_deg"])
+    Ry = np.array([[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]])
+    Rx = np.array([[1, 0, 0], [0, math.cos(b), -math.sin(b)], [0, math.sin(b), math.cos(b)]])
+    R = Ry @ Rx
+    K = np.array([[e["focal_px"], 0, e["width"] / 2], [0, e["focal_px"], e["height"] / 2], [0, 0, 1]])
+    # canonical px (pixel centres) -> card mm centred on the card -> camera
+    to_mm = np.array([[1 / px, 0, 0.5 / px - card.canonical_w / px / 2],
+                      [0, 1 / px, 0.5 / px - card.canonical_h / px / 2], [0, 0, 1]])
+    H = K @ np.column_stack([R[:, 0], R[:, 1], [0, 0, e["z_m"] * 1000]]) @ to_mm
+    H /= H[2, 2]
+    canon = cv2.cvtColor(to_raster(front(card, spec), px), cv2.COLOR_RGB2BGR)
+    scale = e["focal_px"] / (e["z_m"] * 1000) / px            # image px per canonical px (approx.)
+    canon = cv2.GaussianBlur(canon, (0, 0), max(0.5 / scale * 0.5, 0.1))  # anti-alias the downscale
+    bg = np.array(e["background_rgb"][::-1], np.float32)
+    img = cv2.warpPerspective(canon.astype(np.float32), H, (e["width"], e["height"]),
+                              flags=cv2.INTER_LINEAR, borderValue=bg.tolist())
+    img = np.clip(img + 0.5, 0, 255).astype(np.uint8)
+
+    def proj(pts):
+        return cv2.perspectiveTransform(np.asarray(pts, np.float64).reshape(-1, 1, 2), H).reshape(-1, 2)
+
+    tags = {}
+    for tid, tag in sorted(card.tags.items()):
+        (cx, cy), (ex, ey) = tag.center, tag.edge
+        c = [[cx - ex / 2, cy - ey / 2], [cx + ex / 2, cy - ey / 2], [cx + ex / 2, cy + ey / 2],
+             [cx - ex / 2, cy + ey / 2]]
+        tags[str(tid)] = {"corners": np.round(proj(c), 3).tolist(),
+                          "center": np.round(proj([tag.center])[0], 3).tolist()}
+    patches = {p.id: np.round(proj([[p.box.x + p.box.w / 2 - 0.5, p.box.y + p.box.h / 2 - 0.5]])[0],
+                              3).tolist() for p in card.patches}
+    truth = {"card": card.card_id, "card_yaml": f"configs/cards/{Path(card_path).name}",
+             "camera": {**e, "note": "pinhole, no distortion; geometry only (no water, noise, blur)"},
+             "homography_canonical_to_image": np.round(H, 9).tolist(),
+             "tags": tags, "patch_centers": patches}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = out_dir / f"{card.card_id}_example_{e['width']}x{e['height']}"
+    cv2.imwrite(str(stem.with_suffix(".png")), img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    stem.with_suffix(".json").write_text(json.dumps(truth, indent=1) + "\n")
+    return [stem.with_suffix(".png"), stem.with_suffix(".json")]
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cards", nargs="+", type=Path, help="card YAML file(s)")
@@ -322,9 +396,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--no-pdf", action="store_true", help="skip the matplotlib PDF")
     ap.add_argument("--sticker", action="store_true",
                     help="front only at trim size (no bleed / marks / cut line) + 300 ppi PNG")
+    ap.add_argument("--reference", action="store_true",
+                    help="canonical rectified template PNG + a synthetic example frame with ground truth")
     a = ap.parse_args(argv)
     for c in a.cards:
-        for p in (sticker(c, a.out) if a.sticker else render(c, a.out, pdf=not a.no_pdf)):
+        if a.reference:
+            written = [template(c, a.out), *example_view(c, a.out)]
+        elif a.sticker:
+            written = sticker(c, a.out)
+        else:
+            written = render(c, a.out, pdf=not a.no_pdf)
+        for p in written:
             print(p)
     return 0
 
