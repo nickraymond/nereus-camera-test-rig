@@ -6,7 +6,8 @@ default suite (``norecursedirs = tests/hardware``); skips cleanly when no board 
 pyserial is present, so it never fails a hardware-less CI run.
 
 Proves the Phase 4 exit criteria: discover the AE3 by USB identity, capture N stills in a
-row each retrieved with a matching checksum, and reject a bad command cleanly. The AE3
+row each retrieved with a matching checksum, and reject a bad command cleanly. On OpenMV v5
+each capture follows a ``reset_board`` (one camera session per boot, ``_capture_after_reset``). The AE3
 reuses the same board-agnostic host adapter and USB protocol as the N6 (Phase 3); only
 the board identity/sensor facts differ.
 """
@@ -32,6 +33,22 @@ from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 
 # The AE3 validated during Phase 4 bring-up. Override via the AE3_SERIAL env var.
 AE3_SERIAL = os.environ.get("AE3_SERIAL", "0829c14000000000")
+
+
+VGA = CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800})
+
+
+def _capture_after_reset(cam, dest):
+    """One capture per boot, as the coordinator does (``reset_before_capture: true``).
+
+    On OpenMV v5 / MicroPython 1.28 the AE3 hard-crashes on the *second* camera session
+    after a boot — dead USB CDC, then off the bus (``error -71``) or a safe-mode REPL; only
+    ``machine.reset()`` clears it (measured by Nick, ADIN_SPI_OpenMV firmware/ae3_usb/README;
+    reproduced on ``nereus002`` 2026-09-28 by back-to-back captures). Back-to-back captures
+    without a reset only worked on fw 1.25.0-preview.
+    """
+    cam.reset_board()
+    return cam.capture_image(str(dest), VGA)
 
 
 def _ae3_port():
@@ -61,10 +78,7 @@ def test_repeated_capture_with_checksums(tmp_path):
     try:
         for i in range(3):
             dest = tmp_path / ("ae3_%d.jpg" % i)
-            result = cam.capture_image(
-                str(dest),
-                CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800}),
-            )
+            result = _capture_after_reset(cam, dest)
             assert result.ok, result.error
             assert dest.is_file() and dest.stat().st_size > 1000
             assert result.sha256 and result.width == 640 and result.height == 400
@@ -90,10 +104,7 @@ def test_reset_board_returns_to_service(tmp_path):
         assert out["info"]["board"] == "ae3"
         assert 0 < out["duration_seconds"] < 20
         dest = tmp_path / "after_reset.jpg"
-        result = cam.capture_image(
-            str(dest),
-            CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800}),
-        )
+        result = cam.capture_image(str(dest), VGA)
         assert result.ok, result.error
         assert dest.is_file() and dest.stat().st_size > 1000
         # The settled 3A state is recorded so a stale-state capture is diagnosable (§12).
@@ -119,10 +130,7 @@ def test_flash_free_space_stable_across_captures(tmp_path):
         assert free_before is not None, "firmware does not report flash_free_bytes"
         for i in range(3):
             dest = tmp_path / ("ae3_flash_%d.jpg" % i)
-            result = cam.capture_image(
-                str(dest),
-                CaptureRequest(kind="image", settings={"framesize": "VGA", "warmup_ms": 800}),
-            )
+            result = _capture_after_reset(cam, dest)
             assert result.ok, result.error
         free_after = cam.get_device_info().get("flash_free_bytes")
     finally:
