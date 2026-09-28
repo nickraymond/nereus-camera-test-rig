@@ -11,8 +11,9 @@ N6) is unavailable *on any AE3 firmware* — ``pyb`` is STM32-specific. The AE3'
 reached instead through the MicroPython console streams (``sys.stdin.buffer`` /
 ``sys.stdout.buffer``, ``select.poll`` for non-blocking reads).
 ``usb_console.UsbConsole`` (shared with the N6 on v5 firmware) wraps those to expose the
-same ``any()`` / ``read(n)`` / ``write(bytes)`` interface the shared ``capture_service`` and the dispatch loop expect — so this is the *only*
-board-specific code, and the shared services stay untouched (CLAUDE.md §6/§36).
+same ``any()`` / ``read(n)`` / ``write(bytes)`` interface the shared ``capture_service``
+and the dispatch loop expect — so this is the *only* board-specific code, and the
+shared services stay untouched (CLAUDE.md §6/§36).
 
 The dispatch logic (``_handle_line``) is intentionally identical to the N6's; only the USB
 acquisition differs.

@@ -28,8 +28,9 @@ from host_tools.discover_openmv import find_port  # noqa: E402
 from nereus_camera_test_rig.cameras.openmv_usb import OpenMvUsbCamera  # noqa: E402
 from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 
-# The N6 validated during Phase 3 bring-up. Override via the N6_SERIAL env var.
-N6_SERIAL = os.environ.get("N6_SERIAL", "005537493543")
+# The N6 on the nereus002 rig (OpenMV v5.0.1; Phase 3's N6 was 005537493543). Override via
+# the N6_SERIAL env var.
+N6_SERIAL = os.environ.get("N6_SERIAL", "020023000450433547373200")
 
 
 def _n6_port():
