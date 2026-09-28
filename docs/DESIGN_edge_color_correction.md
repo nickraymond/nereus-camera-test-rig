@@ -316,6 +316,8 @@ Why it matters: wet paper is darker and more see-through than dry paper, so an a
 
 #### Card V3 recommendations (for the repeat dive)
 
+*Superseded by the card V3 design, [`docs/reference_card_v3.md`](reference_card_v3.md) (2026-09-27): one YAML per physical card (`configs/cards/nereus_v3_c1…c4.yaml`), no printed length scale (tag geometry is the scale).*
+
 - **Rigid, waterproof substrate.** Print directly on a rigid board (e.g. UV-cured print on aluminum composite or PVC), or encapsulate with ≥ 10 mm sealed margin on every edge. No paper in a pouch.
 - **Matte surface** to cut glare, with patches ≥ 5× larger than now where possible. A large mid-grey patch helps white balance at distance.
 - **Keep AprilTags and the length scale.** Keep the black patch (backscatter).
