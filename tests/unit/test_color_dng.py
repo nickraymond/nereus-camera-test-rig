@@ -97,3 +97,5 @@ def test_real_rpicam_dng_decodes():
     assert frame.mosaic.ndim == 2 and frame.white_level > max(frame.black_level)
     assert frame.exposure_s and frame.iso
     assert np.isfinite(binned).all() and 0 < float(np.median(binned)) < 1
+    # rpicam keeps the colour tags in IFD0 and the raw in a SubIFD: both must be read
+    assert frame.as_shot_wb and frame.as_shot_wb[1] == 1.0 and frame.color_matrix is not None

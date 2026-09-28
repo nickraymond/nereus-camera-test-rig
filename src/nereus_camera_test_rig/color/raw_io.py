@@ -210,6 +210,10 @@ def read_dng(path) -> RawFrame:
     with tifffile.TiffFile(path) as tf:
         page = _find_cfa_page(tf)
         tags = page.tags
+        # Colour tags (AsShotNeutral, ColorMatrix1, CalibrationIlluminant1) belong in IFD0 per
+        # the DNG spec; rpicam puts them there and the raw in a SubIFD (nereus002, 2026-09-28).
+        colour = {c: t for c in (50728, 50721, 50778)
+                  for t in (tags.get(c) or tf.pages[0].tags.get(c),) if t is not None}
         if int(page.compression) != 1:
             raise ValueError(f"{path}: compressed CFA data ({page.compression!r}) not supported")
         if 50712 in tags:
@@ -239,13 +243,13 @@ def read_dng(path) -> RawFrame:
             crop = (left, top, right - left, bottom - top)
 
         wb = None
-        if 50728 in tags:  # AsShotNeutral: camera response to neutral → multipliers
-            n = _floats(tags[50728])
+        if 50728 in colour:  # AsShotNeutral: camera response to neutral → multipliers
+            n = _floats(colour[50728])
             wb = (n[1] / n[0], 1.0, n[1] / n[2])
         matrix, matrix_note = None, None
-        if 50721 in tags:
-            matrix = np.asarray(_floats(tags[50721]), dtype=np.float64).reshape(3, 3)
-            illum = tags[50778].value if 50778 in tags else None
+        if 50721 in colour:
+            matrix = np.asarray(_floats(colour[50721]), dtype=np.float64).reshape(3, 3)
+            illum = colour[50778].value if 50778 in colour else None
             matrix_note = f"DNG ColorMatrix1: XYZ -> camera, CalibrationIlluminant1={illum}"
 
         return RawFrame(
