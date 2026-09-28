@@ -96,3 +96,30 @@ def test_card_haze_method_recovers_the_card_and_classes_share_patches():
     for m in ("raw_card_wb", "raw_card_wb_haze"):
         assert scores[m]["n_psi"] == 0 and scores[m]["n_de"] == 12
     assert set(ALL_GREYS) >= {p.id for p in CARD.group("grey")}
+
+
+def test_grvi_column_is_card_anchored_and_falls_back_to_the_camera_jpeg():
+    design = {p.id: list(p.truth) for p in CARD.patches}
+    j = job(card_means())
+    scores = score({**j, "grvi_means": design}, {}, CARD, np.eye(3))["grvi_cheeca_v3"]
+    assert scores["de2000_median"] < 0.5 and scores["n_psi"] == 0 and scores["n_de"] == 12
+    assert scores["grvi_no_card"] is False
+    grey = {pid: [128, 128, 128] for pid in design}
+    fallback = score({**j, "grvi_no_card": True, "jpeg_means": grey}, {}, CARD, np.eye(3))
+    assert fallback["grvi_cheeca_v3"]["grvi_no_card"] is True
+    assert fallback["grvi_cheeca_v3"]["de2000"] == fallback["camera_jpeg"]["de2000"]
+
+
+def test_preset_frames_pair_with_the_nearest_a_mode_frame_of_their_dive():
+    from nereus_camera_test_rig.color.correct import nearest_a_mode
+
+    rows = {s: {"category": c, "dive_id": d, "time_utc": f"2026-09-16T01:{m:02d}:00+00:00",
+                "depth_m": dep}
+            for s, c, d, m, dep in (("P", "2_underwater_preset", "1", 30, "10"),
+                                    ("A1", "1_reference_A_iso100", "1", 20, "12"),
+                                    ("A2", "1_reference_A_iso100", "1", 33, "9.5"),
+                                    ("B", "1_reference_A_iso100", "2", 30, "10"),
+                                    ("S", "3_scene_card_offcenter", "1", 30, "10"))}
+    pair = nearest_a_mode("P", rows, list(rows), "1_reference_A_iso100")
+    assert pair == {"stem": "A2", "dt_s": 180.0, "depth_diff_m": -0.5}
+    assert nearest_a_mode("P", rows, ["B", "S"], "1_reference_A_iso100") is None

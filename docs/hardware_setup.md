@@ -24,6 +24,24 @@ In a git worktree, pass the shared venv: `make install-color VENV=../../../.venv
 worktree; the tests don't depend on it (pytest `pythonpath`), but other tools do — re-run
 `make install-color` from the primary checkout afterwards.
 
+### GRVI baseline (S2a baseline a, OQ-31)
+
+The backend's GRVI `cheeca_v3` correction is scored as a baseline, **unmodified and in its own
+environment** — this repo never imports it. `make grvi-env` builds `.venv-grvi/` with the
+backend's own pins for the four packages GRVI imports (numpy, opencv-python-headless, scipy,
+Pillow), read from `backend/requirements.txt` at `BACKEND_REF`; the backend checkout, its
+branch and its venv are not touched. The `grvi` stage exports `backend/app` at the resolved
+commit with `git archive` and records the SHA in `stage.json`.
+
+```bash
+make grvi-env BACKEND=~/Documents/GitHub/nereus-vision-dev          # BACKEND_REF=origin/staging
+python -m host_tools.color grvi results/color/<dataset_id>/locate --config <dataset.yaml> \
+    --backend ~/Documents/GitHub/nereus-vision-dev --python .venv-grvi/bin/python
+```
+
+Verified 2026-09-27: backend `03272be` (staging), numpy 2.5.1, OpenCV 5.0.0, scipy 1.18.1,
+Pillow 12.3.0; GRVI peaks at ~4.2 GB per 12 MP frame, so the stage runs 4 frames at a time.
+
 ### Licences (SPEC §20 — permissive-only for shipped code)
 
 - **rawpy** bundles LibRaw (LGPL-2.1 / CDDL). It is `internal_only`: Mac analysis tools

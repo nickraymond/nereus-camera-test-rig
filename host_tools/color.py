@@ -16,6 +16,8 @@ Usage::
     python -m host_tools.color report results/color/<dataset_id>/qc --config <dataset.yaml>
     python -m host_tools.color fit results/color/<dataset_id>/qc --config <dataset.yaml>
     python -m host_tools.color correct results/color/<dataset_id>/fit --config <dataset.yaml>
+    python -m host_tools.color grvi results/color/<dataset_id>/locate --config <dataset.yaml> \
+        --backend <nereus-vision-dev checkout> --python <backend env python>   # before correct
 """
 
 from __future__ import annotations
@@ -91,6 +93,14 @@ def main(argv=None) -> int:
                        help="default: configs/calibration/<dataset camera>.yaml")
         p.add_argument("--card", type=Path,
                        default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p = sub.add_parser("grvi", help="backend GRVI cheeca_v3 baseline, in the backend's env")
+    p.add_argument("locate_dir", type=Path)
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p.add_argument("--backend", type=Path, required=True, help="nereus-vision-dev checkout")
+    p.add_argument("--ref", default="origin/staging", help="backend commit to export")
+    p.add_argument("--python", type=Path, required=True,
+                   help="Python of an env built from the backend's requirements.txt")
     p = sub.add_parser("click", help="click tag centres on frames locate could not find")
     p.add_argument("locate_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -123,6 +133,11 @@ def main(argv=None) -> int:
         elif args.stage == "jpeg-map":
             summary = jpeg_map(args.locate_dir, args.config)
             print(summary.pop("config_block"), file=sys.stderr)
+        elif args.stage == "grvi":
+            from .grvi_baseline import grvi
+
+            summary = grvi(args.locate_dir, args.config, args.card, args.backend, args.ref,
+                           args.python)
         elif args.stage == "qc":
             summary = qc(args.patches_dir, args.config, args.card)
         elif args.stage == "patches":
