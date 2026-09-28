@@ -241,36 +241,7 @@ class OpenMvUsbCamera(CameraDevice):
         self._settings.update(settings or {})
 
     def capture_image(self, destination: str, request: CaptureRequest) -> CaptureResult:
-        return self._capture("capture_image", Path(destination), request)
-
-    def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
-        """8-bit Bayer RAW at a locked exposure (Phase 8 S3, OQ-21) → ``destination``
-        (``.bayer``, the mosaic bytes row-major) + ``<stem>.json`` sidecar with everything
-        needed to read it (W, H, CFA, bits, black / white level, read-back exposure / gain)
-        — ``color.raw_io.read_openmv_bayer`` turns the pair into a ``RawFrame``. Settings:
-        ``warmup_ms`` (metering time), optional ``exposure_us`` / ``gain_db`` (else the
-        metered values are locked). On the AE3, ``reset_board`` first (one camera session
-        per boot on OpenMV v5)."""
         dest = Path(destination)
-        result = self._capture("capture_raw", dest, request)
-        if result.status != "completed":
-            return result
-        meta = result.sensor_metadata
-        expected = meta["width"] * meta["height"] * meta["bits"] // 8
-        if result.size_bytes != expected:
-            return self._failed(result.camera, request, "size_mismatch",
-                                "raw is %d B, expected %dx%dx%d bits = %d B" % (
-                                    result.size_bytes, meta["width"], meta["height"],
-                                    meta["bits"], expected), result.duration_seconds)
-        sidecar = {"format": "openmv_bayer", "file": dest.name, "sha256": result.sha256,
-                   "size_bytes": result.size_bytes,
-                   "captured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                   "camera": result.camera.to_dict(),
-                   "duration_seconds": round(result.duration_seconds, 3), **meta}
-        dest.with_suffix(".json").write_text(json.dumps(sidecar, indent=2) + "\n")
-        return result
-
-    def _capture(self, action: str, dest: Path, request: CaptureRequest) -> CaptureResult:
         dest.parent.mkdir(parents=True, exist_ok=True)
         identity = self._current_identity()
         started = time.monotonic()
@@ -279,7 +250,7 @@ class OpenMvUsbCamera(CameraDevice):
             settings = {**self._settings, **(request.settings or {})}
             # The host owns the filename (it owns real time); the board saves under it.
             settings["filename"] = dest.name
-            cap = self._command(action, settings, timeout=CAPTURE_TIMEOUT)
+            cap = self._command("capture_image", settings, timeout=CAPTURE_TIMEOUT)
             output = cap.get("output") or {}
             self._retrieve_file(output.get("filename", dest.name), dest, output)
         except OpenMvError as exc:
@@ -287,6 +258,46 @@ class OpenMvUsbCamera(CameraDevice):
             return self._failed(identity, request, exc.code, exc.message, elapsed)
 
         return self._validate(identity, request, dest, output, time.monotonic() - started)
+
+    def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
+        """8-bit Bayer RAW at a locked exposure (Phase 8 S3, OQ-21) → ``destination``
+        (``.bayer``, the mosaic bytes row-major) + ``<stem>.json`` sidecar with everything
+        needed to read it (W, H, CFA, bits, black / white level, read-back exposure / gain)
+        — ``color.raw_io.read_openmv_bayer`` turns the pair into a ``RawFrame``.
+
+        The board streams the frame from RAM in the command's own framed reply (no
+        ``/flash`` copy, see ``capture_service.capture_raw``). Settings: ``warmup_ms``
+        (metering time), optional ``exposure_us`` / ``gain_db`` (else the metered values
+        are locked). On the AE3, ``reset_board`` first (one camera session per boot on v5).
+        """
+        dest = Path(destination)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        identity = self._current_identity()
+        started = time.monotonic()
+        try:
+            settings = {**self._settings, **(request.settings or {}), "filename": dest.name}
+            io = self._ensure_io()
+            io.write_message(cp.make_request("capture_raw", uuid.uuid4().hex[:12], settings))
+            data, footer = self._receive_framed(io, "capture_raw", CAPTURE_TIMEOUT)
+            output = footer.get("output") or {}
+            expected = output["width"] * output["height"] * output["bits"] // 8
+            if len(data) != expected:
+                raise OpenMvError("size_mismatch", "raw is %d B, expected %dx%dx%d bits" % (
+                    len(data), output["width"], output["height"], output["bits"]))
+            dest.write_bytes(data)
+        except OpenMvError as exc:
+            return self._failed(identity, request, exc.code, exc.message,
+                                time.monotonic() - started)
+        result = self._validate(identity, request, dest, output, time.monotonic() - started)
+        if result.ok:
+            sidecar = {"format": "openmv_bayer", "file": dest.name, "sha256": result.sha256,
+                       "size_bytes": result.size_bytes,
+                       "captured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "camera": result.camera.to_dict(),
+                       "duration_seconds": round(result.duration_seconds, 3),
+                       **result.sensor_metadata}
+            dest.with_suffix(".json").write_text(json.dumps(sidecar, indent=2) + "\n")
+        return result
 
     def capture_video(self, destination: str, request: CaptureRequest) -> CaptureResult:
         # OQ-4: short-clip-to-file on the N6 is not yet verified. Live focus streaming is
@@ -365,29 +376,8 @@ class OpenMvUsbCamera(CameraDevice):
         io = self._ensure_io()
         command_id = uuid.uuid4().hex[:12]
         io.write_message(cp.make_request("get_file", command_id, {"filename": filename}))
-        header = io.read_message(timeout=TRANSFER_TIMEOUT)
-        if header.get("status") == "failed":
-            err = header.get("error") or {}
-            raise OpenMvError(
-                err.get("code", "file_not_found"), err.get("message", "get_file failed")
-            )
-        if header.get("status") != "sending":
-            raise OpenMvError("bad_transfer", "unexpected transfer header: %r" % header)
-        transfer = header.get("transfer") or {}
-        size = int(transfer.get("size_bytes", 0))
-        data = io.read_exact(size, timeout=TRANSFER_TIMEOUT)
-        footer = io.read_message(timeout=TRANSFER_TIMEOUT)
-        if footer.get("status") != "completed":
-            raise OpenMvError("bad_transfer", "transfer not completed: %r" % footer)
-
-        # Verify the framed payload against the header before trusting it (§19).
-        if len(data) != size:
-            raise OpenMvError("size_mismatch", "got %d bytes, expected %d" % (len(data), size))
+        data, _footer = self._receive_framed(io, "get_file", TRANSFER_TIMEOUT)
         actual_sha = _sha256_bytes(data)
-        expected_sha = transfer.get("sha256")
-        if expected_sha and actual_sha != expected_sha:
-            raise OpenMvError("checksum_mismatch",
-                              "sha256 %s != board %s" % (actual_sha, expected_sha))
         # Cross-check against the capture metadata's own sha where present.
         cap_sha = expected.get("sha256")
         if cap_sha and cap_sha != actual_sha:
@@ -399,6 +389,33 @@ class OpenMvUsbCamera(CameraDevice):
         # free on 2026-07-17 and every capture failed with io_error). Best-effort: a
         # failed delete (e.g. pre-delete_file firmware) must not fail the capture.
         self._delete_remote_file(filename)
+
+    @staticmethod
+    def _receive_framed(io: _SerialIO, action: str, timeout: float) -> tuple[bytes, dict]:
+        """Read one §10 framed reply — ``sending`` header, exactly ``size_bytes`` of payload,
+        ``completed`` footer — and verify the payload's size and SHA-256 against the header
+        before trusting it (§19). Returns (payload, footer)."""
+        header = io.read_message(timeout=timeout)
+        if header.get("status") == "failed":
+            err = header.get("error") or {}
+            raise OpenMvError(err.get("code", "file_not_found"),
+                              err.get("message", "%s failed" % action))
+        if header.get("status") != "sending":
+            raise OpenMvError("bad_transfer", "unexpected transfer header: %r" % header)
+        transfer = header.get("transfer") or {}
+        size = int(transfer.get("size_bytes", 0))
+        data = io.read_exact(size, timeout=TRANSFER_TIMEOUT)
+        footer = io.read_message(timeout=TRANSFER_TIMEOUT)
+        if footer.get("status") != "completed":
+            raise OpenMvError("bad_transfer", "transfer not completed: %r" % footer)
+        if len(data) != size:
+            raise OpenMvError("size_mismatch", "got %d bytes, expected %d" % (len(data), size))
+        actual_sha = _sha256_bytes(data)
+        expected_sha = transfer.get("sha256")
+        if expected_sha and actual_sha != expected_sha:
+            raise OpenMvError("checksum_mismatch",
+                              "sha256 %s != board %s" % (actual_sha, expected_sha))
+        return data, footer
 
     def _delete_remote_file(self, filename: str) -> None:
         """Best-effort ``delete_file`` after a verified retrieval; warn, never raise."""
@@ -467,7 +484,7 @@ class OpenMvUsbCamera(CameraDevice):
 
 _RAW_KEYS = ("width", "height", "framesize", "cfa", "bits", "black_level", "white_level",
              "exposure_us", "gain_db", "requested", "metered", "isp_rgb_gain_db",
-             "mount_rotation_deg")
+             "mount_rotation_deg", "timing_ms")
 
 
 def _raw_metadata(output: dict) -> dict[str, Any]:
