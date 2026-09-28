@@ -166,7 +166,20 @@ From the design brief §11 (`docs/DESIGN_edge_color_correction.md`) plus gaps fo
 planning (2026-09-26). "Blocks" names the Phase 8 sprint (SPEC §4) that needs the answer.
 Items for Nick are marked **(Nick)**.
 
-- **[PARTIAL] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.* What the
+- **[PARTIAL] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.*
+  **N6 probed on real hardware 2026-09-28** (`nereus002`, OpenMV v5.0.1, `csi` module,
+  `openmv/probes/raw_probe_v5.py`): `csi.BAYER` is the only raw format (no 10/12-bit constant) —
+  **8-bit Bayer**, 1 byte/px, HD 1280×800 = 1,024,000 B; `auto_exposure` / `auto_gain` /
+  `auto_whitebal` lock; `exposure_us()` (5,560) and `gain_db()` (0.0) read back; `rgb_gain_db()`
+  reports (3.1, 0, 6.0) dB — whether those ISP gains touch the Bayer data is unknown; `auto_blc`
+  / `blc_regs` exist (black level: to measure with a dark frame). Per-2×2-position means
+  56.9 / 80.6 / 80.5 / 40.7 → greens at TR/BL, so RGGB or BGGR (decide on the card).
+  Heap 25.6 MB free, flash 2.7 MB free. `mpremote fs cp` of the 1 MB frame took > 90 s → use
+  the rig's framed `get_file`. The AE3 gave the same 8-bit HD frames in Nick's September runs
+  (`isp_run.py`, `csi`). *Still to do:* CFA from the card, `get_file` time for 1 MB (OQ-23),
+  dark-frame black level, the AE3 probe (one session per boot), then an allowlisted
+  `capture_raw` (Bayer → `/flash` → `get_file`, sidecar with W/H/CFA/bits/exposure/gain).
+  *Earlier notes:* What the
   repo already tells us:
   - **AE3:** `sensor.BAYER` was accepted by `set_pixformat` during the 2026-07-15 bring-up
     probe (fw 1.25.0-preview), recorded in the `PIXEL_FORMATS` comment in
