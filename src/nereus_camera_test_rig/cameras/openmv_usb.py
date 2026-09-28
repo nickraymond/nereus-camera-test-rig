@@ -48,6 +48,10 @@ TRANSFER_TIMEOUT = 30.0
 RESET_TIMEOUT = 20.0
 _READ_CHUNK = 4096
 
+# A board that stops reading its USB input makes host writes block forever once the CDC buffer
+# fills (AE3 on nereus002, 2026-09-28: a hardware test hung 11 min in serial.write).
+WRITE_TIMEOUT = 10.0
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +82,13 @@ class _SerialIO:
         self._buf = bytearray()
 
     def write_message(self, message: dict) -> None:
-        self._t.write(cp.encode_message(message))
+        try:
+            self._t.write(cp.encode_message(message))
+        except OSError as exc:  # pyserial's SerialTimeoutException is an OSError
+            raise OpenMvTimeout(
+                "board is not reading its USB input (write failed: %s) — the service is stuck "
+                "or the board is wedged; replug its USB cable (AE3: never USB-reset it)" % exc
+            ) from exc
 
     def _read_some(self) -> bytes:
         return self._t.read(_READ_CHUNK) or b""
@@ -173,7 +183,7 @@ class OpenMvUsbCamera(CameraDevice):
             )
         self._port = port
         # Short per-read timeout; overall deadlines are enforced in _SerialIO.
-        return serial.Serial(port, self._baudrate, timeout=0.2)
+        return serial.Serial(port, self._baudrate, timeout=0.2, write_timeout=WRITE_TIMEOUT)
 
     def _resolve_port(self) -> Optional[str]:
         from host_tools.discover_openmv import find_port

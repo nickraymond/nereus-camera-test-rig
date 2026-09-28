@@ -110,7 +110,7 @@ def handshake(port, timeout=DEFAULT_HANDSHAKE_TIMEOUT):
     import serial
 
     try:
-        with serial.Serial(port, DEFAULT_BAUD, timeout=timeout) as ser:
+        with serial.Serial(port, DEFAULT_BAUD, timeout=timeout, write_timeout=timeout) as ser:
             ser.reset_input_buffer()
             ser.write(cp.encode_message(cp.make_request("get_device_info", "discover-0")))
             # Read up to the first JSON line (pyserial's per-read timeout bounds each
