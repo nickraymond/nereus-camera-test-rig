@@ -7,8 +7,8 @@ pyserial is present, so it never fails a hardware-less CI run.
 
 Proves the Phase 4 exit criteria: discover the AE3 by USB identity, capture N stills in a
 row each retrieved with a matching checksum, and reject a bad command cleanly. On OpenMV v5
-each capture follows a ``reset_board`` (one camera session per boot, ``_capture_after_reset``). The AE3
-reuses the same board-agnostic host adapter and USB protocol as the N6 (Phase 3); only
+each capture follows a ``reset_board`` (one camera session per boot, see
+``_capture_after_reset``). The AE3 reuses the same board-agnostic host adapter and USB protocol as the N6 (Phase 3); only
 the board identity/sensor facts differ.
 """
 
