@@ -19,6 +19,7 @@ a fake loopback exercises the whole adapter on the host with no hardware.
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 import time
@@ -240,7 +241,36 @@ class OpenMvUsbCamera(CameraDevice):
         self._settings.update(settings or {})
 
     def capture_image(self, destination: str, request: CaptureRequest) -> CaptureResult:
+        return self._capture("capture_image", Path(destination), request)
+
+    def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
+        """8-bit Bayer RAW at a locked exposure (Phase 8 S3, OQ-21) → ``destination``
+        (``.bayer``, the mosaic bytes row-major) + ``<stem>.json`` sidecar with everything
+        needed to read it (W, H, CFA, bits, black / white level, read-back exposure / gain)
+        — ``color.raw_io.read_openmv_bayer`` turns the pair into a ``RawFrame``. Settings:
+        ``warmup_ms`` (metering time), optional ``exposure_us`` / ``gain_db`` (else the
+        metered values are locked). On the AE3, ``reset_board`` first (one camera session
+        per boot on OpenMV v5)."""
         dest = Path(destination)
+        result = self._capture("capture_raw", dest, request)
+        if result.status != "completed":
+            return result
+        meta = result.sensor_metadata
+        expected = meta["width"] * meta["height"] * meta["bits"] // 8
+        if result.size_bytes != expected:
+            return self._failed(result.camera, request, "size_mismatch",
+                                "raw is %d B, expected %dx%dx%d bits = %d B" % (
+                                    result.size_bytes, meta["width"], meta["height"],
+                                    meta["bits"], expected), result.duration_seconds)
+        sidecar = {"format": "openmv_bayer", "file": dest.name, "sha256": result.sha256,
+                   "size_bytes": result.size_bytes,
+                   "captured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                   "camera": result.camera.to_dict(),
+                   "duration_seconds": round(result.duration_seconds, 3), **meta}
+        dest.with_suffix(".json").write_text(json.dumps(sidecar, indent=2) + "\n")
+        return result
+
+    def _capture(self, action: str, dest: Path, request: CaptureRequest) -> CaptureResult:
         dest.parent.mkdir(parents=True, exist_ok=True)
         identity = self._current_identity()
         started = time.monotonic()
@@ -249,7 +279,7 @@ class OpenMvUsbCamera(CameraDevice):
             settings = {**self._settings, **(request.settings or {})}
             # The host owns the filename (it owns real time); the board saves under it.
             settings["filename"] = dest.name
-            cap = self._command("capture_image", settings, timeout=CAPTURE_TIMEOUT)
+            cap = self._command(action, settings, timeout=CAPTURE_TIMEOUT)
             output = cap.get("output") or {}
             self._retrieve_file(output.get("filename", dest.name), dest, output)
         except OpenMvError as exc:
@@ -405,7 +435,7 @@ class OpenMvUsbCamera(CameraDevice):
             size_bytes=dest.stat().st_size,
             sha256=local_sha,
             duration_seconds=duration,
-            sensor_metadata={
+            sensor_metadata=_raw_metadata(output) if output.get("format") == "bayer" else {
                 "framesize": output.get("framesize"),
                 "pixel_format": output.get("pixel_format"),
                 "jpeg_quality": output.get("jpeg_quality"),
@@ -433,6 +463,19 @@ class OpenMvUsbCamera(CameraDevice):
             duration_seconds=duration,
             error={"code": code, "message": message},
         )
+
+
+_RAW_KEYS = ("width", "height", "framesize", "cfa", "bits", "black_level", "white_level",
+             "exposure_us", "gain_db", "requested", "metered", "isp_rgb_gain_db",
+             "mount_rotation_deg")
+
+
+def _raw_metadata(output: dict) -> dict[str, Any]:
+    """The board's ``capture_raw`` facts, as recorded in the sidecar (OQ-21: CFA, black
+    level and bit depth are measured board facts from ``board_config.RAW_*``;
+    ``isp_rgb_gain_db`` is diagnostic only — the ISP WB gains are not in the Bayer data
+    and the firmware lists the top-left (blue) site first)."""
+    return {k: output.get(k) for k in _RAW_KEYS}
 
 
 def _sha256_bytes(data: bytes) -> str:
