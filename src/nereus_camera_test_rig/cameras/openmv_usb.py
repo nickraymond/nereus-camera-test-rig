@@ -96,6 +96,18 @@ class _SerialIO:
         del self._buf[: idx + 1]
         return line
 
+    def read_message(self, timeout: Optional[float] = None) -> dict:
+        """The next protocol message. Board console lines — anything not starting with
+        ``{``, e.g. OpenMV v5's ``sensor`` deprecation warning printed into the USB stream
+        at service start (N6 on ``nereus002``, 2026-09-28) — are logged and skipped."""
+        deadline = time.monotonic() + (self._default_timeout if timeout is None else timeout)
+        while True:
+            line = self.read_line(timeout=max(0.0, deadline - time.monotonic()))
+            if line.strip().startswith(b"{"):
+                return cp.decode_message(line)
+            if line.strip():
+                logger.info("board console: %s", line.decode("utf-8", "replace").strip()[:200])
+
     def read_exact(self, n: int, timeout: Optional[float] = None) -> bytes:
         deadline = time.monotonic() + (self._default_timeout if timeout is None else timeout)
         while len(self._buf) < n:
@@ -191,7 +203,7 @@ class OpenMvUsbCamera(CameraDevice):
         io = self._ensure_io()
         command_id = uuid.uuid4().hex[:12]
         io.write_message(cp.make_request(action, command_id, settings))
-        resp = cp.decode_message(io.read_line(timeout=timeout))
+        resp = io.read_message(timeout=timeout)
         if resp.get("status") == "failed":
             err = resp.get("error") or {}
             raise OpenMvError(
@@ -313,7 +325,7 @@ class OpenMvUsbCamera(CameraDevice):
         io = self._ensure_io()
         command_id = uuid.uuid4().hex[:12]
         io.write_message(cp.make_request("get_file", command_id, {"filename": filename}))
-        header = cp.decode_message(io.read_line(timeout=TRANSFER_TIMEOUT))
+        header = io.read_message(timeout=TRANSFER_TIMEOUT)
         if header.get("status") == "failed":
             err = header.get("error") or {}
             raise OpenMvError(
@@ -324,7 +336,7 @@ class OpenMvUsbCamera(CameraDevice):
         transfer = header.get("transfer") or {}
         size = int(transfer.get("size_bytes", 0))
         data = io.read_exact(size, timeout=TRANSFER_TIMEOUT)
-        footer = cp.decode_message(io.read_line(timeout=TRANSFER_TIMEOUT))
+        footer = io.read_message(timeout=TRANSFER_TIMEOUT)
         if footer.get("status") != "completed":
             raise OpenMvError("bad_transfer", "transfer not completed: %r" % footer)
 

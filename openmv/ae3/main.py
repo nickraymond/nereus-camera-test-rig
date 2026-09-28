@@ -8,10 +8,10 @@ dispatches to the shared services, and replies with structured JSON (+ framed bi
 **Board difference from the N6 (verified on hardware 2026-07-15).** The AE3 is an Alif
 Ensemble part; its firmware has **no ``pyb`` module**, so ``pyb.USB_VCP()`` (used by the
 N6) is unavailable *on any AE3 firmware* — ``pyb`` is STM32-specific. The AE3's USB CDC is
-reached instead through the standard MicroPython console streams ``sys.stdin.buffer`` /
-``sys.stdout.buffer`` with a ``select.poll`` for non-blocking reads.
-``usb_console.UsbConsole`` (shared with the N6 on v5 firmware) wraps those to expose the same ``any()`` / ``read(n)`` / ``write(bytes)`` interface the
-shared ``capture_service`` and the dispatch loop expect — so this is the *only*
+reached instead through the MicroPython console streams (``sys.stdin.buffer`` /
+``sys.stdout.buffer``, ``select.poll`` for non-blocking reads).
+``usb_console.UsbConsole`` (shared with the N6 on v5 firmware) wraps those to expose the
+same ``any()`` / ``read(n)`` / ``write(bytes)`` interface the shared ``capture_service`` and the dispatch loop expect — so this is the *only*
 board-specific code, and the shared services stay untouched (CLAUDE.md §6/§36).
 
 The dispatch logic (``_handle_line``) is intentionally identical to the N6's; only the USB
