@@ -94,6 +94,8 @@ prints the card; the wet measurement (checklist step 6) captures this.
 8. [ ] Photograph each card above water in daylight before and after every dive (damage check and
    a fresh daylight reference).
 9. [ ] Shoot the ChArUco back with each camera, 12–20 views, in air and in water (P1.4 rows 9–10, P4).
+10. [ ] On the V3 dive, include shallow frames (0.5–4 m depth) as well as deep ones: the no-card depth
+    table is fitted on 5–16 m, and 8 of its 9 losses to the camera JPEG are shallower (S2a, PR #44).
 
 ## Pipeline changes needed before V3 data can be processed (OQ-47)
 
