@@ -459,6 +459,10 @@ reference its issue there.
   §17 down-select. Beyond MVP (current analysis is still-based). Needs refinement: precise
   "accuracy" definition, cross-camera frame-sync tolerance, on-device vs host detection per
   platform (candidate ADR).
+- **Motion-blur detection for best-frame selection** — [#61](https://github.com/nickraymond/nereus-camera-test-rig/issues/61) (Nick, 2026-09-28; not in the current rollout).
+  Score each candidate frame for motion blur on the RAW (card edges and scene) before transmit, so the camera always sends the best
+  frame. It feeds the locked-exposure rule (S3): a longer shutter gives cleaner data but more blur. On the TG-7, shutter ≥ 1/30 s
+  was the main card-detection failure (OQ-43). Needs a metric, a threshold per camera, and a rig test with a moving target.
 
 ---
 
