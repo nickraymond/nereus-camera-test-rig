@@ -47,7 +47,15 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   This is metadata only — raw frames are stored un-rotated and it does not affect capture,
   checksums, or the Phase 4 exit criteria — but the down-select side-by-side wants it right.
   Resolve with a known-orientation reference capture; do **not** assume it matches the N6.
-- **[DEFERRED] OQ-19 — Firmware update to v5.0.0 + `sensor`→`csi` migration.** Both boards run
+- **[PARTIAL 2026-09-28] OQ-19 — Firmware update to v5.0.0 + `sensor`→`csi` migration.**
+  **Firmware: done** — both boards on `nereus002` run **OpenMV v5.0.1** (MicroPython 1.28,
+  `os.uname()`), updated by Nick. What changed for the rig, all verified on hardware: the N6's
+  `pyb` has no `USB_VCP` → shared `openmv/common/usb_console.py` shim (#67); the legacy
+  `sensor` module still works but prints a deprecation warning into the USB stream → the host
+  skips non-JSON lines (#67); the AE3 hard-crashes on the second camera session per boot → one
+  capture per boot, `reset_board` first (#70; Nick's `ADIN_SPI_OpenMV/firmware/ae3_usb/README.md`);
+  a board that stops reading no longer hangs the host (write timeout, #69). **Still open:** the
+  `sensor` → `csi` migration (do it before `sensor` is removed). *History:* Both boards ran
   pre-v5.0.0 firmware (N6 MicroPython `1.26.0`; AE3 `1.25.0-preview`). OpenMV **v5.0.0** (2026-07-02)
   takes the N6/AE3 out of beta and lists "Fix Apriltags on the AE3", but bundles MicroPython 1.28
   with API changes: the legacy `sensor` module (used by `openmv/common/capture_service.py`) is
@@ -388,7 +396,11 @@ Items for Nick are marked **(Nick)**.
 
 ### Card V3 (design 2026-09-27, `docs/reference_card_v3.md`)
 
-- **[NEEDS-HARDWARE] OQ-43 — Real N6 / AE3 blur, distortion and card detection range.** *Blocks
+- **[NEEDS-HARDWARE] OQ-43 — Real N6 / AE3 blur, distortion and card detection range.**
+  *First real frames (nereus002, 2026-09-28, V1 card ~1.5 m, in air, HD 1280×800):* the N6 and
+  AE3 have **fixed lenses** (no focus adjustment, Nick). The N6 image is soft on the left: it
+  finds only the right-hand tags (1, 3; card ~370 px wide) at every detection scale; the AE3
+  finds all 4 (card ~340 px). *Blocks
   printing V3.* The V3 sizes come from a simulator that is ~2× optimistic against the real TG-7:
   it located V2 in 100 % of runs at 1–3 m where the dives got 56 % (1–2 m) and 45 % (2–3 m); the
   main real failure is slow-shutter motion blur (at 1–2 m, 88 % located below 1/30 s vs 27 % at or
