@@ -8,6 +8,7 @@ the camera colour matrix (L1), clip, sRGB encode (L3)::
 | method | column name | haze | gain | card |
 |---|---|---|---|---|
 | ``raw_card_wb`` | RAW + card WB | 0 | anchor grey → its truth | yes |
+| ``raw_card_slope_wb`` | RAW + card slope WB | 0 | grey-ramp slope (light colour) | yes |
 | ``raw_card_wb_haze`` | RAW + card WB − haze | grey-ramp intercept, capped at the dark floor | anchor grey (after haze) → truth | yes |
 | ``raw_depth_wb_haze`` | RAW + depth WB − haze (no card) | the dark floor | light colour from depth; brightness from the image | **no** |
 
@@ -24,6 +25,11 @@ nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset
 
 - Anchor grey: the card's ``roles.wb_anchors``, first one qc kept (V2: grey 128, its right half,
   grey 74).
+- Card slope WB: white balance on the **slope** ``A`` of the grey ramp (the light reaching
+  the card, haze-free) instead of on the anchor grey, which also carries the haze: in turbid
+  water grey 128 is mostly blue-green backscatter, so balancing on it over-boosts red. No haze
+  is subtracted; green gets the same gain as ``raw_card_wb``, so brightness is unchanged.
+  Needs ``SLOPE_MIN_GREYS`` greys in the ramp (no column otherwise).
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
   channel, capped at the **dark floor** — the ``DARK_PERCENTILE`` of the image centre
   (``CENTRE`` of each side; the corners are vignetted). How often the cap binds is logged.
@@ -71,11 +77,13 @@ from .water_model import fit_settings, grey_reflectance, ramp_fit
 DARK_PERCENTILE = 0.5
 CENTRE = 0.6
 TARGET_P99 = 0.8
+SLOPE_MIN_GREYS = 3  # a 2-grey slope is unstable (TG-7 dive 4: grey 74 + grey 128 right → yellow)
 COLUMNS = {  # method → the name used in sheets and reports
     "camera_jpeg": "Camera JPEG",
     "olympus_preset_jpeg": "Olympus underwater preset JPEG",
     "jpeg_card_wb": "JPEG + card WB",
     "raw_card_wb": "RAW + card WB",
+    "raw_card_slope_wb": "RAW + card slope WB",
     "raw_card_wb_haze": "RAW + card WB − haze",
     "raw_depth_wb_haze": "RAW + depth WB − haze (no card)",
     "grvi_cheeca_v3": "GRVI cheeca_v3 (backend)",
@@ -86,7 +94,8 @@ COLUMNS = {  # method → the name used in sheets and reports
 }
 NOT_RENDERED = {"raw_depth_wb_haze_loso"}  # a validation variant: scored, no images
 CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
-                             "raw_card_wb_haze", "raw_card_wb_ccm", "raw_card_affine"),
+                             "raw_card_slope_wb", "raw_card_wb_haze", "raw_card_wb_ccm",
+                             "raw_card_affine"),
            "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze",
                          "raw_depth_wb_haze_loso", "raw_depth_wb_haze_ccm")}
 PRESET_CATEGORY = "2_underwater_preset"
@@ -149,6 +158,10 @@ def frame_maps(job: dict, image: np.ndarray) -> tuple[dict[str, tuple], dict[str
         a = np.asarray(raw[anchor])
         maps["raw_card_wb"] = ([0.0] * 3, (t / np.maximum(a, 1e-9)).tolist())
         ramp = job.get("ramp")
+        if ramp is not None and len(ramp["greys"]) >= SLOPE_MIN_GREYS and min(ramp["A"]) > 0:
+            A = np.asarray(ramp["A"])
+            maps["raw_card_slope_wb"] = ([0.0] * 3,
+                                         (t * A[1] / max(a[1], 1e-9) / A).tolist())
         if ramp is None:
             haze, diag["haze_source"] = dark, "dark floor (fewer than 2 usable greys)"
         else:
