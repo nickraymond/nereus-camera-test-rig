@@ -20,7 +20,7 @@ Usage::
     python -m host_tools.color decide results/color/<dataset_id>/correct --config <dataset.yaml>
     python -m host_tools.color grvi results/color/<dataset_id>/locate --config <dataset.yaml> \
         --backend <nereus-vision-dev checkout> --python <backend env python>   # before correct
-    python -m host_tools.color jxl-check <file.orf|file.dng> [--distance 0.5 1.0]  # transport
+    python -m host_tools.color jxl-check <file.orf|file.dng> [--jxl-distance 0.5 1.0]  # transport
 """
 
 from __future__ import annotations
@@ -63,7 +63,9 @@ def main(argv=None) -> int:
     p.add_argument("--out", type=Path, default=REPO / "results" / "color")
     p = sub.add_parser("jxl-check", help="linear JPEG XL transport round trip on one RAW")
     p.add_argument("file", type=Path)
-    p.add_argument("--distance", type=float, nargs="+", default=[0.5, 1.0])
+    p.add_argument("--jxl-distance", "--distance", dest="distance", type=float, nargs="+",
+                   default=[0.5, 1.0], help="JPEG XL encoder distance (cjxl -d; 0 = lossless, "
+                   "larger = smaller file, more loss) — not a camera distance")
     p.add_argument("--crop", type=lambda v: tuple(int(c) for c in v.split(",")),
                    help="x,y,w,h in sensor px (default: centred 1600x900, bmcam001's crop)")
     p.add_argument("--wb", type=lambda v: tuple(float(c) for c in v.split(",")),
