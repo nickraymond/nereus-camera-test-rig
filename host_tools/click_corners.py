@@ -29,7 +29,7 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from nereus_camera_test_rig.color.locate import plausible
+from nereus_camera_test_rig.color.locate import RATIO_RANGE, plausible
 from nereus_camera_test_rig.color.raw_io import RawFrame, bin2x2, normalize
 
 ORDER = ("TL", "TR", "BR", "BL")
@@ -68,8 +68,8 @@ def save_entry(manual_path: Path, stem: str, entry: dict[str, Any]) -> None:
 class ClickSession:
     """GUI-free state for one frame: clicks in, a manual_corners entry out."""
 
-    def __init__(self, origin: tuple[int, int]):
-        self.origin = origin
+    def __init__(self, origin: tuple[int, int], ratio_range=RATIO_RANGE):
+        self.origin, self.ratio_range = origin, tuple(ratio_range)
         self.points: list[tuple[float, float]] = []  # display coords
 
     def click(self, x: float, y: float) -> bool:
@@ -87,7 +87,7 @@ class ClickSession:
         if len(self.points) != 4:
             return None
         quad = [to_raw(x, y, self.origin) for x, y in self.points]
-        if not plausible(np.asarray(quad, dtype=np.float64)):
+        if not plausible(np.asarray(quad, dtype=np.float64), self.ratio_range):
             return None
         return {"quad_raw": quad, "quad_type": "tag_centers", "display": "raw_binned_wb",
                 "clicked_utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
@@ -115,6 +115,8 @@ def run(locate_dir: Path, manual_path: Path, dataset_dir: Path,
     for key in ("keymap.save", "keymap.quit"):
         plt.rcParams[key] = []
     corners = json.loads((locate_dir / "corners.json").read_text())
+    params = json.loads((locate_dir / "stage.json").read_text()).get("params", {})
+    ratio_range = params.get("ratio_range", RATIO_RANGE)  # the card's, as locate used it
     stems = todo(locate_dir, manual_path, redo)
     print(f"{len(stems)} frames to click ({manual_path})")
     fig, ax = plt.subplots(figsize=(14, 10))
@@ -125,7 +127,7 @@ def run(locate_dir: Path, manual_path: Path, dataset_dir: Path,
         stem = stems[state["i"]]
         row = rows[stem]
         img, origin = display_image(raw_reader(dataset_dir / row["file"]))
-        state["session"] = ClickSession(origin)
+        state["session"] = ClickSession(origin, ratio_range)
         state["marks"] = []
         ax.imshow(img)
         rec = corners[stem]
