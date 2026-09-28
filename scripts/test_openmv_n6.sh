@@ -15,7 +15,7 @@ cd "$ROOT"
 PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || { echo "!! venv missing at $PY — run scripts/install_pi.sh" >&2; exit 1; }
 
-SERIAL="${1:-005537493543}"
+SERIAL="${1:-020023000450433547373200}"  # N6 on nereus002 (OpenMV v5.0.1)
 
 echo "== OpenMV N6 smoke test (serial $SERIAL) =="
 

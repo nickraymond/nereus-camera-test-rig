@@ -90,7 +90,7 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
         while state.running:
             io.write_message(cp.make_request("start_stream", command_id, settings))
             while state.running:
-                header = cp.decode_message(io.read_line(timeout=10.0))
+                header = io.read_message(timeout=10.0)
                 status = header.get("status")
                 if status == "frame":
                     meta = header.get("frame") or {}
