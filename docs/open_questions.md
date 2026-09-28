@@ -262,15 +262,13 @@ Items for Nick are marked **(Nick)**.
 - **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
   or cameras housed and cabled to a dry poolside Pi?
 - **[PARTIAL 2026-09-28] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *Answer:* no
-  X-Rite. Nick has a **Pixel Perfect "24 Standard Color Calibration Chart"** (4×6 in, SmartFlex
-  synthetic paper, ColorChecker-Classic patch layout; Amazon B07VCTWR5Q) — *not* a Datacolor
-  SpyderCheckr (that was a sponsored listing on the same page). No published Lab / spectral values
-  found (2026-09-28 web search); its "Adobe DNG Profile Editor" workflow implies the X-Rite
-  Classic values, but a clone's inks can differ by several ΔE. Use: relative reference (same chart
-  in every shot, across cameras and lamps) and a check of the V1 reading; absolute truth needs a
-  chart with published per-batch data (Calibrite ColorChecker Classic, whose values ship in
-  `colour`) or a spectrophotometer reading. No AprilTags: place it at a fixed offset from the V1
-  card, or click its corners with the existing tool. *Original:* *S2b and S4.* Enables
+  X-Rite; Nick has a **Datacolor SpyderCheckr 24** (SCK200) — same role (absolute reference beside
+  the card). Its authoritative Lab values are in **Datacolor's SpyderCheckr software reference
+  file** (or from Datacolor support); darktable PR #22278 (2026) fixed wrong copies of them and found
+  no real pre/post-2018 edition difference. Take the values from Datacolor's file, not from a
+  third-party copy (and not from darktable's GPL source, §20 licensing). The SpyderCheckr has no
+  AprilTags: place it at a fixed offset from the V1 card, or click its corners with the existing
+  tool. *Original:* *S2b and S4.* Enables
   card-truth Option B (brief §5.3). More valuable than before: the V2 card is water-damaged,
   so a reshoot of it gives an unreliable daylight reference for its light patches. Not a
   blocker for the S2a gate (design values + the TG-7's embedded colour matrix).
