@@ -3,10 +3,16 @@ bootstrap, the pre-registered rule, n tables, preset pairs, needs-V3 and the HTM
 
 from __future__ import annotations
 
+import csv
 import json
+import re
+from pathlib import Path
 
+import cv2
 import numpy as np
+import pytest
 
+from nereus_camera_test_rig.color.correct import COLUMNS
 from nereus_camera_test_rig.color.decision import (
     GRVI_FOUND,
     compare,
@@ -16,7 +22,10 @@ from nereus_camera_test_rig.color.decision import (
     sweep_bootstrap,
     with_grvi_found,
 )
-from nereus_camera_test_rig.color.stages import write_stage
+from nereus_camera_test_rig.color.decision_sheets import SEED, nereus_side, score_blind
+from nereus_camera_test_rig.color.stages import verify_fresh, write_stage
+
+CARD_PATH = Path(__file__).resolve().parents[2] / "configs" / "cards" / "nereus_v2.yaml"
 
 
 def frame(dive="3", sweep="", cond="damaged", **methods):
@@ -65,19 +74,51 @@ def test_n_table_counts_frames_and_patches_per_dive_and_condition():
     assert n["3"]["clean"] == [4, 60] and n["4"]["damaged"] == [16, 240]
 
 
-def test_decide_stage_writes_numbers_and_page(tmp_path):
-    root = tmp_path / "ds"
+def _stage_fixture(tmp_path):
+    """A §20 results tree: ingest manifest + dataset JPEGs, patches, qc, correct + images."""
+    root, ds = tmp_path / "ds", tmp_path / "data"
     correct_dir, qc_dir = root / "correct", root / "qc"
     scores = synthetic()
     for v in scores.values():
         v["methods"]["raw_card_wb"] = {"de2000_median": 18.0, "n_de": 12}
         v["methods"]["jpeg_card_wb"] = {"de2000_median": 37.0, "n_de": 12}
+        v["methods"]["grvi_cheeca_v3"] = {"de2000_median": 30.0, "grvi_no_card": False}
+        v["anchor"] = "gray_mid"
     scores["F0"]["category"] = "2_underwater_preset"
     scores["F0"]["methods"]["olympus_preset_jpeg"] = {"de2000_median": 45.0, "psi_median": 46.0}
     scores["F0"]["pair_a_mode"] = {"stem": "F1", "dt_s": 30.0, "depth_diff_m": 0.2}
     scores["FL"] = {**frame(), "flash": True}
-    correct_dir.mkdir(parents=True)
+    stems = list(scores) + ["N1"]  # N1: a no-card frame (rendered, not scored)
+    (ds / "cat").mkdir(parents=True)
+    img = np.full((60, 80, 3), (90, 140, 30), np.uint8)
+    for d in ("raw_card_wb", "raw_card_wb_haze", "raw_depth_wb_haze"):
+        (correct_dir / "images" / d).mkdir(parents=True, exist_ok=True)
+    (root / "grvi" / "images").mkdir(parents=True)
+    rows = []
+    for i, s in enumerate(stems):
+        cv2.imwrite(str(ds / "cat" / f"{s}.jpg"), img)
+        for d in ("raw_card_wb", "raw_card_wb_haze", "raw_depth_wb_haze"):
+            cv2.imwrite(str(correct_dir / "images" / d / f"{s}.jpg"), img[..., ::-1])
+        cv2.imwrite(str(root / "grvi" / "images" / f"{s}.jpg"), img)
+        v = scores.get(s, frame())
+        rows.append({"stem": s, "jpeg": f"cat/{s}.jpg", "sweep_id": v["sweep_id"],
+                     "category": "4_no_card" if s == "N1" else v["category"],
+                     "dive_id": v["dive_id"], "depth_m": "8.0",
+                     "time_utc": f"2026-09-16T02:{i:02d}:00+00:00"})
+    (root / "ingest").mkdir()
+    with (root / "ingest" / "manifest.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    write_stage(root / "ingest", "ingest", params={"dataset_dir": str(ds)})
+    (root / "patches").mkdir()
+    (root / "patches" / "patches.json").write_text(json.dumps(
+        {s: {"jpeg": {"patches": {"gray_mid": {"mean": [100, 120, 110]}}}} for s in scores}))
     (correct_dir / "scores.json").write_text(json.dumps(scores))
+    (correct_dir / "frames.json").write_text(json.dumps(
+        {s: {"depth_m": 1.0 if s == "F2" else 8.0} for s in scores}))
+    (root / "fit").mkdir()
+    (root / "fit" / "wb_points.csv").write_text("stem,dive,depth_m\nA,3,5.0\nB,4,16.0\n")
     (correct_dir / "summary.json").write_text(json.dumps(
         {"card_haze_cap_bound_frames": "3 of 4", "grvi_no_card_frames": []}))
     qc_dir.mkdir()
@@ -87,8 +128,14 @@ def test_decide_stage_writes_numbers_and_page(tmp_path):
     write_stage(correct_dir, "correct")
     cfg = tmp_path / "dataset.yaml"
     cfg.write_text("fit:\n  reference_category: cat\n  wb_categories: [cat]\n"
-                   "  table_source_dives: ['3', '4']\n  flagged_dives: {'1': sunset}\n")
-    out = decide(correct_dir, cfg)
+                   "  table_source_dives: ['3', '4']\n  flagged_dives: {'1': sunset}\n"
+                   "blind_answers: answers.json\n")
+    return root, correct_dir, cfg
+
+
+def test_decide_stage_writes_numbers_and_pages(tmp_path):
+    root, correct_dir, cfg = _stage_fixture(tmp_path)
+    out = decide(correct_dir, cfg, CARD_PATH)
     result = json.loads((root / "decide" / "decision.json").read_text())
     anchored = {(c["nereus"], c["baseline"]): c
                 for c in result["classes"]["card_anchored"]["comparisons"]}
@@ -96,8 +143,41 @@ def test_decide_stage_writes_numbers_and_page(tmp_path):
     assert result["preset_pairs"]["n"] == 1 and list(result["flash"]) == ["FL"]
     assert any("gray_white" in x for x in out["needs_v3"])
     assert any("Dive 1" in x for x in out["needs_v3"])
+    assert any("fitted on 5–16 m; 1 scored frames lie outside" in x for x in out["needs_v3"])
     page = (root / "decide" / "index.html").read_text()
-    assert "Card-anchored" in page and "Needs the V3 dataset" in page
+    assert "Card-anchored" in page and "Blind review not done yet" in page
+    # 10 sweep middles + the no-card frame (card-free), 10 sweep middles (card-anchored)
+    assert out["blind_pairs"] == 21 and out["cut_frames"] == 12
+    blind = re.sub(r"base64,[^\"]+", "", (root / "decide" / "blind.html").read_text())
+    assert blind.count("<fieldset>") == 21
+    for label in COLUMNS.values():  # method names never appear on the blind page
+        assert label not in blind
+    assert "GRVI" not in blind and "RAW" not in blind
+    assert (root / "decide" / "cutsheet.html").read_text().count("<tr>") == 13
+
+
+def test_saved_blind_answers_are_scored_against_the_key(tmp_path):
+    root, correct_dir, cfg = _stage_fixture(tmp_path)
+    stems = [f"F{i}" for i in range(0, 40, 4)]
+    answers = {f"card_free:{s}": nereus_side("card_free", s) for s in stems}
+    answers.update({f"card_anchored:{s}": "=" for s in stems[:5]})
+    answers[f"card_anchored:{stems[5]}"] = "B" if nereus_side("card_anchored", stems[5]) == "A" \
+        else "A"
+    (tmp_path / "answers.json").write_text(json.dumps({"seed": SEED, "answers": answers}))
+    out = decide(correct_dir, cfg, CARD_PATH)
+    assert out["blind"]["card_free"] == {"nereus": 10, "baseline": 0, "tie": 0,
+                                         "prefer_nereus": 1.0, "rule_pass": True}
+    assert out["blind"]["card_anchored"]["baseline"] == 1
+    assert out["blind"]["card_anchored"]["rule_pass"] is False
+    assert str((tmp_path / "answers.json").resolve()) in verify_fresh(root / "decide")["configs"]
+    with pytest.raises(ValueError, match="seed"):
+        score_blind({"seed": "other", "answers": {}})
+
+
+def test_blind_sides_are_stable_and_balanced():
+    sides = [nereus_side("card_free", f"P{i}") for i in range(400)]
+    assert sides == [nereus_side("card_free", f"P{i}") for i in range(400)]
+    assert 0.4 < sides.count("A") / 400 < 0.6
 
 
 def test_card_free_is_never_compared_with_card_anchored_columns():
