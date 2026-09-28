@@ -54,10 +54,13 @@ def _load_analyzer(analysis_config: Optional[dict[str, Any]]):
     raw evidence and must never be gated on the analysis dependency (CLAUDE.md §11).
     """
     try:
-        from ..analysis.result_writer import AnalysisConfig, analyze_reference_card
+        from ..analysis.isolated import analyze_isolated
+        from ..analysis.result_writer import AnalysisConfig
     except ImportError:
         return None
-    return AnalysisConfig.from_dict(analysis_config), analyze_reference_card
+    # In a child process: an OOM kill on the Zero 2 W then fails only the analysis, and the
+    # experiment record is still written (analysis/isolated.py).
+    return AnalysisConfig.from_dict(analysis_config), analyze_isolated
 
 
 @dataclass
