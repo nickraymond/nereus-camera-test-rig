@@ -97,7 +97,7 @@ def test_grvi_stage_runs_the_backend_and_samples_its_output(tmp_path):
     assert data["N1"] == {"no_card": True}
     for p in CARD.patches:  # the fake inverts the image; sampled on the right card area
         np.testing.assert_allclose(data["A1"]["patches"][p.id]["mean"],
-                                   255 - np.asarray(p.truth), atol=4, err_msg=p.id)
+                                   255 - np.asarray(p.design or p.truth), atol=4, err_msg=p.id)
     record = verify_fresh(Path(summary["out_dir"]))
     assert record["params"]["backend_sha"] == sha
     assert not (Path(summary["out_dir"]) / "other.txt").exists()

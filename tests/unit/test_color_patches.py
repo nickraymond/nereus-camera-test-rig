@@ -53,7 +53,7 @@ def test_patches_sampled_in_a_perspective_view_match_the_card_truth():
     for p in CARD.patches:
         stats = sample(img, H, p.box, clip=img >= 255)
         assert stats["in_frame"] and stats["n_px"] > 500, p.id
-        np.testing.assert_allclose(stats["mean"], p.truth, atol=3, err_msg=p.id)
+        np.testing.assert_allclose(stats["mean"], p.design or p.truth, atol=3, err_msg=p.id)
         assert max(stats["std"]) < 3, p.id  # central 60 % stays off the patch edges
         assert np.asarray(stats["cell_n"]).min() > 0
         np.testing.assert_allclose(np.asarray(stats["cells"]).reshape(-1, 3),
@@ -100,10 +100,11 @@ def test_raw_path_samples_the_binned_mosaic_in_mosaic_coordinates():
     assert out["exposure_factor"] == pytest.approx(0.01 * 100 / 4)
     for p in CARD.patches:
         stats = out["patches"][p.id]
-        np.testing.assert_allclose(stats["mean"], np.asarray(p.truth) / 255, atol=4 / 255,
+        np.testing.assert_allclose(stats["mean"], np.asarray(p.design or p.truth) / 255,
+                                   atol=4 / 255,
                                    err_msg=p.id)
         # a truth of 255 is exactly the white level → clipped (white; cream's red); else not
-        assert stats["clip_frac"] == [float(v == 255) for v in p.truth], p.id
+        assert stats["clip_frac"] == [float(v == 255) for v in p.design or p.truth], p.id
         np.testing.assert_allclose(stats["mean_norm"], np.asarray(stats["mean"]) / 0.25,
                                    rtol=1e-4)
     assert set(out["patches"]) >= {"gray_mid_left", "gray_mid_right"}

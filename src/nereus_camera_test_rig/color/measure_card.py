@@ -9,8 +9,10 @@ are from the design.
 Method, per reference frame (the dataset config's ``card_reference_frames``, else its in-air
 frames ``medium.air``): the binned-RAW patch means that qc kept and that are not clipped,
 white-balanced on a **common anchor grey** (the first of the card's ``wb_anchors`` usable in
-every reference frame, set to its design value — one grey has to fix the brightness scale),
-then the camera's daylight colour matrix (calibration) → linear sRGB → 8-bit sRGB scale. A
+every reference frame), then the camera's daylight colour matrix (calibration) → linear sRGB;
+the median over frames is then scaled so the **first** ``wb_anchors`` grey keeps its design
+value — every correction sets white balance and exposure on it, so renderings keep their
+brightness — and stored on the 8-bit sRGB scale (values above 255 are allowed). A
 damaged patch falls back to its first usable sub-patch. Per patch: the median over frames.
 Greys are stored neutral at their measured luminance (white balance defines them as neutral);
 their residual tint is reported.
@@ -88,12 +90,19 @@ def measure(card: Card, frames: dict[str, tuple[dict, dict]],
         raise ValueError(f"no wb_anchors grey {card.roles.wb_anchors} is usable in every "
                          f"reference frame {sorted(frames)}")
     reads = {s: read_frame(card, q, raw, anchor, matrix) for s, (q, raw) in frames.items()}
+    got_by = {p.id: [r[p.id] for r in reads.values() if p.id in r] for p in card.patches}
+    lins = {pid: np.median(g, axis=0) for pid, g in got_by.items() if g}
+    # Brightness scale: the first wb_anchors grey keeps its design value (it is what every
+    # correction sets white balance and exposure on); everything else keeps its measured
+    # relation to it. The common anchor only links frames.
+    scale_anchor = next((a for a in card.roles.wb_anchors if a in lins), anchor)
+    k = luminance(design_linear(card, scale_anchor)) / luminance(lins[scale_anchor])
     values, table = {}, {}
     for p in card.patches:
-        got = [r[p.id] for r in reads.values() if p.id in r]
+        got = [g * k for g in got_by[p.id]]
         if not got:
             continue
-        lin = np.median(got, axis=0)
+        lin = lins[p.id] * k
         tint = _lch(lin)[1]
         if p.group == "grey":  # neutral by definition of white balance; tint reported
             lin = np.full(3, luminance(lin))
@@ -112,7 +121,7 @@ def measure(card: Card, frames: dict[str, tuple[dict, dict]],
                        else None,
                        "grey_tint_C": round(tint, 1) if p.group == "grey" else None,
                        "frame_spread_de2000": round(spread, 2)}
-    return {"anchor": anchor, "values": values, "patches": table}
+    return {"anchor": anchor, "scale_anchor": scale_anchor, "values": values, "patches": table}
 
 
 def config_block(result: dict, source: str, frames: list[str], camera: str) -> str:
@@ -120,8 +129,8 @@ def config_block(result: dict, source: str, frames: list[str], camera: str) -> s
                    for pid, rgb in result["values"].items())
     return (f"measured:\n"
             f"  source: {source}\n"
-            f"  method: in air, WB on {result['anchor']} (design value), {camera} daylight "
-            f"colour matrix, median over frames\n"
+            f"  method: in air, WB on {result['anchor']}, {camera} daylight colour matrix, "
+            f"median over frames, scaled so {result['scale_anchor']} = its design value\n"
             f"  reference_frames: [{', '.join(frames)}]\n"
             f"  values:                # 8-bit sRGB scale; greys neutral{vals}\n")
 
@@ -150,6 +159,7 @@ def measure_card(qc_dir: Path, card_path: Path, calibration: Path,
     gap = max((max(abs(a - b) for a, b in zip(result["values"][k], configured[k]))
                for k in result["values"] if k in configured), default=None)
     summary = {"reference_frames": stems, "anchor": result["anchor"],
+               "scale_anchor": result["scale_anchor"],
                "patches": result["patches"],
                "median_de2000_vs_design": {
                    g: round(float(np.median([v["de2000_vs_design"] for k, v in
@@ -169,6 +179,7 @@ def measure_card(qc_dir: Path, card_path: Path, calibration: Path,
     write_stage(out_dir, "measure_card", configs=[card_path, calibration, dataset_config],
                 upstream=[qc_dir], params={"reference_frames": stems,
                                            "anchor": result["anchor"],
+                                           "scale_anchor": result["scale_anchor"],
                                            "match_tol_counts": MATCH_TOL})
     summary["out_dir"] = str(out_dir)
     return summary

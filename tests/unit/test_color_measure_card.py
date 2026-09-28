@@ -5,6 +5,7 @@ the reference everywhere, while the design values stay visible for comparison.""
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,19 @@ from nereus_camera_test_rig.color.water_model import grey_reflectance
 
 REPO = Path(__file__).resolve().parents[2]
 CARD_PATH = REPO / "configs" / "cards" / "nereus_v2.yaml"
-CARD = load_card(CARD_PATH)
+
+
+def _design_card_yaml(tmp: Path) -> Path:
+    """The V2 card with design values only (the repo YAML carries a measured block)."""
+    data = yaml.safe_load(CARD_PATH.read_text())
+    data.pop("measured", None)
+    path = tmp / "nereus_v2_design.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return path
+
+
+DESIGN_PATH = _design_card_yaml(Path(tempfile.mkdtemp()))
+CARD = load_card(DESIGN_PATH)
 
 
 def printed(pid: str) -> np.ndarray:
@@ -41,7 +54,8 @@ def test_measure_recovers_the_print_and_quantifies_the_design_gap():
     frames = {"A": frame(), "B": frame(light=(0.5, 1.0, 1.2), exclude=("gray_mid",))}
     result = measure(CARD, frames, np.eye(3))
     assert result["anchor"] == "gray_mid_right"  # gray_mid not usable in B: common anchor
-    for p in CARD.group("color"):
+    assert result["scale_anchor"] == "gray_mid" and result["values"]["gray_mid"][0] == 128.0
+    for p in CARD.group("color"):  # the synthetic print's greys equal the design, so no rescale
         np.testing.assert_allclose(result["values"][p.id], linear_to_srgb8(printed(p.id)),
                                    atol=0.1, err_msg=p.id)
     yellow = result["patches"]["yellow"]
@@ -51,7 +65,7 @@ def test_measure_recovers_the_print_and_quantifies_the_design_gap():
 
 
 def test_the_measured_block_becomes_the_reference_and_keeps_the_design(tmp_path):
-    data = yaml.safe_load(CARD_PATH.read_text())
+    data = yaml.safe_load(DESIGN_PATH.read_text())
     data["measured"] = {"source": "measured_test", "values": {"yellow": [200.0, 180.5, 90.0],
                                                              "gray_light": [190.0] * 3}}
     path = tmp_path / "card.yaml"
@@ -83,13 +97,25 @@ def test_measure_card_stage_writes_a_block_that_matches_once_pasted(tmp_path):
     calib = tmp_path / "cam.yaml"
     calib.write_text(yaml.safe_dump({"camera_id": "cam", "color_matrix": {
         "matrix": np.eye(3).tolist()}}))
-    summary = measure_card(root / "qc", CARD_PATH, calib, cfg)
+    summary = measure_card(root / "qc", DESIGN_PATH, calib, cfg)
     assert summary["reference_frames"] == ["AIR"] and not summary["config_matches"]
     assert summary["median_de2000_vs_design"]["color"] > 5
     block = yaml.safe_load(summary["config_block"])["measured"]
     assert block["reference_frames"] == ["AIR"] and "yellow" in block["values"]
     card_yaml = tmp_path / "card.yaml"
-    card_yaml.write_text(CARD_PATH.read_text() + "\n" + summary["config_block"])
+    card_yaml.write_text(DESIGN_PATH.read_text() + "\n" + summary["config_block"])
     again = measure_card(root / "qc", card_yaml, calib, cfg)
     assert again["config_matches"]  # the design is still the anchor, so values are stable
     verify_fresh(Path(again["out_dir"]))
+
+
+def test_the_brightness_scale_is_set_on_the_first_wb_anchor():
+    q, raw = frame()
+    raw["gray_dark"] = {"mean": (np.asarray(raw["gray_dark"]["mean"]) * 1.4).tolist(),
+                        "clip_frac": [0, 0, 0]}  # dark grey printed 40 % too light
+    q2, raw2 = frame(exclude=("gray_mid", "gray_mid_right"))
+    raw2["gray_dark"] = raw["gray_dark"]
+    result = measure(CARD, {"A": (q, raw), "B": (q2, raw2)}, np.eye(3))
+    assert result["anchor"] == "gray_dark" and result["scale_anchor"] == "gray_mid"
+    assert result["values"]["gray_mid"][0] == pytest.approx(128.0, abs=0.1)
+    assert result["values"]["gray_dark"][0] > 74 + 10  # measured lighter than its design

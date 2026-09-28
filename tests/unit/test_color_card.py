@@ -23,7 +23,8 @@ def card():
 
 def test_v2_card_loads_with_expected_shape(card):
     assert card.card_id == "nereus_v2"
-    assert card.truth_source == "design_svg_2026-09-01"
+    assert card.design_source == "design_svg_2026-09-01"  # the reference is the measured print
+    assert card.truth_is_measured and card.truth_source.startswith("measured_")
     assert len(card.group("grey")) == 5
     assert len(card.group("color")) == 12
     assert card.corner_map == {"tl": 0, "tr": 1, "bl": 2, "br": 3}
