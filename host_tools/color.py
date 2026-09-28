@@ -66,8 +66,10 @@ def main(argv=None) -> int:
     p.add_argument("--jxl-distance", "--distance", dest="distance", type=float, nargs="+",
                    default=[0.5, 1.0], help="JPEG XL encoder distance (cjxl -d; 0 = lossless, "
                    "larger = smaller file, more loss) — not a camera distance")
-    p.add_argument("--crop", type=lambda v: tuple(int(c) for c in v.split(",")),
-                   help="x,y,w,h in sensor px (default: centred 1600x900, bmcam001's crop)")
+    p.add_argument("--crop",
+                   type=lambda v: v if v == "card" else tuple(int(c) for c in v.split(",")),
+                   help="x,y,w,h in sensor px, or 'card' (1600x900 centred on the card; needs "
+                        "--card); default: centred 1600x900, bmcam001's crop")
     p.add_argument("--wb", type=lambda v: tuple(float(c) for c in v.split(",")),
                    help="r,g,b gains that set the code spacing (default: the file's as-shot WB)")
     p.add_argument("--card", type=Path,
