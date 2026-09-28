@@ -14,8 +14,8 @@ Run ON the rig Pi from the repo root, with the rig venv (needs the serial + colo
 3. **Capture** the locked RAW. The sensor silently clamps exposure to its frame time (N6
    8248 us, AE3 16584 us at HD Bayer, measured 2026-09-28); if the read-back is short, the
    shortfall goes into gain and the locked shot is taken again.
-4. **Verify:** read-back exposure within 5 % and gain within 0.05 dB of the request, the card
-   found again, its brightest channel within 15 % of the target and unclipped.
+4. **Verify:** read-back exposure within 5 % and gain within one sensor step (0.75 dB) of the
+   request, the card found again, its brightest channel within 15 % of the target and unclipped.
 
 ``reset_board`` runs before every shot (required on the AE3: one camera session per boot on
 OpenMV v5; also gives both boards fresh 3A state). Stop Nick's workbench recipe first
@@ -50,7 +50,9 @@ from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 SERIALS = {"n6": "020023000450433547373200", "ae3": "0829c14000000000"}  # nereus002
 MIN_GAIN_DB = 3.152157  # PAG7936 floor on both boards: 0 dB reads back as this (OQ-21)
 MAX_METER_SHOTS = 3
-TOL_EXPOSURE, TOL_GAIN_DB, TOL_TARGET = 0.05, 0.05, 0.15
+# Gain moves in sensor steps (read back on the N6, 2026-09-28: asked 3.676 -> 3.522 dB, 4.18 ->
+# 4.22 dB), so its check only catches gross errors; the card-on-target check judges the result.
+TOL_EXPOSURE, TOL_GAIN_DB, TOL_TARGET = 0.05, 0.75, 0.15
 
 
 def shot(cam: OpenMvUsbCamera, dest: Path, settings: dict) -> dict:
