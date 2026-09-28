@@ -320,12 +320,24 @@ Items for Nick are marked **(Nick)**.
   at ΔE00 ≈ 19 under water (≈ 10 in air) — chroma loss under blue-green light that no single
   daylight matrix fixes (a matrix fitted in air: 6.4 in air, 19.2 under water). Next step: a
   light-dependent matrix fitted on the card per depth, validated leave-one-sweep/dive-out.
+  **v0.3 tried (2026-09-27, SPEC §4 S2a):** a depth-dependent matrix fitted on the card's colour
+  patches, leave-one-dive-out, brings card-anchored ΔE00 from 19.6 to 13.1 (100 % of frames), so
+  most of the floor is the matrix, not the data. Remaining: blue / magenta stay at ~20; without a
+  card the matrix amplifies white-balance error (ψ 9.8° → 19.1°); whether a matrix fitted on
+  printed patches is right for scene colours (it warms rocks and algae strongly) needs the
+  measured card and scene references of the V3 dive (OQ-40).
 - **[OPEN] OQ-40 — True printed values of the reference card.** *S2b, V3 dive.* The V2 print is
   not its design: after white balance the grey ramp reads white 0.78, grey 200 0.47, grey 74
   0.114 (design 1, 0.578, 0.068), colours come out lighter (median ΔL* +5), and the black patch's
   reflectance is uncertain (0.027 on one near-surface frame, ≈ 0.076 on deep frames). Until the
   card is measured (daylight reference shots, X-Rite, OQ-27), ΔE00 is provisional and haze cannot
   be separated from print non-linearity. The V3 dive plan includes the dry reference shots.
+  **Measured 2026-09-27 (in air, 3 deck frames, WB on grey, camera daylight matrix):** the print is
+  far less saturated than the design file — yellow / orange / red-orange 30–40 C\* lower, earth
+  tones 15–30. A colour matrix fitted to the design values adds that chroma back to the whole
+  scene (the v0.3 "yellow cast" Nick rejected in the blind review); fitted to the in-air reading
+  it does not. Until the card is measured with an instrument, the in-air reading is the better
+  truth for fitting; the V3 dive's dry reference shots are the minimum, a spectro reading better.
 - **[OPEN] OQ-41 — Light changes between frames.** *S2a fit.* Exposure-normalized brightness jumps
   up to 3× between consecutive frames on shallow sunny dives (caustics), and dives 1–2 drift
   through the dive (sunset, morning). The colour of the light is stable enough to use (ratios

@@ -22,14 +22,17 @@ Flash frames (the Olympus preset fired its flash) are scored on the camera's out
 (``flash: true``), since the flash breaks the water model; every preset frame records its
 nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset comparison.
 
-- Anchor grey: grey 128, else its right half, else grey 74 (whichever qc kept).
+- Anchor grey: the card's ``roles.wb_anchors``, first one qc kept (V2: grey 128, its right half,
+  grey 74).
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
   channel, capped at the **dark floor** — the ``DARK_PERCENTILE`` of the image centre
   (``CENTRE`` of each side; the corners are vignetted). How often the cap binds is logged.
 - Depth WB table: ``ln(R/G)``, ``ln(B/G)`` of the light vs depth, pooled over the dataset's
   ``fit.table_source_dives`` **leaving the frame's own dive out**; brightness puts the image's
   99th percentile of green at ``TARGET_P99``. Distance is not used (run A: colour barely
-  changes over 0.5–3 m).
+  changes over 0.5–3 m). ``raw_depth_wb_haze_loso`` is the same table validated
+  **leave-one-sweep-out** (only the frame's own sweep, or the frame itself outside a sweep, is
+  left out — the frame's dive stays in when it is a source dive); scored, not rendered.
 
 Scoring (SPEC §20): the map is applied to the patch means (and their stds, through the same
 map) and encoded to 8-bit. Within a comparison class every method is scored on the same
@@ -59,10 +62,11 @@ import numpy as np
 
 from ..config import load_yaml
 from .card import Card, load_card
+from .ccm import MIN_AFFINE_PATCHES, affine_leave_one_out, fit_affine, leave_one_dive_out, matrix_at
 from .metrics import score_linear, score_srgb8, srgb8_to_linear
 from .raw_io import RawFrame, bin2x2, normalize
 from .stages import run_parallel, verify_fresh, write_stage
-from .water_model import ANCHORS, fit_settings, grey_reflectance, ramp_fit
+from .water_model import fit_settings, grey_reflectance, ramp_fit
 
 DARK_PERCENTILE = 0.5
 CENTRE = 0.6
@@ -75,12 +79,16 @@ COLUMNS = {  # method → the name used in sheets and reports
     "raw_card_wb_haze": "RAW + card WB − haze",
     "raw_depth_wb_haze": "RAW + depth WB − haze (no card)",
     "grvi_cheeca_v3": "GRVI cheeca_v3 (backend)",
+    "raw_depth_wb_haze_loso": "RAW + depth WB − haze (no card, leave-one-sweep-out)",
+    "raw_card_wb_ccm": "RAW + card WB + depth matrix (v0.3)",
+    "raw_depth_wb_haze_ccm": "RAW + depth WB − haze + depth matrix (no card, v0.3)",
+    "raw_card_affine": "RAW + per-frame card affine (leave-one-patch-out)",
 }
+NOT_RENDERED = {"raw_depth_wb_haze_loso"}  # a validation variant: scored, no images
 CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
-                             "raw_card_wb_haze"),
-           "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze")}
-ALL_GREYS = ("gray_white", "gray_light", "gray_mid", "gray_mid_left", "gray_mid_right",
-             "gray_dark", "gray_black")
+                             "raw_card_wb_haze", "raw_card_wb_ccm", "raw_card_affine"),
+           "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze",
+                         "raw_depth_wb_haze_loso", "raw_depth_wb_haze_ccm")}
 PRESET_CATEGORY = "2_underwater_preset"
 
 
@@ -107,10 +115,13 @@ def dark_floor(image: np.ndarray) -> np.ndarray:
     return np.percentile(image[y0:h - y0, x0:w - x0].reshape(-1, 3), DARK_PERCENTILE, axis=0)
 
 
-def depth_table(points_csv: Path, sources: list[str], held_out: str) -> Optional[dict]:
-    """Pooled ln(R/G), ln(B/G) vs depth over the source dives except ``held_out``."""
+def depth_table(points_csv: Path, sources: list[str], held_out: Optional[str],
+                exclude_stems=frozenset()) -> Optional[dict]:
+    """Pooled ln(R/G), ln(B/G) vs depth over the source dives, leaving out the dive
+    ``held_out`` (leave-one-dive-out) or only the frames ``exclude_stems`` (leave-one-sweep-out:
+    the frame's own sweep)."""
     pts = [p for p in csv.DictReader(points_csv.open())
-           if p["dive"] in sources and p["dive"] != held_out]
+           if p["dive"] in sources and p["dive"] != held_out and p.get("stem") not in exclude_stems]
     if len(pts) < 3:
         return None
     d = np.array([float(p["depth_m"]) for p in pts])
@@ -146,26 +157,44 @@ def frame_maps(job: dict, image: np.ndarray) -> tuple[dict[str, tuple], dict[str
             haze, diag["haze_source"] = np.minimum(h, dark), "grey ramp"
         maps["raw_card_wb_haze"] = (np.asarray(haze).tolist(),
                                     (t / np.maximum(a - haze, 1e-9)).tolist())
-    table = job.get("table")
-    if table:
-        d = job["depth_m"]
-        colour = np.array([np.exp(table["ln_rg"][0] + table["ln_rg"][1] * d), 1.0,
-                           np.exp(table["ln_bg"][0] + table["ln_bg"][1] * d)])
-        green = (image[..., 1] - dark[1]).ravel()
-        scale = TARGET_P99 / max(float(np.percentile(green, 99)), 1e-9)
-        maps["raw_depth_wb_haze"] = (dark.tolist(), (scale / colour).tolist())
+    for method, key in (("raw_depth_wb_haze", "table"), ("raw_depth_wb_haze_loso", "table_loso")):
+        table = job.get(key)
+        if table:
+            d = job["depth_m"]
+            colour = np.array([np.exp(table["ln_rg"][0] + table["ln_rg"][1] * d), 1.0,
+                               np.exp(table["ln_bg"][0] + table["ln_bg"][1] * d)])
+            green = (image[..., 1] - dark[1]).ravel()
+            scale = TARGET_P99 / max(float(np.percentile(green, 99)), 1e-9)
+            maps[method] = (dark.tolist(), (scale / colour).tolist())
+    if job.get("affine"):  # per-frame card affine A x + c, as (haze, gain, M): haze = −A⁻¹c
+        A, c = np.asarray(job["affine"]["A"]), np.asarray(job["affine"]["c"])
+        maps["raw_card_affine"] = ((-np.linalg.solve(A, c)).tolist(), [1.0] * 3, A.tolist())
+    if job.get("ccm") is not None:  # v0.3: the same maps with the depth matrix (3rd element)
+        for base in ("raw_card_wb", "raw_depth_wb_haze"):
+            if base in maps:
+                maps[f"{base}_ccm"] = (*maps[base], job["ccm"])
     return maps, diag
+
+
+def _parts(entry, matrix: np.ndarray) -> tuple:
+    """(haze, gain, matrix) of a map entry; the camera matrix unless the entry carries one."""
+    haze, gain, *m = entry
+    return haze, gain, (np.asarray(m[0]) if m else matrix)
 
 
 def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, Any]:
     anchor, excluded = job["anchor"], job["excluded"]
     lm = anchor or "gray_mid"
     out: dict[str, Any] = {}
-    for method, (haze, gain) in maps.items():
-        means = {pid: srgb8_to_linear(encode8(apply(v, haze, gain, matrix)))
+    for method, entry in maps.items():
+        haze, gain, M = _parts(entry, matrix)
+        means = {pid: srgb8_to_linear(encode8(apply(v, haze, gain, M)))
                  for pid, v in job["raw_means"].items()}
-        stds = {pid: apply_std(job["raw_stds"][pid], gain, matrix) for pid in means}
-        neutral = ALL_GREYS if method in CLASSES["card_anchored"] else ()
+        if method == "raw_card_affine":  # colour patches: predicted from the other patches
+            means.update({pid: srgb8_to_linear(encode8(v))
+                          for pid, v in job["affine"]["loo"].items()})
+        stds = {pid: apply_std(job["raw_stds"][pid], gain, M) for pid in means}
+        neutral = card.grey_ids if method in CLASSES["card_anchored"] else ()
         out[method] = score_linear(means, card, neutralized=neutral, anchor=lm,
                                    exclude=excluded, stds=stds)
     jm, js = job.get("jpeg_means"), job.get("jpeg_stds")
@@ -178,11 +207,11 @@ def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, An
             gain = job["anchor_truth"] / np.maximum(lin[anchor], 1e-9)
             out["jpeg_card_wb"] = score_srgb8({k: encode8(v * gain).tolist()
                                                for k, v in lin.items()},
-                                              card, neutralized=ALL_GREYS, anchor=anchor,
+                                              card, neutralized=card.grey_ids, anchor=anchor,
                                               exclude=excluded)
     gm = job.get("grvi_means") or (jm if job.get("grvi_no_card") else None)
     if gm:
-        out["grvi_cheeca_v3"] = score_srgb8(gm, card, neutralized=ALL_GREYS, anchor=lm,
+        out["grvi_cheeca_v3"] = score_srgb8(gm, card, neutralized=card.grey_ids, anchor=lm,
                                             exclude=excluded)
         out["grvi_cheeca_v3"]["grvi_no_card"] = bool(job.get("grvi_no_card"))
     return out
@@ -193,10 +222,11 @@ def card_job(stem: str, row: dict, q: dict, patches: dict, grvi: Optional[dict],
     """Scoring inputs of one card frame: qc-kept patch means per source (RAW, camera JPEG,
     GRVI output), the anchor grey and the card-ramp fit."""
     keep = {pid for pid, p in q["patches"].items() if p["usable"]}
-    anchor = next((a for a in ANCHORS if a in keep), None)
+    anchor = next((a for a in card.roles.wb_anchors if a in keep), None)
     jpeg = (patches.get("jpeg") or {"patches": {}})["patches"]
     job: dict[str, Any] = {
         "stem": stem, "category": row["category"], "depth_m": float(row["depth_m"]),
+        "dive_id": row["dive_id"],
         "anchor": anchor, "excluded": [pid for pid in q["patches"] if pid not in keep],
         "anchor_truth": _truth_linear(card, anchor) if anchor else None,
         "jpeg_means": {pid: s["mean"] for pid, s in jpeg.items() if pid in keep and s.get("mean")},
@@ -206,11 +236,26 @@ def card_job(stem: str, row: dict, q: dict, patches: dict, grvi: Optional[dict],
         raw_stats = patches["raw"]["patches"]
         k = patches["raw"]["exposure_factor"]
         job.update(
-            ramp=ramp_fit(raw_stats, keep, rho),
+            ramp=ramp_fit(raw_stats, keep, rho, card.roles.ramp),
             raw_means={pid: s["mean_norm"] for pid, s in raw_stats.items()
                        if pid in keep and s.get("mean_norm")},
             raw_stds={pid: (np.asarray(s["std"]) / k).tolist() for pid, s in
                       raw_stats.items() if pid in keep and s.get("mean_norm")})
+    # per-frame affine on the card's own patches; each grey 128 half only stands in for a
+    # damaged whole (no patch counted twice)
+    raw = job.get("raw_means") or {}
+    ids = [p.id for p in card.patches if p.id in raw]
+    if "gray_mid" not in raw:
+        ids += [s.id for s in card.sub_patches if s.id in raw][:1]
+    if len(ids) >= MIN_AFFINE_PATCHES + 1:
+        x = {pid: raw[pid] for pid in ids}
+        t = {pid: srgb8_to_linear(card.patch(next((s.parent for s in card.sub_patches
+                                                     if s.id == pid), pid)).truth)
+             for pid in ids}
+        A, c = fit_affine(list(x.values()), list(t.values()))
+        loo = affine_leave_one_out(x, t, [p.id for p in card.group("color")])
+        job["affine"] = {"A": A.tolist(), "c": c.tolist(),
+                         "loo": {k: v.tolist() for k, v in loo.items()}}
     if (grvi or {}).get("no_card"):
         job["grvi_no_card"] = True
     elif grvi and "patches" in grvi:
@@ -232,6 +277,23 @@ def nearest_a_mode(stem: str, rows: dict, candidates, category: str) -> Optional
             "depth_diff_m": round(float(rows[best[1]]["depth_m"]) - float(me["depth_m"]), 2)}
 
 
+def ccm_observations(jobs: list[dict], card: Card) -> list[dict]:
+    """v0.3 training data: per usable card frame, its colour patches white-balanced on the
+    anchor grey (the ``raw_card_wb`` map, camera RGB) and their design values (linear sRGB)."""
+    obs = []
+    colours = [p.id for p in card.group("color")]
+    for job in jobs:
+        raw, anchor = job.get("raw_means") or {}, job.get("anchor")
+        ids = [pid for pid in colours if pid in raw]
+        if not anchor or anchor not in raw or len(ids) < 6:
+            continue
+        gain = job["anchor_truth"] / np.maximum(np.asarray(raw[anchor]), 1e-9)
+        obs.append({"stem": job["stem"], "dive": job["dive_id"], "depth_m": job["depth_m"],
+                    "x": [(np.asarray(raw[pid]) * gain).tolist() for pid in ids],
+                    "t": [srgb8_to_linear(card.patch(pid).truth).tolist() for pid in ids]})
+    return obs
+
+
 class _Frame:
     """Picklable per-frame worker: read the RAW once, derive maps, score, render."""
 
@@ -249,8 +311,11 @@ class _Frame:
         result = {"maps": maps, "diag": diag,
                   "scores": score(job, maps, self.card, self.matrix)
                   if job.get("raw_means") else {}}
-        for method, (haze, gain) in maps.items():
-            out = apply(image, haze, gain, self.matrix)
+        for method, entry in maps.items():
+            if method in NOT_RENDERED:
+                continue
+            haze, gain, M = _parts(entry, self.matrix)
+            out = apply(image, haze, gain, M)
             # A pixel with any channel at the sensor's white level has lost its colour; white
             # balance would tint it (clipped G/B whites turn magenta once red is boosted).
             # Render it neutral at its brightest channel. Scoring is unaffected: qc already
@@ -265,7 +330,7 @@ class _Frame:
                 raise IOError(f"failed to write {path}")
             (d / f"{job['stem']}.json").write_text(json.dumps(
                 {"stem": job["stem"], "method": method, "column": COLUMNS[method],
-                 "haze": haze, "gain": gain, "color_matrix": self.matrix.tolist(),
+                 "haze": haze, "gain": gain, "color_matrix": M.tolist(),
                  "depth_m": job["depth_m"], "anchor": job.get("anchor"),
                  "table": job.get("table"), **diag,
                  "pipeline": "exposure-normalized linear camera RGB → (I − haze) · gain → "
@@ -297,6 +362,10 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
         grvi = json.loads((grvi_dir / "patches.json").read_text())
     tables = {d: depth_table(fit_dir / "wb_points.csv", sources, d)
               for d in {r["dive_id"] for r in rows.values()}}
+    sweeps: dict[str, set] = {}
+    for stem, row in rows.items():
+        if row["sweep_id"]:
+            sweeps.setdefault(row["sweep_id"], set()).add(stem)
 
     jobs, flash_jobs = [], []
     for stem, row in rows.items():
@@ -310,15 +379,25 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
                 flash_jobs.append(card_job(stem, row, q, patches[stem], (grvi or {}).get(stem),
                                            card, rho))
             continue
+        sweep = sweeps.get(row["sweep_id"], {stem}) if row["sweep_id"] else {stem}
         job: dict[str, Any] = {"stem": stem, "raw_path": str(dataset_dir / row["file"]),
                                "depth_m": float(row["depth_m"]), "category": row["category"],
-                               "table": tables[row["dive_id"]]}
+                               "table": tables[row["dive_id"]],
+                               "table_loso": depth_table(fit_dir / "wb_points.csv", sources,
+                                                         None, frozenset(sweep))}
         if row["category"] not in no_card:
             if (q is None or not q["usable"] or "raw" not in patches.get(stem, {})
                     or d.get("medium") != "water"):
                 continue
             job.update(card_job(stem, row, q, patches[stem], (grvi or {}).get(stem), card, rho))
         jobs.append(job)
+
+    # v0.3 depth matrix, leave-one-dive-out: fitted on the other dives' card frames
+    obs = ccm_observations(jobs, card)
+    ccm = leave_one_dive_out(obs, sorted({r["dive_id"] for r in rows.values()}))
+    for job in jobs:
+        m = matrix_at(ccm[rows[job["stem"]]["dive_id"]], job["depth_m"])
+        job["ccm"] = None if m is None else m.tolist()
 
     out_dir = root / "correct"
     shutil.rmtree(out_dir / "images", ignore_errors=True)  # never mix runs
@@ -363,9 +442,12 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
                                              .get("grvi_no_card")),
                "columns": COLUMNS}
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    (out_dir / "ccm.json").write_text(json.dumps(
+        {"method": "3x3 per depth tercile, rows sum to 1, leave-one-dive-out",
+         "training_frames": len(obs), "held_out_dive": ccm}, indent=1) + "\n")
     write_stage(out_dir, "correct", configs=[calibration, dataset_config, card_path],
                 upstream=[fit_dir] + ([grvi_dir] if grvi else []),
-                params={"version": "v0.2", "anchors": list(ANCHORS),
+                params={"version": "v0.3", "anchors": list(card.roles.wb_anchors),
                         "table_source_dives": sources,
                         "dark_percentile": DARK_PERCENTILE,
                         "centre": CENTRE, "target_p99": TARGET_P99})

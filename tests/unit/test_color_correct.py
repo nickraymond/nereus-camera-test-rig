@@ -11,7 +11,6 @@ import pytest
 
 from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.correct import (
-    ALL_GREYS,
     apply,
     apply_std,
     dark_floor,
@@ -41,11 +40,11 @@ def card_means(light=LIGHT, haze=HAZE):
 
 def test_ramp_fit_recovers_light_and_haze():
     raw = {pid: {"mean_norm": v} for pid, v in card_means().items()}
-    fit = ramp_fit(raw, set(raw), RHO)
+    fit = ramp_fit(raw, set(raw), RHO, CARD.roles.ramp)
     np.testing.assert_allclose(fit["A"], LIGHT, atol=1e-9)
     np.testing.assert_allclose(fit["H"], HAZE, atol=1e-9)
     assert "gray_black" not in fit["greys"]
-    assert ramp_fit(raw, {"gray_dark"}, RHO) is None  # one grey: no line
+    assert ramp_fit(raw, {"gray_dark"}, RHO, CARD.roles.ramp) is None  # one grey: no line
 
 
 def test_depth_table_leaves_the_frames_own_dive_out(tmp_path):
@@ -76,7 +75,8 @@ def test_dark_floor_ignores_the_vignetted_corners():
 def job(means):
     return {"anchor": "gray_mid", "anchor_truth": float(srgb8_to_linear(128)), "excluded": [],
             "raw_means": means, "raw_stds": {k: [1e-4] * 3 for k in means},
-            "ramp": ramp_fit({k: {"mean_norm": v} for k, v in means.items()}, set(means), RHO),
+            "ramp": ramp_fit({k: {"mean_norm": v} for k, v in means.items()}, set(means), RHO,
+                             CARD.roles.ramp),
             "depth_m": 8.0, "category": "1_reference_A_iso100",
             "table": {"ln_rg": [float(np.log(LIGHT[0] / LIGHT[1])), 0.0],
                       "ln_bg": [float(np.log(LIGHT[2] / LIGHT[1])), 0.0]}}
@@ -95,7 +95,7 @@ def test_card_haze_method_recovers_the_card_and_classes_share_patches():
     # card-anchored methods are all scored on colour patches only (every grey held out)
     for m in ("raw_card_wb", "raw_card_wb_haze"):
         assert scores[m]["n_psi"] == 0 and scores[m]["n_de"] == 12
-    assert set(ALL_GREYS) >= {p.id for p in CARD.group("grey")}
+    assert set(CARD.grey_ids) >= {p.id for p in CARD.group("grey")}
 
 
 def test_grvi_column_is_card_anchored_and_falls_back_to_the_camera_jpeg():
@@ -123,3 +123,47 @@ def test_preset_frames_pair_with_the_nearest_a_mode_frame_of_their_dive():
     pair = nearest_a_mode("P", rows, list(rows), "1_reference_A_iso100")
     assert pair == {"stem": "A2", "dt_s": 180.0, "depth_diff_m": -0.5}
     assert nearest_a_mode("P", rows, ["B", "S"], "1_reference_A_iso100") is None
+
+
+def test_leave_one_sweep_out_keeps_the_dive_but_drops_the_sweep(tmp_path):
+    path = tmp_path / "wb_points.csv"
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["stem", "dive", "depth_m", "ln_rg", "ln_bg"])
+        w.writeheader()
+        for i, (dive, d, rg) in enumerate([("3", 4, -1.6), ("3", 8, -1.8), ("3", 12, -9.0),
+                                           ("4", 4, -1.6), ("4", 8, -1.8)]):
+            w.writerow({"stem": f"S{i}", "dive": dive, "depth_m": d, "ln_rg": rg, "ln_bg": 0})
+    loso = depth_table(path, ["3", "4"], None, frozenset({"S2"}))  # S2 = the held-out sweep
+    assert loso["n"] == 4 and loso["source_dives"] == ["3", "4"]
+    assert loso["ln_rg"][1] == pytest.approx(-0.05)
+    assert depth_table(path, ["3", "4"], None)["n"] == 5
+
+
+def test_v03_columns_use_the_frames_depth_matrix():
+    means = card_means()
+    image = np.zeros((50, 50, 3)) + HAZE + 1e-6
+    j = {**job(means), "ccm": np.eye(3).tolist()}
+    maps, _ = frame_maps(j, image)
+    assert {"raw_card_wb_ccm", "raw_depth_wb_haze_ccm"} <= set(maps)
+    scores = score(j, maps, CARD, np.eye(3))
+    assert scores["raw_card_wb_ccm"]["de2000"] == scores["raw_card_wb"]["de2000"]
+    desat = 0.7 * np.eye(3) + 0.1  # rows sum to 1: a desaturating depth matrix
+    worse = score({**j, "ccm": desat.tolist()}, frame_maps({**j, "ccm": desat.tolist()},
+                                                          image)[0], CARD, np.eye(3))
+    assert worse["raw_card_wb_ccm"]["de2000_median"] > scores["raw_card_wb"]["de2000_median"]
+
+
+def test_card_affine_column_scores_leave_one_patch_out():
+    from nereus_camera_test_rig.color.correct import card_job
+
+    means = card_means()  # an exactly affine card: haze + light
+    q = {"patches": {pid: {"usable": True} for pid in means}, "card_condition": "clean"}
+    row = {"category": "1_reference_A_iso100", "depth_m": "8.0", "dive_id": "3"}
+    patches = {"raw": {"exposure_factor": 1.0,
+                       "patches": {pid: {"mean_norm": v, "std": [1e-4] * 3}
+                                   for pid, v in means.items()}}}
+    j = {**card_job("F", row, q, patches, None, CARD, RHO), "table": None}
+    assert set(j["affine"]["loo"]) == {p.id for p in CARD.group("color")}
+    maps, _ = frame_maps(j, np.zeros((50, 50, 3)) + HAZE + 1e-6)
+    s = score(j, maps, CARD, np.eye(3))["raw_card_affine"]
+    assert s["n_de"] == 12 and s["de2000_median"] < 1.0

@@ -109,7 +109,7 @@ def test_jpeg_patches_sampled_through_the_map_hit_the_raw_card_area():
     naive = homography(CARD, STRONG.to_jpeg(quad_raw))  # the JPEG quad, projectively
     for p in CARD.patches:
         stats = sample(jpg, H, p.box, warp=STRONG)
-        np.testing.assert_allclose(stats["mean"], p.truth, atol=4, err_msg=p.id)
+        np.testing.assert_allclose(stats["mean"], p.design or p.truth, atol=4, err_msg=p.id)
         assert max(stats["std"]) < 4, p.id
     # the card is not projective in the JPEG: a JPEG-quad homography puts the patch centres
     # several pixels away from where the map puts them

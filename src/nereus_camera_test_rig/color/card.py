@@ -45,7 +45,8 @@ class Patch:
     group: str  # "grey" | "color"
     label: str
     box: Box
-    truth: tuple[int, int, int]
+    truth: tuple[float, float, float]  # the reference: measured print if the card has one
+    design: Optional[tuple[int, int, int]] = None  # the design value, when truth is measured
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,21 @@ class Tag:
     id: int
     center: tuple[float, float]  # canonical px
     edge: tuple[float, float]  # canonical px along x, y (canonical px are not square)
+
+
+@dataclass(frozen=True)
+class Roles:
+    """Which patches do what (card YAML ``roles``), so no stage hard-codes a card's patch ids.
+
+    ``wb_anchors``: greys to white-balance on, in preference order (first usable wins).
+    ``ramp``: non-black greys for the straight-line light + haze fit; an entry may be a list of
+    alternatives (first usable wins — e.g. a half standing in for a damaged whole).
+    ``haze``: the black patch (backscatter; its print reflectance is not trusted).
+    """
+
+    wb_anchors: tuple[str, ...]
+    ramp: tuple[tuple[str, ...], ...]
+    haze: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -78,6 +94,29 @@ class Card:
     truth_source: str
     patches: tuple[Patch, ...]
     sub_patches: tuple[SubPatch, ...]
+    roles: Roles
+    quad_ratio: Optional[float] = None  # tag-centre quad width / height
+    design_source: Optional[str] = None  # set when ``truth_source`` is a measurement
+
+    @property
+    def truth_is_measured(self) -> bool:
+        return self.design_source is not None
+
+    @property
+    def aruco_dictionary(self) -> str:
+        """OpenCV ArUco dictionary for ``tag_family`` (``tag25h9`` → ``DICT_APRILTAG_25h9``)."""
+        fam = self.tag_family
+        return fam if fam.startswith("DICT_") else f"DICT_APRILTAG_{fam.removeprefix('tag')}"
+
+    @property
+    def grey_ids(self) -> tuple[str, ...]:
+        """Every neutral region: the grey patches and their sub-patches."""
+        greys = [p.id for p in self.group("grey")]
+        return tuple(greys + [s.id for s in self.sub_patches if s.parent in greys])
+
+    def parent_of(self, region_id: str) -> str:
+        """The patch a sub-patch belongs to (a patch is its own parent)."""
+        return next((s.parent for s in self.sub_patches if s.id == region_id), region_id)
 
     @property
     def physically_measured(self) -> bool:
@@ -162,7 +201,37 @@ def load_card(path: str | Path) -> Card:
             raise CardError(f"{sw}: box {list(vars(box).values())} is outside parent {parent!r}")
         subs.append(SubPatch(str(_get(raw, "id", sw)), parent, box))
 
+    regions = set(by_id) | {s.id for s in subs}
+    rw = f"{where}: roles"
+    raw_roles = _get(data, "roles", where)
+    anchors = tuple(str(a) for a in _get(raw_roles, "wb_anchors", rw))
+    ramp = tuple(tuple(str(a) for a in (e if isinstance(e, list) else [e]))
+                 for e in _get(raw_roles, "ramp", rw))
+    haze = raw_roles.get("haze")
+    unknown = sorted({a for a in anchors + sum(ramp, ()) + ((haze,) if haze else ())}
+                     - regions)
+    if unknown:
+        raise CardError(f"{rw}: unknown patch ids {unknown}")
+
     truth = _get(data, "truth", where)
+    truth_source, design_source = str(_get(truth, "source", where)), None
+    measured = data.get("measured")
+    if measured:
+        # Real-world reference (SPEC §20): the print as measured replaces the design values;
+        # the design values are kept on each patch so the difference stays visible.
+        mw = f"{where}: measured"
+        values = {str(k): v for k, v in _get(measured, "values", mw).items()}
+        unknown = sorted(set(values) - set(by_id))
+        if unknown:
+            raise CardError(f"{mw}: unknown patch ids {unknown}")
+        for pid, v in values.items():
+            if not (len(v) == 3 and all(isinstance(x, (int, float)) and 0 <= x <= 300
+                                        for x in v)):
+                raise CardError(f"{mw}: {pid} must be three values 0-300 (sRGB 8-bit scale)")
+        patches = [Patch(p.id, p.group, p.label, p.box,
+                         tuple(float(x) for x in values[p.id]), p.truth) if p.id in values
+                   else p for p in patches]
+        design_source, truth_source = truth_source, str(_get(measured, "source", mw))
     physical = dict(_get(data, "physical_mm", where))
     physical_source = str(physical.pop("source", "unspecified"))
     return Card(
@@ -177,7 +246,18 @@ def load_card(path: str | Path) -> Card:
         tags=tags,
         physical_mm={k: (None if v is None else float(v)) for k, v in physical.items()},
         physical_source=physical_source,
-        truth_source=str(_get(truth, "source", where)),
+        truth_source=truth_source,
+        design_source=design_source,
         patches=tuple(patches),
         sub_patches=tuple(subs),
+        roles=Roles(anchors, ramp, None if haze is None else str(haze)),
+        quad_ratio=_quad_ratio(april, physical),
     )
+
+
+def _quad_ratio(april: dict, physical: dict) -> Optional[float]:
+    """``apriltag.quad_ratio``, else the tag-centre spacing x / y from ``physical_mm``."""
+    if april.get("quad_ratio") is not None:
+        return float(april["quad_ratio"])
+    x, y = physical.get("tag_center_spacing_x"), physical.get("tag_center_spacing_y")
+    return float(x) / float(y) if x and y else None

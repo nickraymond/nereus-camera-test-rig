@@ -63,7 +63,7 @@ def score_before(patches: dict, qc: dict, card: Card) -> dict[str, dict]:
         keep = {pid for pid, p in q["patches"].items() if p["usable"]}
         stats = {pid: s for pid, s in jpeg["patches"].items() if pid in keep and s.get("mean")}
         excluded = [pid for pid in q["patches"] if pid not in keep]
-        anchor = "gray_mid" if "gray_mid" in keep else "gray_mid_right"
+        anchor = next((a for a in card.roles.wb_anchors if a in keep), card.roles.wb_anchors[0])
         s = score_srgb8({k: v["mean"] for k, v in stats.items()}, card, neutralized=(),
                         anchor=anchor, exclude=excluded,
                         stds={k: v["std"] for k, v in stats.items()})
@@ -350,6 +350,7 @@ def report(qc_dir: Path, distance_dir: Path, dataset_config: Path, card_path: Pa
         f"<td>{_e(v['psi_median'])}</td><td>{_e(v['de2000_median'])}</td></tr>"
         for s, v in sorted(scores.items()))
     page = PAGE.format(
+        style=STYLE,
         dataset_id=_e(ingest["dataset_id"]), stats=stat_html,
         by_condition=_score_table(scores, rows, lambda s, v: CONDITION[v["card_condition"]][1]),
         by_dive=_score_table(scores, rows, lambda s, v: f"dive {rows[s]['dive_id']} · "
@@ -377,54 +378,57 @@ def report(qc_dir: Path, distance_dir: Path, dataset_config: Path, card_path: Pa
     return summary
 
 
+# Shared page style (also used by the decision report).
+STYLE = """:root{color-scheme:light;--surface-1:#fcfcfb;--surface-2:#f1f0ec;--text-primary:#0b0b0b;
+--text-secondary:#52514e;--muted:#898781;--gridline:#e1e0d9;--axis:#c3c2b7;--s1:#2a78d6;
+--s2:#eb6834;--s3:#1baf7a;--other:#9a9994;--critical:#d03b3b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+--surface-1:#1a1a19;--surface-2:#252523;--text-primary:#fff;--text-secondary:#c3c2b7;
+--gridline:#2c2c2a;--axis:#383835;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--other:#6f6e69}}
+:root[data-theme="dark"]{color-scheme:dark;--surface-1:#1a1a19;--surface-2:#252523;
+--text-primary:#fff;--text-secondary:#c3c2b7;--gridline:#2c2c2a;--axis:#383835;--s1:#3987e5;
+--s2:#d95926;--s3:#199e70;--other:#6f6e69}
+body{margin:0;background:var(--surface-1);color:var(--text-primary);
+font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1240px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:17px;margin:32px 0 8px}
+h3{font-size:13px;color:var(--text-secondary);margin:18px 0 6px;font-weight:600}
+.note{color:var(--text-secondary);margin:0 0 12px;max-width:85ch} .muted{color:var(--muted)}
+.stats{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+.stat{background:var(--surface-2);border-radius:8px;padding:10px 14px;min-width:120px}
+.stat b{display:block;font-size:22px} .stat span{color:var(--text-secondary);font-size:12px}
+table{border-collapse:collapse;font-size:13px;margin:8px 0;font-variant-numeric:tabular-nums}
+th,td{padding:4px 10px;text-align:left;border-bottom:1px solid var(--gridline)}
+thead th{color:var(--text-secondary);font-weight:600} .cols{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.scroll{overflow-x:auto;max-height:420px}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0;color:var(--text-secondary);font-size:12px}
+.key{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:50%;display:inline-block}
+.sw.s1{background:var(--s1)} .sw.s2{background:var(--s2)} .sw.s3{background:var(--s3)}
+.sw.other{border:2px solid var(--other);width:6px;height:6px}
+.panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}
+.panel{margin:0;background:var(--surface-2);border-radius:8px;padding:10px;max-width:760px}
+figcaption{font-size:12px;color:var(--text-secondary);margin-bottom:4px}
+svg{width:100%;height:auto;display:block} .gridline{stroke:var(--gridline);stroke-width:1}
+.axis{stroke:var(--axis);stroke-width:1} .tick{fill:var(--muted);font-size:10px}
+.sweep{fill:none;stroke:var(--s1);stroke-width:2;opacity:.45}
+.pt{stroke:var(--surface-2);stroke-width:2} .pt.s1{fill:var(--s1)} .pt.s2{fill:var(--s2)}
+.pt.s3{fill:var(--s3)} .pt.other{fill:var(--surface-2);stroke:var(--other)}
+.pt:hover,.pt:focus{r:6;outline:none}
+#tip{position:fixed;pointer-events:none;background:var(--text-primary);color:var(--surface-1);
+font-size:12px;padding:6px 8px;border-radius:6px;opacity:0;max-width:320px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.tile{background:var(--surface-2);border-radius:6px;overflow:hidden}
+.tile img{width:100%;display:block;aspect-ratio:3/1;object-fit:cover} .noimg{padding:24px;color:var(--muted)}
+.tile .cap{font-size:11px;padding:4px 6px;color:var(--text-secondary)}
+.tile.miss{outline:2px dashed var(--critical);outline-offset:-2px}
+.tile.excl{outline:2px solid var(--other);outline-offset:-2px;opacity:.75}
+"""
+
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Phase 8 Report</title>
 <style>
-:root{{color-scheme:light;--surface-1:#fcfcfb;--surface-2:#f1f0ec;--text-primary:#0b0b0b;
---text-secondary:#52514e;--muted:#898781;--gridline:#e1e0d9;--axis:#c3c2b7;--s1:#2a78d6;
---s2:#eb6834;--s3:#1baf7a;--other:#9a9994;--critical:#d03b3b}}
-@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{color-scheme:dark;
---surface-1:#1a1a19;--surface-2:#252523;--text-primary:#fff;--text-secondary:#c3c2b7;
---gridline:#2c2c2a;--axis:#383835;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--other:#6f6e69}}}}
-:root[data-theme="dark"]{{color-scheme:dark;--surface-1:#1a1a19;--surface-2:#252523;
---text-primary:#fff;--text-secondary:#c3c2b7;--gridline:#2c2c2a;--axis:#383835;--s1:#3987e5;
---s2:#d95926;--s3:#199e70;--other:#6f6e69}}
-body{{margin:0;background:var(--surface-1);color:var(--text-primary);
-font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}}
-main{{max-width:1240px;margin:0 auto;padding:24px 16px 64px}}
-h1{{font-size:22px;margin:0 0 4px}} h2{{font-size:17px;margin:32px 0 8px}}
-h3{{font-size:13px;color:var(--text-secondary);margin:18px 0 6px;font-weight:600}}
-.note{{color:var(--text-secondary);margin:0 0 12px;max-width:85ch}} .muted{{color:var(--muted)}}
-.stats{{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}}
-.stat{{background:var(--surface-2);border-radius:8px;padding:10px 14px;min-width:120px}}
-.stat b{{display:block;font-size:22px}} .stat span{{color:var(--text-secondary);font-size:12px}}
-table{{border-collapse:collapse;font-size:13px;margin:8px 0;font-variant-numeric:tabular-nums}}
-th,td{{padding:4px 10px;text-align:left;border-bottom:1px solid var(--gridline)}}
-thead th{{color:var(--text-secondary);font-weight:600}} .cols{{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}}
-.scroll{{overflow-x:auto;max-height:420px}}
-.legend{{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0;color:var(--text-secondary);font-size:12px}}
-.key{{display:inline-flex;align-items:center;gap:6px}}
-.sw{{width:10px;height:10px;border-radius:50%;display:inline-block}}
-.sw.s1{{background:var(--s1)}} .sw.s2{{background:var(--s2)}} .sw.s3{{background:var(--s3)}}
-.sw.other{{border:2px solid var(--other);width:6px;height:6px}}
-.panels{{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px}}
-.panel{{margin:0;background:var(--surface-2);border-radius:8px;padding:10px;max-width:760px}}
-figcaption{{font-size:12px;color:var(--text-secondary);margin-bottom:4px}}
-svg{{width:100%;height:auto;display:block}} .gridline{{stroke:var(--gridline);stroke-width:1}}
-.axis{{stroke:var(--axis);stroke-width:1}} .tick{{fill:var(--muted);font-size:10px}}
-.sweep{{fill:none;stroke:var(--s1);stroke-width:2;opacity:.45}}
-.pt{{stroke:var(--surface-2);stroke-width:2}} .pt.s1{{fill:var(--s1)}} .pt.s2{{fill:var(--s2)}}
-.pt.s3{{fill:var(--s3)}} .pt.other{{fill:var(--surface-2);stroke:var(--other)}}
-.pt:hover,.pt:focus{{r:6;outline:none}}
-#tip{{position:fixed;pointer-events:none;background:var(--text-primary);color:var(--surface-1);
-font-size:12px;padding:6px 8px;border-radius:6px;opacity:0;max-width:320px}}
-.tiles{{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}}
-.tile{{background:var(--surface-2);border-radius:6px;overflow:hidden}}
-.tile img{{width:100%;display:block;aspect-ratio:3/1;object-fit:cover}} .noimg{{padding:24px;color:var(--muted)}}
-.tile .cap{{font-size:11px;padding:4px 6px;color:var(--text-secondary)}}
-.tile.miss{{outline:2px dashed var(--critical);outline-offset:-2px}}
-.tile.excl{{outline:2px solid var(--other);outline-offset:-2px;opacity:.75}}
-</style></head><body><main>
+{style}</style></head><body><main>
 <h1>Phase 8 · TG-7 dataset report (S1)</h1>
 <p class="note">Dataset <code>{dataset_id}</code> · generated {created} by
 <code>python -m host_tools.color report</code>. All detection, distances, patch sampling and QC

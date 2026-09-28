@@ -37,6 +37,14 @@ apriltag:
   family: tag36h11            # OpenCV DICT_APRILTAG_36h11
   corner_map: {tl: 0, tr: 1, bl: 2, br: 3}
 
+# What each patch is used for (stages read this; none hard-codes patch ids). V2: white-balance
+# on grey 128, its right half when the whole is excluded (the left half is water-damaged),
+# grey 74 last; the ramp takes one of grey 128 / its right half; black is the haze patch.
+roles:
+  wb_anchors: [gray_mid, gray_mid_right, gray_dark]
+  ramp: [gray_white, gray_light, gray_dark, [gray_mid, gray_mid_right]]
+  haze: gray_black
+
 canonical:                     # rectified frame: tag-centre quad expanded about its centre
   width: 3000
   height: 1000
@@ -92,3 +100,35 @@ patches:                       # box: [x, y, w, h] in canonical px
 sub_patches:
   - {id: gray_mid_left, parent: gray_mid, box: [626, 288, 101, 351]}
   - {id: gray_mid_right, parent: gray_mid, box: [727, 288, 101, 351]}
+
+# The printed card as measured (SPEC §20: real-world measurements over design files, Nick
+# 2026-09-27). Written by `python -m host_tools.color measure-card` (git 77b060b), reviewed,
+# pasted here; every stage then scores and fits against these values, and keeps the design
+# values above for comparison. The print is much paler than its design: colours 7–39 C* less
+# saturated (median dE00 13.4 from design); greys compressed: scaled so grey 128 = 128, white
+# paper reads 268 and black 83 (black / grey 128 = 0.39 in linear, where ~0.15 is typical of ink).
+# Caveats: read through the TG-7's daylight colour matrix (OQ-39); in air on deck, so flare or
+# sky glare may lift the dark end and lower chroma (the lifted black suggests some); greys other than grey 74 come from the one clean-card frame.
+# An instrument measurement of the card (OQ-40) replaces this block when it exists.
+measured:
+  source: measured_om_tg7_in_air_tg7_channel_islands
+  method: in air, WB on gray_dark, om_tg7 daylight colour matrix, median over frames, scaled so gray_mid = its design value
+  reference_frames: [P9150341, P9160474, P9160571]
+  values:                # 8-bit sRGB scale; greys neutral
+    gray_white: [267.6, 267.6, 267.6]
+    gray_light: [190.6, 190.6, 190.6]
+    gray_mid: [128.0, 128.0, 128.0]
+    gray_dark: [96.6, 96.6, 96.6]
+    gray_black: [82.6, 82.6, 82.6]
+    cream: [271.4, 263.9, 261.0]
+    tan: [234.7, 219.2, 198.9]
+    ochre: [212.5, 181.6, 146.7]
+    orange: [209.5, 166.7, 118.5]
+    brown: [187.8, 132.9, 106.1]
+    dark_brown: [115.8, 86.9, 79.1]
+    red_orange: [238.7, 108.3, 100.2]
+    yellow: [254.3, 198.2, 124.0]
+    green: [120.9, 185.3, 136.7]
+    cyan: [123.9, 200.3, 222.2]
+    blue: [42.5, 138.3, 190.2]
+    magenta: [178.0, 101.9, 161.4]
