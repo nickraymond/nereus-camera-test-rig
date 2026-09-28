@@ -98,6 +98,8 @@ def main(argv=None) -> int:
     p = sub.add_parser("decide", help="S2a decision report: classes, CIs, win rates, needs-V3")
     p.add_argument("correct_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--blind-compare", action="append", default=[], metavar="REF:CAND[:card|free]",
+                   help="add a blind review of two correct methods (repeatable)")
     p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
     p = sub.add_parser("grvi", help="backend GRVI cheeca_v3 baseline, in the backend's env")
     p.add_argument("locate_dir", type=Path)
@@ -140,7 +142,10 @@ def main(argv=None) -> int:
             summary = jpeg_map(args.locate_dir, args.config)
             print(summary.pop("config_block"), file=sys.stderr)
         elif args.stage == "decide":
-            summary = decide(args.correct_dir, args.config, args.card)
+            from nereus_camera_test_rig.color.decision_sheets import custom_review
+
+            summary = decide(args.correct_dir, args.config, args.card,
+                             dict(custom_review(c) for c in args.blind_compare))
         elif args.stage == "grvi":
             from .grvi_baseline import grvi
 
