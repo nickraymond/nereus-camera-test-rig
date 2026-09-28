@@ -103,5 +103,6 @@ def test_camera_to_linear_and_red_signal():
                                [0.2, 0.2, 0.15])
     m = np.array([[1.2, -0.2, 0], [0, 1, 0], [0, -0.1, 1.1]])
     np.testing.assert_allclose(camera_to_linear([0.2, 0.2, 0.2], [1, 1, 1], m), [0.2] * 3)
-    r = red_signal({"gray_white": {"mean": [0.04, 0.3, 0.3], "std": [0.01, 0.01, 0.01]}})
+    r = red_signal({"gray_white": {"mean": [0.04, 0.3, 0.3], "std": [0.01, 0.01, 0.01]}},
+                   ["gray_white", "gray_light"])
     assert r == {"gray_white": {"red_snr": 4.0, "red_full_scale": 0.04}}

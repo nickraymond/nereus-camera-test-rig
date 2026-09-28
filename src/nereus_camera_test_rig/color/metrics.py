@@ -113,7 +113,7 @@ def camera_to_linear(rgb, wb: Sequence[float], matrix: Optional[np.ndarray] = No
 
 
 def red_signal(raw_patches: Mapping[str, Mapping[str, Any]],
-               ids: Iterable[str] = ("gray_white", "gray_light")) -> dict[str, dict]:
+               ids: Iterable[str]) -> dict[str, dict]:
     """Red SNR (mean ÷ std) and red fraction of full scale on linear-RAW patch stats."""
     out = {}
     for pid in ids:
@@ -146,8 +146,9 @@ def score_linear(means: Mapping[str, Sequence[float]], card: Card, *,
     """Score linear-sRGB patch means (0..1) of one frame by the §20 protocol.
 
     ``neutralized``: patches the method used to neutralize (held out of ψ). ``anchor``: the
-    grey for the L*-only match (``gray_mid``, or ``gray_mid_right`` where the left half is
-    damaged). ``exclude``: patches qc marked unusable.
+    grey for the L*-only match (the card's first usable ``roles.wb_anchors``; V2: ``gray_mid``,
+    or ``gray_mid_right`` where the left half is damaged). ``exclude``: patches qc marked
+    unusable.
     """
     truth, excluded = _truths(card), set(exclude)
     neutral_ids = set(neutralized)

@@ -4,8 +4,9 @@ blind, side-randomized review that decides the gate.
 - **Cut sheet** (``decide/cutsheet.html``): one row per frame, one whole-frame thumbnail per
   method — camera JPEG (or Olympus preset JPEG), JPEG + card WB (rendered here from the camera
   JPEG: linear gain on the anchor grey), RAW + card WB, RAW + card WB − haze, RAW + card WB +
-  depth matrix (v0.3), RAW + depth WB − haze (no card), the same + depth matrix (v0.3), GRVI. Frames: the middle frame of every sweep, every off-centre and no-card
-  frame (torch frames have no Nereus output), every preset frame.
+  depth matrix (v0.3), per-frame card affine, RAW + depth WB − haze (no card), the same +
+  depth matrix (v0.3), GRVI. Frames: the middle frame of every sweep, every off-centre and
+  no-card frame (torch frames have no Nereus output), every preset frame.
 - **Blind review** (``decide/blind.html``): pairs of images with the method names hidden and the
   sides randomized — card-free: camera JPEG vs Nereus no card (off-centre, no-card, one frame per
   sweep); card-anchored: GRVI vs RAW + card WB (one frame per sweep where GRVI found the card).

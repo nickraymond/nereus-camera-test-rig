@@ -57,20 +57,22 @@ IDENTIFIABLE_Z_RATIO = 1.5
 
 
 def grey_reflectance(card: Card) -> dict[str, float]:
-    """Linear reflectance of the neutral patches relative to white (from the design sRGB)."""
-    white = float(srgb8_to_linear(card.patch("gray_white").truth[0]))
-    out = {p.id: float(srgb8_to_linear(p.truth[0])) / white for p in card.group("grey")}
-    out["gray_mid_right"] = out["gray_mid"]
-    return out
+    """Linear reflectance of every neutral region (paper white = 1, from the design sRGB)."""
+    return {g: float(srgb8_to_linear(card.patch(card.parent_of(g)).truth[0]))
+            for g in card.grey_ids}
 
 
-def _grey_ids(qpatches: dict) -> list[str]:
-    ids = ["gray_white", "gray_light", "gray_dark", "gray_black"]
-    if qpatches["gray_mid"]["usable"]:
-        ids.append("gray_mid")
-    elif qpatches["gray_mid_right"]["usable"]:
-        ids.append("gray_mid_right")
-    return [i for i in ids if qpatches[i]["usable"]]
+def first_usable(alternatives, usable) -> Optional[str]:
+    """The first of ``alternatives`` that ``usable(id)`` accepts."""
+    return next((a for a in alternatives if usable(a)), None)
+
+
+def _grey_ids(qpatches: dict, card: Card) -> list[str]:
+    """The ramp greys (one of each set of alternatives) and the haze patch, if usable."""
+    ok = lambda pid: qpatches.get(pid, {}).get("usable", False)  # noqa: E731
+    ids = [first_usable(alts, ok) for alts in card.roles.ramp]
+    return [i for i in ids if i] + ([card.roles.haze] if card.roles.haze and ok(card.roles.haze)
+                                    else [])
 
 
 def observations(root: Path, dist: dict, card: Card, principal,
@@ -91,18 +93,18 @@ def observations(root: Path, dist: dict, card: Card, principal,
             continue
         H = homography(card, np.asarray(corners[stem]["quad_raw"]))
         raw = patches[stem]["raw"]["patches"]
-        for pid in _grey_ids(q["patches"]):
+        for pid in _grey_ids(q["patches"], card):
             b = boxes[pid]
             centre = cv2.perspectiveTransform(
                 np.array([[[b.x + b.w / 2, b.y + b.h / 2]]], dtype=np.float64), H)[0, 0]
             radius = float(np.linalg.norm(centre - pp)) / half_diag
             if radius > MAX_RADIUS:
                 continue
-            if pid == "gray_black" and min(raw[pid]["size_px"]) < MIN_BLACK_PX:
+            if pid == card.roles.haze and min(raw[pid]["size_px"]) < MIN_BLACK_PX:
                 continue
             obs.append({"stem": stem, "dive": r["dive_id"], "sweep": r["sweep_id"],
                         "depth_m": float(r["depth_m"]), "z_m": d["z_m"], "patch": pid,
-                        "rho": None if pid == "gray_black" else rho[pid],
+                        "rho": None if pid == card.roles.haze else rho[pid],
                         "radius": round(radius, 3), "I": raw[pid]["mean_norm"]})
     return obs
 
@@ -188,22 +190,17 @@ def fit_dive(obs: list[dict]) -> dict[str, Any]:
     return out
 
 
-ANCHORS = ("gray_mid", "gray_mid_right", "gray_dark")
-RAMP = ("gray_white", "gray_light", "gray_dark")
-
-
-def ramp_fit(raw: dict, keep: set, rho: dict) -> Optional[dict[str, Any]]:
+def ramp_fit(raw: dict, keep: set, rho: dict, ramp) -> Optional[dict[str, Any]]:
     """Per-channel straight line through the usable greys: I = A·ρ + H.
 
     ``A`` is the light reaching the card (its colour = the white balance), ``H`` the additive
-    haze. Uses white, grey 200, grey 128 (or its right half) and grey 74 — never black, whose
-    print reflectance is not known (colour review 2026-09-27: the single-frame black estimate
-    over-predicted haze ~3×). Needs ≥ 2 greys spanning ≥ 0.1 in reflectance.
+    haze. Uses the card's ``roles.ramp`` greys (one of each set of alternatives; V2: white,
+    grey 200, grey 74 and grey 128 or its right half) — never black, whose print reflectance is
+    not known (colour review 2026-09-27: the single-frame black estimate over-predicted haze
+    ~3×). Needs ≥ 2 greys spanning ≥ 0.1 in reflectance.
     """
-    ids = [p for p in RAMP if p in keep]
-    mid = next((m for m in ("gray_mid", "gray_mid_right") if m in keep), None)
-    ids += [mid] if mid else []
-    ids = [p for p in ids if raw.get(p, {}).get("mean_norm")]
+    ids = [first_usable(alts, keep.__contains__) for alts in ramp]
+    ids = [p for p in ids if p and raw.get(p, {}).get("mean_norm")]
     x = np.array([rho[p] for p in ids])
     if len(ids) < 2 or np.ptp(x) < 0.1:
         return None
@@ -227,7 +224,7 @@ def wb_points(root: Path, dist: dict, card: Card, categories) -> list[dict]:
                 or r["flash_fired"] == "True"):
             continue
         keep = {pid for pid, p in q["patches"].items() if p["usable"]}
-        ramp = ramp_fit(patches[stem]["raw"]["patches"], keep, rho)
+        ramp = ramp_fit(patches[stem]["raw"]["patches"], keep, rho, card.roles.ramp)
         if ramp is None or min(ramp["A"]) <= 0:
             continue
         A, H = np.asarray(ramp["A"]), np.asarray(ramp["H"])
