@@ -194,6 +194,12 @@ Items for Nick are marked **(Nick)**.
     stored (4.2 MB total), AE3 3.8 MB (8.4 MB total) — one frame at a time on the N6.
   - The in-air test scene clipped (max 255 on every site at the auto exposure): the S3 locked
     recipe must meter for the card, not the window.
+  - **`capture_raw` (allowlisted, shared service) streams the frame from RAM** in its own
+    framed reply (§10 framing, SHA-256 verified), with no `/flash` copy: writing 1 MB to the
+    N6's flash took **~7.6 s of wall time while `ticks_ms` reported 0.5 s** (tick counter and
+    USB stalled), and the N6 dropped off USB mid-capture during it. Streamed: **~2.5 s per
+    capture** on both boards at 2 s metering (send 50–90 ms, SHA-256 90–150 ms on board).
+    Stress on `nereus002` with `reset_board` before each: N6 30/30, AE3 15/15.
   *First probe (N6, `raw_probe_v5.py`):* `csi.BAYER` is the only raw format (no 10/12-bit
   constant); per-2×2 means 56.9 / 80.6 / 80.5 / 40.7 put the greens at TR/BL; `mpremote fs cp`
   of the 1 MB frame took > 90 s → use the rig's framed `get_file` (OQ-23). The AE3 gave the
@@ -224,7 +230,9 @@ Items for Nick are marked **(Nick)**.
 - **[RESOLVED 2026-09-28] OQ-23 — USB transfer time for a raw frame.** **Answer (`nereus002`,
   rig `get_file`, 512 B board chunks, SHA-256 verified):** 1,024,000 B in **0.77 s on the N6**
   (~1.3 MB/s) and **0.91 s on the AE3** (~1.1 MB/s), repeatable across two frames each —
-  well inside `TRANSFER_TIMEOUT` (30 s), and > 100× faster than `mpremote fs cp`. *Original:*
+  well inside `TRANSFER_TIMEOUT` (30 s), and > 100× faster than `mpremote fs cp`. `capture_raw`
+  skips the file step and streams from RAM: capture + transfer **~2.5 s** end to end (OQ-21);
+  add ~3.5 s (N6) / ~5 s (AE3) when `reset_board` runs first. *Original:*
   *Blocks S3 (soak cadence
   in S7).* Transfer is not timed separately, but the host's capture `duration_seconds`
   includes `_retrieve_file` (`cameras/openmv_usb.py`), and `TRANSFER_TIMEOUT = 30.0` s bounds
