@@ -45,7 +45,8 @@ class Patch:
     group: str  # "grey" | "color"
     label: str
     box: Box
-    truth: tuple[int, int, int]
+    truth: tuple[float, float, float]  # the reference: measured print if the card has one
+    design: Optional[tuple[int, int, int]] = None  # the design value, when truth is measured
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,11 @@ class Card:
     sub_patches: tuple[SubPatch, ...]
     roles: Roles
     quad_ratio: Optional[float] = None  # tag-centre quad width / height
+    design_source: Optional[str] = None  # set when ``truth_source`` is a measurement
+
+    @property
+    def truth_is_measured(self) -> bool:
+        return self.design_source is not None
 
     @property
     def aruco_dictionary(self) -> str:
@@ -208,6 +214,24 @@ def load_card(path: str | Path) -> Card:
         raise CardError(f"{rw}: unknown patch ids {unknown}")
 
     truth = _get(data, "truth", where)
+    truth_source, design_source = str(_get(truth, "source", where)), None
+    measured = data.get("measured")
+    if measured:
+        # Real-world reference (SPEC §20): the print as measured replaces the design values;
+        # the design values are kept on each patch so the difference stays visible.
+        mw = f"{where}: measured"
+        values = {str(k): v for k, v in _get(measured, "values", mw).items()}
+        unknown = sorted(set(values) - set(by_id))
+        if unknown:
+            raise CardError(f"{mw}: unknown patch ids {unknown}")
+        for pid, v in values.items():
+            if not (len(v) == 3 and all(isinstance(x, (int, float)) and 0 <= x <= 300
+                                        for x in v)):
+                raise CardError(f"{mw}: {pid} must be three values 0-300 (sRGB 8-bit scale)")
+        patches = [Patch(p.id, p.group, p.label, p.box,
+                         tuple(float(x) for x in values[p.id]), p.truth) if p.id in values
+                   else p for p in patches]
+        design_source, truth_source = truth_source, str(_get(measured, "source", mw))
     physical = dict(_get(data, "physical_mm", where))
     physical_source = str(physical.pop("source", "unspecified"))
     return Card(
@@ -222,7 +246,8 @@ def load_card(path: str | Path) -> Card:
         tags=tags,
         physical_mm={k: (None if v is None else float(v)) for k, v in physical.items()},
         physical_source=physical_source,
-        truth_source=str(_get(truth, "source", where)),
+        truth_source=truth_source,
+        design_source=design_source,
         patches=tuple(patches),
         sub_patches=tuple(subs),
         roles=Roles(anchors, ramp, None if haze is None else str(haze)),

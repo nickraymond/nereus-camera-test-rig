@@ -14,6 +14,7 @@ Usage::
     python -m host_tools.color patches results/color/<dataset_id>/locate
     python -m host_tools.color qc results/color/<dataset_id>/patches --config <dataset.yaml>
     python -m host_tools.color report results/color/<dataset_id>/qc --config <dataset.yaml>
+    python -m host_tools.color measure-card results/color/<dataset_id>/qc --config <dataset.yaml>
     python -m host_tools.color fit results/color/<dataset_id>/qc --config <dataset.yaml>
     python -m host_tools.color correct results/color/<dataset_id>/fit --config <dataset.yaml>
     python -m host_tools.color decide results/color/<dataset_id>/correct --config <dataset.yaml>
@@ -41,6 +42,7 @@ from nereus_camera_test_rig.color.distance import distance  # noqa: E402
 from nereus_camera_test_rig.color.ingest import ingest  # noqa: E402
 from nereus_camera_test_rig.color.jpeg_map import jpeg_map  # noqa: E402
 from nereus_camera_test_rig.color.locate import locate  # noqa: E402
+from nereus_camera_test_rig.color.measure_card import measure_card  # noqa: E402
 from nereus_camera_test_rig.color.patches import patches  # noqa: E402
 from nereus_camera_test_rig.color.qc import qc  # noqa: E402
 from nereus_camera_test_rig.color.report import report  # noqa: E402
@@ -95,6 +97,12 @@ def main(argv=None) -> int:
                        help="default: configs/calibration/<dataset camera>.yaml")
         p.add_argument("--card", type=Path,
                        default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p = sub.add_parser("measure-card", help="the printed card's colours, read in air")
+    p.add_argument("qc_dir", type=Path)
+    p.add_argument("--config", type=Path, required=True)
+    p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
+    p.add_argument("--calibration", type=Path,
+                   help="default: configs/calibration/<dataset camera>.yaml")
     p = sub.add_parser("decide", help="S2a decision report: classes, CIs, win rates, needs-V3")
     p.add_argument("correct_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -124,6 +132,11 @@ def main(argv=None) -> int:
             summary = stages.inspect(args.file, args.out)
         elif args.stage == "ingest":
             summary = ingest(args.dataset_dir, args.config, args.out, read_exif)
+        elif args.stage == "measure-card":
+            calibration = args.calibration or (REPO / "configs" / "calibration" /
+                                               f"{load_yaml(args.config).get('camera', '')}.yaml")
+            summary = measure_card(args.qc_dir, args.card, calibration, args.config)
+            print(summary.pop("config_block"), file=sys.stderr)
         elif args.stage in ("distance", "fit", "correct"):
             calibration = args.calibration or (REPO / "configs" / "calibration" /
                                                f"{load_yaml(args.config).get('camera', '')}.yaml")

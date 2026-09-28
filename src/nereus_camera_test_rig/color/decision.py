@@ -50,6 +50,7 @@ from .decision_sheets import (
     review_frames,
     score_blind,
 )
+from .metrics import delta_e2000, linear_to_lab, srgb8_to_linear
 from .report import STYLE
 from .stages import verify_fresh, write_stage
 from .water_model import fit_settings
@@ -319,6 +320,19 @@ def render(result: dict, provenance: dict) -> str:
                           "candidate</th><th>prefer reference</th><th>no preference</th>"
                           "<th>candidate share</th><th>≥ 70 %</th></tr></thead><tbody>"
                           f"{rows}</tbody></table>")
+    ref = result.get("card_reference") or {}
+    if ref.get("measured"):
+        rows = "".join(f"<tr><td>{_e(pid)}</td><td>{_e(v['design'])}</td><td>{_e(v['measured'])}"
+                       f"</td><td>{v['de2000']}</td></tr>" for pid, v in ref["patches"].items())
+        card_ref = (f"<p class=\"note\">Scored and fitted against the <b>measured print</b> "
+                    f"({_e(ref['source'])}); design values ({_e(ref['design_source'])}) kept "
+                    f"for comparison. Median ΔE00 design → measured: colours "
+                    f"{ref['median_de2000_color']}, greys {ref['median_de2000_grey']}.</p>"
+                    "<table><thead><tr><th>patch</th><th>design sRGB</th><th>measured sRGB"
+                    f"</th><th>ΔE00</th></tr></thead><tbody>{rows}</tbody></table>")
+    else:
+        card_ref = ("<p class=\"note\"><b>Design values</b> — the card has no measured "
+                    "reference yet (run <code>measure-card</code>).</p>")
     rule = result["rule"]
     prov = "".join(f"<tr><td>{_e(k)}</td><td><code>{_e(v)}</code></td></tr>"
                    for k, v in provenance.items())
@@ -348,9 +362,31 @@ frames.</p>{review}
 <h2>Flash frames (scored apart)</h2><p class="note">The preset fired its flash; only the
 camera's outputs are scored.</p><table><thead><tr><th>frame</th><th>method</th><th>ψ (°)</th>
 <th>ΔE00</th></tr></thead><tbody>{flash}</tbody></table>
+<h2>Card reference</h2>{card_ref}
 <h2>Needs the V3 dataset</h2><ul>{needs}</ul>
 <h2>Provenance</h2><table><tbody>{prov}</tbody></table>
 </main></body></html>"""
+
+
+def card_reference(card) -> dict[str, Any]:
+    """Which truth scores use, and the design-vs-measured difference per patch."""
+    if not card.truth_is_measured:
+        return {"measured": False, "source": card.truth_source}
+    per = {}
+    for p in card.patches:
+        if p.design is None:
+            continue
+        d, m = srgb8_to_linear(np.asarray(p.design, float)), srgb8_to_linear(np.asarray(p.truth))
+        per[p.id] = {"design": list(p.design), "measured": [round(v, 1) for v in p.truth],
+                     "de2000": round(float(delta_e2000(linear_to_lab(np.maximum(d, 1e-9)),
+                                                       linear_to_lab(np.maximum(m, 1e-9)))), 1)}
+
+    def med(group):
+        v = [per[p.id]["de2000"] for p in card.group(group) if p.id in per]
+        return round(float(np.median(v)), 1) if v else None
+
+    return {"measured": True, "source": card.truth_source, "design_source": card.design_source,
+            "patches": per, "median_de2000_color": med("color"), "median_de2000_grey": med("grey")}
 
 
 def decide(correct_dir: Path, dataset_config: Path, card_path: Path,
@@ -392,6 +428,7 @@ def decide(correct_dir: Path, dataset_config: Path, card_path: Path,
     ingest_dir = root / "ingest"
     rows = {r["stem"]: r for r in csv.DictReader((ingest_dir / "manifest.csv").open())}
     card = load_card(card_path)
+    result["card_reference"] = card_reference(card)
     truth = {pid: _truth_linear(card, pid) for pid in
              [p.id for p in card.patches] + [sp.id for sp in card.sub_patches]}
     patches = json.loads((root / "patches" / "patches.json").read_text())
@@ -417,7 +454,8 @@ def decide(correct_dir: Path, dataset_config: Path, card_path: Path,
                                   "answers": str(shown),
                                   "comparisons": [dict(c) for c in review]})
     result["blind_pairs"] = next(r["pairs"] for r in result["reviews"] if r["name"] == "gate")
-    provenance = {"dataset": root.name, "correct stage git": record["git"],
+    provenance = {"dataset": root.name, "card truth": card.truth_source,
+                  "correct stage git": record["git"],
                   "GRVI backend commit": correct_summary.get("grvi_backend_sha")}
     (out_dir / "decision.json").write_text(json.dumps(result, indent=1) + "\n")
     (out_dir / "index.html").write_text(render(result, provenance))
