@@ -261,7 +261,12 @@ Items for Nick are marked **(Nick)**.
   the 2304×1296 binned sensor mode (brief §10).
 - **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
   or cameras housed and cabled to a dry poolside Pi?
-- **[OPEN] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *S2b and S4.* Enables
+- **[PARTIAL 2026-09-28] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *Answer:* no
+  X-Rite, but Nick has a **Datacolor SpyderCheckr 24** — same role (absolute reference beside
+  the card). Still to do: get Datacolor's published reference values for this chart (and which
+  edition it is) from Datacolor's own source; the SpyderCheckr has no AprilTags, so it is placed
+  at a fixed offset from the V1 card (or its corners clicked with the existing click tool).
+  *Original:* *S2b and S4.* Enables
   card-truth Option B (brief §5.3). More valuable than before: the V2 card is water-damaged,
   so a reshoot of it gives an unreliable daylight reference for its light patches. Not a
   blocker for the S2a gate (design values + the TG-7's embedded colour matrix).
