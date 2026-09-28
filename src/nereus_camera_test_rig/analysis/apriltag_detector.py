@@ -16,6 +16,11 @@ import numpy as np
 
 DEFAULT_FAMILY = "DICT_APRILTAG_36h11"
 DEFAULT_SCALES = (1, 2, 3, 4)
+# Upscaled passes are skipped above this many pixels. Measured 2026-09-28: on a 12 MP IMX708
+# frame the 1-4x passes peaked at 6.8 GB (Mac) and were OOM-killed on the Pi Zero 2 W rig
+# (415 MB); the native pass alone peaks at 242 MB there. The cap is one native IMX708 frame,
+# so a 1280x800 OpenMV frame keeps 1-3x and drops only 4x (16.4 MP). Scale 1 always runs.
+MAX_SCALED_PIXELS = 4608 * 2592
 
 
 class DetectorUnavailable(RuntimeError):
@@ -75,11 +80,15 @@ def detect_tags(
     *,
     family: str = DEFAULT_FAMILY,
     scales: tuple[int, ...] = DEFAULT_SCALES,
+    expected: int | None = None,
+    max_pixels: int = MAX_SCALED_PIXELS,
 ) -> DetectionOutcome:
     """Detect AprilTags, trying each scale and keeping the best (most tags).
 
     Corner coordinates are always returned in native (scale-1) image pixels. Ties on
-    tag count are broken toward the smallest scale (cheapest, least interpolation).
+    tag count are broken toward the smallest scale (cheapest, least interpolation), so
+    stopping once ``expected`` tags are found gives the same result. A scale whose
+    image would exceed ``max_pixels`` is skipped (scale 1 never is).
     """
     _require_aruco()
     gray = _load_gray(image)
@@ -90,6 +99,8 @@ def detect_tags(
 
     best: DetectionOutcome | None = None
     for scale in scales:
+        if scale != 1 and gray.shape[0] * gray.shape[1] * scale * scale > max_pixels:
+            continue
         scaled = (
             gray
             if scale == 1
@@ -109,4 +120,6 @@ def detect_tags(
                 )
         if best is None or len(tags) > len(best.tags):
             best = DetectionOutcome(tags=tags, scale_used=scale)
+        if expected is not None and len(best.tags) >= expected:
+            break
     return best or DetectionOutcome()

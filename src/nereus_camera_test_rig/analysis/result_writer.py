@@ -23,7 +23,7 @@ import numpy as np
 
 from ..models import DetectionResult
 from . import image_metrics
-from .apriltag_detector import DEFAULT_FAMILY, DEFAULT_SCALES, detect_tags
+from .apriltag_detector import DEFAULT_FAMILY, DEFAULT_SCALES, MAX_SCALED_PIXELS, detect_tags
 from .crop import make_card_crop, save_image
 from .reference_card import (
     DEFAULT_CORNER_MAP,
@@ -49,6 +49,7 @@ class AnalysisConfig:
     rectified_w: int = DEFAULT_RECTIFIED_W
     rectified_h: int = DEFAULT_RECTIFIED_H
     tag_min_side_px: float = 10.0  # below this a tag is too small to trust (OQ-12)
+    max_scaled_pixels: int = MAX_SCALED_PIXELS  # upscaled detection passes above this skipped
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict[str, Any]]) -> "AnalysisConfig":
@@ -58,7 +59,8 @@ class AnalysisConfig:
         kwargs: dict[str, Any] = {}
         if "expected_tag_ids" in ap:
             kwargs["expected_tag_ids"] = list(ap["expected_tag_ids"])
-        for key in ("corner_map", "family", "expand_x", "expand_y", "rectified_w", "rectified_h"):
+        for key in ("corner_map", "family", "expand_x", "expand_y", "rectified_w", "rectified_h",
+                    "max_scaled_pixels"):
             if key in ap:
                 kwargs[key] = ap[key]
         return cls(**kwargs)
@@ -103,7 +105,8 @@ def analyze_reference_card(
         _write_json(out_dir / "detection.json", result, extra={})
         return result
 
-    outcome = detect_tags(image, family=cfg.family, scales=cfg.scales)
+    outcome = detect_tags(image, family=cfg.family, scales=cfg.scales,
+                          expected=len(cfg.expected_tag_ids), max_pixels=cfg.max_scaled_pixels)
     result.tags_detected = outcome.tag_ids
     found = set(outcome.tag_ids)
     result.all_expected_tags_found = set(cfg.expected_tag_ids).issubset(found)
