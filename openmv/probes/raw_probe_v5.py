@@ -1,4 +1,6 @@
-"""OpenMV v5 RAW (Bayer) probe — run with ``mpremote connect <port> run openmv/probes/raw_probe_v5.py``.
+"""OpenMV v5 RAW (Bayer) probe.
+
+Run with ``mpremote connect <port> run openmv/probes/raw_probe_v5.py``.
 
 Read-only facts for S3 / OQ-21: the ``csi`` constants and CSI methods, whether auto
 exposure / gain / white balance lock, read-back exposure and gain, one HD Bayer frame's size,
@@ -42,14 +44,16 @@ b = img.bytearray()
 W, H = img.width(), img.height()
 print("#G", W, H, len(b), "bytes/px", len(b) / (W * H), "format", img.format())
 mn, mx = 255, 0
-sums = [0, 0, 0, 0]; n = 0
+sums = [0, 0, 0, 0]
+n = 0
 for y in range(0, H - 1, 8):
     row = y * W
     for x in range(0, W - 1, 8):
         for k, (dy, dx) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
             v = b[row + dy * W + x + dx]
             sums[k] += v
-            mn = min(mn, v); mx = max(mx, v)
+            mn = min(mn, v)
+            mx = max(mx, v)
         n += 1
 print("#S min", mn, "max", mx, "means TL TR BL BR", [round(s / n, 1) for s in sums])
 with open("/flash/raw_probe.bin", "wb") as f:
