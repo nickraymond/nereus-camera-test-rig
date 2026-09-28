@@ -153,6 +153,16 @@ def test_v03_columns_use_the_frames_depth_matrix():
     assert worse["raw_card_wb_ccm"]["de2000_median"] > scores["raw_card_wb"]["de2000_median"]
 
 
+def test_blend_columns_carry_the_blended_matrix():
+    j = {**job(card_means()), "ccm": np.eye(3).tolist(), "ccm_blend": (2 * np.eye(3)).tolist()}
+    maps, _ = frame_maps(j, np.zeros((50, 50, 3)) + HAZE + 1e-6)
+    for base in ("raw_card_wb", "raw_depth_wb_haze"):
+        assert maps[f"{base}_ccm_blend"][:2] == maps[base][:2]
+        np.testing.assert_array_equal(maps[f"{base}_ccm_blend"][2], 2 * np.eye(3))
+    assert "raw_card_wb_ccm_blend" not in frame_maps({**j, "ccm_blend": None},
+                                                     np.zeros((50, 50, 3)) + HAZE)[0]
+
+
 def test_card_affine_column_scores_leave_one_patch_out():
     from nereus_camera_test_rig.color.correct import card_job
 
