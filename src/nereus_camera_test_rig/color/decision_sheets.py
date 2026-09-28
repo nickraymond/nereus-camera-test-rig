@@ -37,9 +37,10 @@ from .report import STYLE
 
 SEED = "s2a-blind-2026-09-27"
 THUMB_W, BLIND_W = 300, 640
-CUT_COLUMNS = ("camera", "jpeg_card_wb", "raw_card_wb", "raw_card_slope_wb", "raw_card_wb_haze",
-               "raw_card_wb_ccm", "raw_card_affine",
-               "raw_depth_wb_haze", "raw_depth_wb_haze_ccm", "grvi_cheeca_v3")
+CUT_COLUMNS = ("camera", "jpeg_card_wb", "raw_card_wb", "raw_card_wb_ccm_blend",
+               "raw_card_slope_wb", "raw_card_wb_haze", "raw_card_wb_ccm", "raw_card_affine",
+               "raw_depth_wb_haze", "raw_depth_wb_haze_ccm_blend", "raw_depth_wb_haze_ccm",
+               "grvi_cheeca_v3")
 # Blind reviews: named sets of comparisons. Each compares a reference and a candidate method on
 # a frame set ("card": one frame per sweep; "free": that plus off-centre and no-card frames).
 # The comparison id seeds the sides, so a review's key never changes when others are added.

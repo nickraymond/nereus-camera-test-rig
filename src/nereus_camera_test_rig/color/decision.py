@@ -62,12 +62,12 @@ LABELS = {**COLUMNS, GRVI_FOUND: "GRVI cheeca_v3 (card found only)"}
 CLASSES = {
     "card_anchored": {"title": "Card-anchored — the card in the frame is used",
                       "nereus": ("raw_card_wb", "raw_card_slope_wb", "raw_card_wb_haze",
-                                 "raw_card_wb_ccm", "raw_card_affine"),
+                                 "raw_card_wb_ccm", "raw_card_affine", "raw_card_wb_ccm_blend"),
                       "baselines": ("grvi_cheeca_v3", GRVI_FOUND, "jpeg_card_wb"),
                       "metrics": ("de2000_median",)},
     "card_free": {"title": "Card-free — no card used",
                   "nereus": ("raw_depth_wb_haze", "raw_depth_wb_haze_loso",
-                             "raw_depth_wb_haze_ccm"),
+                             "raw_depth_wb_haze_ccm", "raw_depth_wb_haze_ccm_blend"),
                   "baselines": ("camera_jpeg", "olympus_preset_jpeg"),
                   "metrics": ("psi_median", "de2000_median")},
 }

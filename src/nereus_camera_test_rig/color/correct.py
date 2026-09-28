@@ -30,6 +30,10 @@ nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset
   water grey 128 is mostly blue-green backscatter, so balancing on it over-boosts red. No haze
   is subtracted; green gets the same gain as ``raw_card_wb``, so brightness is unchanged.
   Needs ``SLOPE_MIN_GREYS`` greys in the ramp (no column otherwise).
+- v0.3 blend (the default, Nick 2026-09-27): the v0.3 depth matrix ``M`` blended toward the
+  camera daylight matrix ``C``, ``C + CCM_BLEND · (M − C)``, on the card-WB and depth-WB maps
+  (``*_ccm_blend``). The card alone cannot set the amount: full v0.3 is still paler than the
+  print on the card but over-saturates scene colours.
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
   channel, capped at the **dark floor** — the ``DARK_PERCENTILE`` of the image centre
   (``CENTRE`` of each side; the corners are vignetted). How often the cap binds is logged.
@@ -77,6 +81,10 @@ from .water_model import fit_settings, grey_reflectance, ramp_fit
 DARK_PERCENTILE = 0.5
 CENTRE = 0.6
 TARGET_P99 = 0.8
+# v0.3 toned down (Nick, 2026-09-27, by eye on the TG-7 cut sheet): the depth matrix blended
+# toward the camera daylight matrix, C + CCM_BLEND · (M − C). Full v0.3 over-saturates scene
+# colours (rocks, algae, blue plastic) although it is still paler than the print on the card.
+CCM_BLEND = 0.25
 SLOPE_MIN_GREYS = 3  # a 2-grey slope is unstable (TG-7 dive 4: grey 74 + grey 128 right → yellow)
 COLUMNS = {  # method → the name used in sheets and reports
     "camera_jpeg": "Camera JPEG",
@@ -91,13 +99,16 @@ COLUMNS = {  # method → the name used in sheets and reports
     "raw_card_wb_ccm": "RAW + card WB + depth matrix (v0.3)",
     "raw_depth_wb_haze_ccm": "RAW + depth WB − haze + depth matrix (no card, v0.3)",
     "raw_card_affine": "RAW + per-frame card affine (leave-one-patch-out)",
+    "raw_card_wb_ccm_blend": f"RAW + card WB + v0.3 × {CCM_BLEND} (default)",
+    "raw_depth_wb_haze_ccm_blend": f"RAW + depth WB − haze + v0.3 × {CCM_BLEND} (no card)",
 }
 NOT_RENDERED = {"raw_depth_wb_haze_loso"}  # a validation variant: scored, no images
 CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
                              "raw_card_slope_wb", "raw_card_wb_haze", "raw_card_wb_ccm",
-                             "raw_card_affine"),
+                             "raw_card_affine", "raw_card_wb_ccm_blend"),
            "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze",
-                         "raw_depth_wb_haze_loso", "raw_depth_wb_haze_ccm")}
+                         "raw_depth_wb_haze_loso", "raw_depth_wb_haze_ccm",
+                         "raw_depth_wb_haze_ccm_blend")}
 PRESET_CATEGORY = "2_underwater_preset"
 
 
@@ -186,6 +197,8 @@ def frame_maps(job: dict, image: np.ndarray) -> tuple[dict[str, tuple], dict[str
         for base in ("raw_card_wb", "raw_depth_wb_haze"):
             if base in maps:
                 maps[f"{base}_ccm"] = (*maps[base], job["ccm"])
+                if job.get("ccm_blend") is not None:
+                    maps[f"{base}_ccm_blend"] = (*maps[base], job["ccm_blend"])
     return maps, diag
 
 
@@ -411,6 +424,7 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
     for job in jobs:
         m = matrix_at(ccm[rows[job["stem"]]["dive_id"]], job["depth_m"])
         job["ccm"] = None if m is None else m.tolist()
+        job["ccm_blend"] = None if m is None else (matrix + CCM_BLEND * (m - matrix)).tolist()
 
     out_dir = root / "correct"
     shutil.rmtree(out_dir / "images", ignore_errors=True)  # never mix runs
@@ -463,6 +477,7 @@ def correct(fit_dir: Path, calibration: Path, dataset_config: Path, card_path: P
                 params={"version": "v0.3", "anchors": list(card.roles.wb_anchors),
                         "table_source_dives": sources,
                         "dark_percentile": DARK_PERCENTILE,
-                        "centre": CENTRE, "target_p99": TARGET_P99})
+                        "centre": CENTRE, "target_p99": TARGET_P99, "ccm_blend": CCM_BLEND,
+                        "slope_min_greys": SLOPE_MIN_GREYS})
     summary["out_dir"] = str(out_dir)
     return summary
