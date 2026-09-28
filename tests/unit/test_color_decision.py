@@ -205,19 +205,19 @@ def test_chosen_reviews_get_their_own_page_key_and_answers(tmp_path):
     name, custom = custom_review("camera:raw_card_wb_ccm:card")
     assert name == "camera_vs_raw_card_wb_ccm" and custom[0]["frames"] == "card"
     stems = [f"F{i}" for i in range(0, 40, 4)]
-    answers = {f"v02_v03_card:{s}": nereus_side("v02_v03_card", s) for s in stems[:7]}
-    answers.update({f"v02_v03_card:{s}": "AB"[nereus_side("v02_v03_card", s) == "A"]
+    answers = {f"v02_v03m_card:{s}": nereus_side("v02_v03m_card", s) for s in stems[:7]}
+    answers.update({f"v02_v03m_card:{s}": "AB"[nereus_side("v02_v03m_card", s) == "A"]
                     for s in stems[7:]})
-    (tmp_path / "dataset_blind_answers_v02_v03.json").write_text(
+    (tmp_path / "dataset_blind_answers_v02_v03m.json").write_text(
         json.dumps({"seed": SEED, "answers": answers}))
     out = decide(correct_dir, cfg, CARD_PATH, {name: custom})
-    assert out["reviews"] == {"gate": 21, "v02_v03": 21, name: 10}
-    v3 = out["blind"]["v02_v03"]["v02_v03_card"]
+    assert out["reviews"] == {"gate": 21, "v02_v03m": 21, name: 10}
+    v3 = out["blind"]["v02_v03m"]["v02_v03m_card"]
     assert (v3["prefer_candidate_n"], v3["prefer_reference_n"]) == (7, 3) and v3["rule_pass"]
-    page = (root / "decide" / "blind_v02_v03.html").read_text()
-    assert "s2a-blind-answers-v02_v03" in page and "dataset_blind_answers_v02_v03.json" in page
+    page = (root / "decide" / "blind_v02_v03m.html").read_text()
+    assert "s2a-blind-answers-v02_v03m" in page and "dataset_blind_answers_v02_v03m.json" in page
     assert "'s2a-blind-answers'" in (root / "decide" / "blind.html").read_text()  # gate kept
-    assert "blind_v02_v03.html" in (root / "decide" / "index.html").read_text()
+    assert "blind_v02_v03m.html" in (root / "decide" / "index.html").read_text()
     with pytest.raises(ValueError, match="not part of this review"):
         score_blind({"seed": SEED, "answers": {"other:F0": "A"}}, custom)
     with pytest.raises(ValueError, match="REF:CAND"):

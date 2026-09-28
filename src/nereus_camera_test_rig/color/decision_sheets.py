@@ -10,8 +10,8 @@ blind, side-randomized review that decides the gate.
 - **Blind reviews** (``REVIEWS``): pairs of images with the method names hidden and the sides
   randomized. ``gate`` (``decide/blind.html``) decides S2a — camera JPEG vs Nereus no card
   (off-centre, no-card, one frame per sweep) and GRVI vs RAW + card WB (one frame per sweep
-  where GRVI found the card); ``v02_v03`` (``blind_v02_v03.html``) compares v0.2 with the v0.3
-  depth matrix, with and without the card; ``custom_review`` builds any REF:CAND pair.
+  where GRVI found the card); ``v02_v03m`` (``blind_v02_v03m.html``) compares v0.2 with the v0.3
+  depth matrix fitted to the measured print, with and without the card; ``custom_review`` builds any REF:CAND pair.
   Choices are kept in the browser and downloaded as JSON. The side of each pair comes from a hash
   of (seed, class, frame), never from the page, so the key is stable across re-runs and does
   not depend on which pairs are listed. Saved answers (``<dataset config>_blind_answers.json``
@@ -48,10 +48,13 @@ REVIEWS = {
               "candidate": "raw_depth_wb_haze"},
              {"id": "card_anchored", "frames": "card", "reference": "grvi_cheeca_v3",
               "candidate": "raw_card_wb"}),
-    "v02_v03": ({"id": "v02_v03_card", "frames": "card", "reference": "raw_card_wb",
-                 "candidate": "raw_card_wb_ccm"},
-                {"id": "v02_v03_no_card", "frames": "free", "reference": "raw_depth_wb_haze",
-                 "candidate": "raw_depth_wb_haze_ccm"}),
+    # v0.2 vs v0.3 with v0.3 fitted to the measured print. (The first v0.2 vs v0.3 review, on
+    # the design-fitted v0.3, is archived as <dataset>_blind_answers_v02_v03_designfit.json:
+    # its answers belong to images that no longer exist.)
+    "v02_v03m": ({"id": "v02_v03m_card", "frames": "card", "reference": "raw_card_wb",
+                  "candidate": "raw_card_wb_ccm"},
+                 {"id": "v02_v03m_no_card", "frames": "free", "reference": "raw_depth_wb_haze",
+                  "candidate": "raw_depth_wb_haze_ccm"}),
 }
 
 
