@@ -1,0 +1,80 @@
+# Nereus Reef Reference Card V3, card c4 of 4 — single source of truth (SPEC §20).
+# Design and evidence: docs/reference_card_v3.md. Print files: python -m host_tools.render_card <this file>.
+# c1-c4 are identical except card_id and the tag-ID block; each physical card gets its own
+# MEASURED truth after printing (the design values below are placeholders until then, OQ-40).
+#
+# Canonical frame = the whole trimmed card at exactly 10 px/mm (square pixels, unlike V2):
+# pixel i covers card mm [i/10, (i+1)/10) from the top-left of the trim, so every box below is
+# card mm x 10. Tag centres are pixel-centre coordinates (mm x 10 - 0.5). expand_x/y follow
+# patches.canonical_tag_quad: tag centre = (W-1)/2 +- ((W-1)/2) / expand.
+
+card_id: nereus_v3_c4
+schema_version: 1
+
+apriltag:
+  family: tag25h9              # OpenCV DICT_APRILTAG_25h9 (35 IDs). V2 is tag36h11.
+  corner_map: {tl: 12, tr: 13, bl: 14, br: 15}   # same convention as V2
+  quad_ratio: 1.829            # tag-centre quad width / height = 331 / 181 (V2: 3.985)
+
+canonical:
+  width: 4200
+  height: 2700
+  px_per_mm: 10
+  expand_x: 1.268580           # 2099.5 / 1655
+  expand_y: 1.491160           # 1349.5 / 905
+
+tags:                          # canonical px: centre [x, y], edge [x_len, y_len]; edge_mm printed
+  12: {center: [444.5, 444.5], edge: [630.0, 630.0], edge_mm: 63.0}
+  13: {center: [3754.5, 444.5], edge: [630.0, 630.0], edge_mm: 63.0}
+  14: {center: [444.5, 2254.5], edge: [630.0, 630.0], edge_mm: 63.0}
+  15: {center: [3754.5, 2254.5], edge: [630.0, 630.0], edge_mm: 63.0}
+
+# Design geometry. Replace `source` and the values with calipers on the printed card before use
+# (tag-centre spacing +-0.1 mm); never use a printed ruler (V2's was 0.35 % off).
+physical_mm:
+  source: design_2026-09-27_unmeasured
+  tag_center_spacing_x: 331.0
+  tag_center_spacing_y: 181.0
+  tag_edge: 63.0
+  card_width: 420.0
+  card_height: 270.0
+
+truth:
+  source: design_srgb_2026-09-27   # placeholders until the printed card is measured (dry + wet)
+  space: srgb8
+
+# Which patch does what. The pipeline hard-codes V2 ids today (gray_white, gray_dark, ANCHORS,
+# RAMP); reading these roles instead is the "card V3 readiness" change (OQ-47).
+roles:
+  wb_anchors: [gray_light, gray_light2, gray_mid]   # preference order at depth; next one if clipped
+  ramp: [gray_light, gray_light2, gray_mid]         # non-black greys for the haze / linearity fit
+  haze: gray_black
+
+layout:
+  surround_rgb: [118, 118, 118]    # = gray_mid ink: the whole surround is extra anchor grey
+  tag_dark_rgb: [0, 0, 0]
+  tag_light_rgb: [200, 200, 200]   # tags printed black on light grey (= gray_light ink), not white
+  tag_quiet_cells: 1
+  corner_radius_mm: 6.0
+
+back:                              # calibration side: OpenCV ChArUco, top-left square black
+  type: charuco
+  dictionary: DICT_4X4_50          # cannot decode as the front's tag25h9 or V2's tag36h11
+  squares: [10, 6]
+  square_mm: 40.0
+  marker_mm: 30.0
+  first_marker_id: 0
+
+patches:                           # box: [x, y, w, h] in canonical px (= card mm x 10)
+  - {id: gray_black, group: grey, label: black_reference, box: [80, 890, 836, 920], truth: [0, 0, 0]}
+  - {id: gray_light, group: grey, label: neutral_gray_light, box: [996, 890, 1140, 920], truth: [200, 200, 200]}
+  - {id: gray_light2, group: grey, label: neutral_gray_light2, box: [2216, 890, 912, 920], truth: [160, 160, 160]}
+  - {id: gray_mid, group: grey, label: neutral_gray_mid_surround, box: [3208, 890, 912, 920], truth: [118, 118, 118]}
+  - {id: red, group: color, label: red, box: [890, 40, 545, 810], truth: [200, 30, 45]}
+  - {id: red_orange, group: color, label: red_orange, box: [1515, 40, 545, 810], truth: [235, 80, 30]}
+  - {id: orange, group: color, label: orange, box: [2140, 40, 545, 810], truth: [245, 140, 30]}
+  - {id: yellow, group: color, label: yellow, box: [2765, 40, 545, 810], truth: [250, 205, 30]}
+  - {id: green, group: color, label: green, box: [890, 1850, 545, 810], truth: [40, 150, 75]}
+  - {id: cyan, group: color, label: cyan, box: [1515, 1850, 545, 810], truth: [0, 165, 205]}
+  - {id: blue, group: color, label: blue, box: [2140, 1850, 545, 810], truth: [30, 80, 170]}
+  - {id: magenta, group: color, label: magenta, box: [2765, 1850, 545, 810], truth: [195, 45, 135]}

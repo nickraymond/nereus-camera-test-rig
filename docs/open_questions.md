@@ -331,6 +331,47 @@ Items for Nick are marked **(Nick)**.
   (or fit the radial RAW → JPEG map). Whether the ORF maker notes carry the correction
   parameters is unverified.
 
+### Card V3 (design 2026-09-27, `docs/reference_card_v3.md`)
+
+- **[NEEDS-HARDWARE] OQ-43 — Real N6 / AE3 blur, distortion and card detection range.** *Blocks
+  printing V3.* The V3 sizes come from a simulator that is ~2× optimistic against the real TG-7:
+  it located V2 in 100 % of runs at 1–3 m where the dives got 56 % (1–2 m) and 45 % (2–3 m); the
+  main real failure is slow-shutter motion blur (at 1–2 m, 88 % located below 1/30 s vs 27 % at or
+  above). Stock lenses (vendor specs): N6 2.8 mm M12, H68.8°, TV < −24 %, f ≈ 933 px; AE3 3.1 mm
+  M8, F2.3, H63.8°, TV < −2.5 %, f ≈ 1033 px ([openmv.io/products/openmv-ae3](https://openmv.io/products/openmv-ae3)).
+  The AE3's blur is unmeasured and decides its range (simulated 1.5 m if 2× the N6's blur, 3.0 m if
+  equal). Next: shoot a paper print of `nereus_v3_c1_front` with both boards at 0.5–3 m (slanted-edge
+  blur, detection rate), calibrate the simulator against the TG-7 curve.
+- **[OPEN] OQ-44 — Card acceptance criteria and the pool near card (Nick).** *Blocks printing V3.*
+  No requirement says what the card must achieve per experiment (located rate, patch pixels,
+  measured reflectance uncertainty, drift after immersion). A 420 × 270 mm card at 0.5 m fills
+  ~81 % × 84 % of the N6 frame: it hides the far card in the brief's two-card pool setup (P4) and
+  drives Arm A's auto-exposure (P3). Does the pool keep two cards, and does the near one need to be
+  smaller (≤ ~170 mm wide)?
+- **[OPEN] OQ-45 — Print vendor, substrate and ink recipes (Nick).** *Blocks printing V3.* UV print
+  on 3 mm ACM or rigid PVC, matte, no optical brighteners, greys K-only. Not verified: the vendor's
+  gamut for the 8 design colours, their ability to print K-only greys, flatness, and immersion
+  durability (test coupon + 5-day soak first). Options (docs/reference_card_v3.md, "Vendor
+  options"): a Sticker Mule vinyl sticker mounted on a rigid board (cheap prototypes, no colour
+  control) or a calib.io custom card (UV print on 6 mm ACM, Nick's quote ~$350 / card, ~3 weeks).
+  Nick is evaluating a calib.io stock ChArUco board (400 × 300 mm, €134) first.
+- **[OPEN] OQ-46 — Measured card truth in the card YAML.** *Before the V3 dive.* `color/card.py`
+  accepts only integer sRGB `truth`. Measured values (reflectance or Lab, dry and wet, per physical
+  card) need a schema addition, e.g. `truth: design | measured` with per-patch measured values and
+  their source. The S2a session agreed to add a `truth:` option once dry reference shots exist.
+- **[OPEN] OQ-47 — Pipeline "card V3 readiness".** *Before V3 data.* `locate.py` calls
+  `detect_tags` without the card's family (so tag25h9 is never detected) and uses V2's
+  `RATIO_RANGE` (2.5–6.0; V3's tag quad is 1.83); it has no guard for tags cut by the image border
+  (they decode with corners 22–58 px wrong in simulation); `water_model` / `correct` / `metrics` /
+  `report` hard-code V2 patch ids. Read `apriltag.family`, `apriltag.quad_ratio` and `roles` from
+  the card YAML instead. A 2× upsample in detection matters for 1280 × 800 OpenMV frames (N6 at
+  3 m: 33 → 92 % in the realistic simulation). Offered by the S2a session as one PR.
+- **[RESOLVED-DECISION] OQ-48 — Light trap on the card.** Decision (Nick + design session,
+  2026-09-27): not on the card. A hole to a black cavity would give a true zero for haze, but the
+  per-frame affine's offset (S2a PR #44) already absorbs haze, measuring the printed black fixes the
+  unknown-black problem, and trapped air, wet flocking and a bolt-on part are real underwater risks.
+  If the haze model needs validating, test a trap as a separate pool experiment.
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
