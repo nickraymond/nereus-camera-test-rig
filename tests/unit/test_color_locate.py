@@ -14,7 +14,6 @@ import pytest
 from nereus_camera_test_rig.analysis.apriltag_detector import (
     DetectionOutcome,
     TagDetection,
-    detect_tags,
 )
 from nereus_camera_test_rig.analysis.reference_card import (
     CardLocalizationError,
@@ -28,7 +27,6 @@ from nereus_camera_test_rig.color.locate import (
     RATIO_RANGE,
     SCALES,
     TagSpec,
-    at_border,
     frame_scales,
     locate,
     locate_frame,
@@ -312,7 +310,7 @@ def test_manual_corners_path_comes_from_the_dataset_config(tmp_path):
     assert manual_corners_path(cfg, {}, tmp_path / "loc") == tmp_path / "loc" / MANUAL_FILE
 
 
-# --- card V3 readiness: tag family and ratio from the card, border guard, small frames ------
+# --- card V3 readiness: tag family and ratio from the card, small frames --------------------
 
 D25 = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_25h9)
 V3_SPEC = TagSpec("DICT_APRILTAG_25h9", (1.829 * 0.627, 1.829 * 1.506))
@@ -345,19 +343,6 @@ def test_the_card_sets_the_tag_family_and_quad_ratio(tmp_path):
     wrong_ratio = locate_frame(None, path, CORNERS, jpeg_map=CROP0,
                                spec=TagSpec(V3_SPEC.family, RATIO_RANGE))
     assert not wrong_ratio["located"] and "implausible" in wrong_ratio["reason"]
-
-
-def test_a_tag_cut_by_the_frame_edge_is_not_used(tmp_path):
-    path = tmp_path / "cut.png"
-    cv2.imwrite(str(path), v3_frame(cx=331 + 60 - 3))  # tags 0 and 2 cut by 3 px on the left
-    raw = detect_tags(cv2.imread(str(path), cv2.IMREAD_GRAYSCALE),
-                      family=V3_SPEC.family, scales=(1,)).tags
-    assert {0, 2} & set(raw)  # the detector does decode the cut tags ...
-    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0, spec=V3_SPEC)
-    assert rec["tags_found"] == [1, 3] and rec["tags_at_border"] == [0, 2]  # ... locate not
-    square = np.array([[0, 0], [120, 0], [120, 120], [0, 120]], float)
-    assert not at_border(square + 12, (1000, 1600))  # a whole tag, 12 px of quiet zone
-    assert at_border(square + 6, (1000, 1600))  # where a cut tag's edge lands
 
 
 def test_small_frames_get_a_2x_pass(tmp_path):
