@@ -124,3 +124,23 @@ def test_committed_print_svgs_match_the_yaml(v3):
         assert committed == to_svg(side, f"{card.card_id} {name}"), (
             f"{card.card_id}_{name}.svg is stale: re-run python -m host_tools.render_card "
             f"configs/cards/nereus_v3_c*.yaml --out tests/fixtures/reference_card_v3")
+
+
+def test_sticker_export_is_trim_size_and_decodes(tmp_path):
+    """Front-only sticker files: PDF page = trim size, 300 ppi PNG, tags decode (c1 = IDs 0-3)."""
+    cv2 = pytest.importorskip("cv2")
+    pytest.importorskip("matplotlib")
+    import re
+
+    from host_tools.render_card import sticker
+    from nereus_camera_test_rig.analysis.apriltag_detector import detect_tags
+
+    svg, pdf, png = sticker(CARDS[0], tmp_path)
+    assert 'width="420mm" height="270mm"' in svg.read_text()
+    box = re.search(rb"/MediaBox\s*\[\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)", pdf.read_bytes())
+    assert abs(float(box.group(1)) / 72 * 25.4 - 420) < 0.05
+    assert abs(float(box.group(2)) / 72 * 25.4 - 270) < 0.05
+    img = cv2.imread(str(png), cv2.IMREAD_GRAYSCALE)
+    assert img.shape == (3189, 4961)  # 420 x 270 mm at 300 ppi
+    small = cv2.resize(img, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+    assert sorted(detect_tags(small, family="DICT_APRILTAG_25h9", scales=(1,)).tags) == [0, 1, 2, 3]

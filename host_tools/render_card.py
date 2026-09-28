@@ -247,14 +247,84 @@ def render(card_path: Path, out_dir: Path, pdf: bool = True) -> list[Path]:
     return written
 
 
+STICKER_PPI = 300
+
+
+def to_trim_svg(side: Side, title: str) -> str:
+    """Artwork at exactly the trim size: no bleed, crop marks or cut line (sticker upload)."""
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{side.width:g}mm" '
+           f'height="{side.height:g}mm" viewBox="0 0 {side.width:g} {side.height:g}">',
+           f"<title>{title}</title>",
+           f'<rect x="0" y="0" width="{side.width:g}" height="{side.height:g}" '
+           f'fill="{_hex(side.background)}"/>']
+    for r in side.rects:
+        out.append(f'<rect id="{r.id}" x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" '
+                   f'height="{r.h:.3f}" fill="{_hex(r.rgb)}" shape-rendering="crispEdges"/>')
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def to_trim_pdf(side: Side, path: Path, title: str) -> None:
+    """Vector PDF, page = trim size exactly. Needs matplotlib."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    fig = plt.figure(figsize=(side.width / 25.4, side.height / 25.4))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, side.width)
+    ax.set_ylim(side.height, 0)
+    ax.set_axis_off()
+    col = lambda rgb: tuple(v / 255 for v in rgb)  # noqa: E731
+    ax.add_patch(Rectangle((0, 0), side.width, side.height, color=col(side.background), lw=0))
+    for r in side.rects:
+        ax.add_patch(Rectangle((r.x, r.y), r.w, r.h, facecolor=col(r.rgb), edgecolor="none", lw=0))
+    fig.savefig(path, metadata={"Title": title})
+    plt.close(fig)
+
+
+def sticker(card_path: Path, out_dir: Path) -> list[Path]:
+    """Front only, trim size, for a sticker printer (e.g. Sticker Mule): SVG, PDF, 300 ppi PNG.
+
+    The outer 4 mm of the card is uniform surround grey, so a cut that is slightly off only
+    trims grey. The printed size must be measured afterwards (physical_mm)."""
+    card = load_card(card_path)
+    side = front(card, load_yaml(card_path))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    title = f"{card.card_id} front {side.width:g} x {side.height:g} mm"
+    stem = out_dir / f"{card.card_id}_sticker_{side.width:g}x{side.height:g}mm"
+    svg, pdf, png = stem.with_suffix(".svg"), stem.with_suffix(".pdf"), stem.with_suffix(".png")
+    svg.write_text(to_trim_svg(side, title))
+    to_trim_pdf(side, pdf, title)
+    img = to_raster(side, STICKER_PPI / 25.4)
+    ok, buf = cv2.imencode(".png", img[..., ::-1],
+                           [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    png.write_bytes(_png_with_dpi(buf.tobytes(), STICKER_PPI))
+    return [svg, pdf, png]
+
+
+def _png_with_dpi(data: bytes, ppi: int) -> bytes:
+    """Insert a pHYs chunk so the PNG opens at its true physical size."""
+    import struct
+    import zlib
+
+    ppm = int(round(ppi / 0.0254))
+    body = b"pHYs" + struct.pack(">IIB", ppm, ppm, 1)
+    chunk = struct.pack(">I", 9) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+    return data[:33] + chunk + data[33:]  # after the 8-byte signature + 25-byte IHDR chunk
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cards", nargs="+", type=Path, help="card YAML file(s)")
     ap.add_argument("--out", type=Path, default=Path("results/cards"))
     ap.add_argument("--no-pdf", action="store_true", help="skip the matplotlib PDF")
+    ap.add_argument("--sticker", action="store_true",
+                    help="front only at trim size (no bleed / marks / cut line) + 300 ppi PNG")
     a = ap.parse_args(argv)
     for c in a.cards:
-        for p in render(c, a.out, pdf=not a.no_pdf):
+        for p in (sticker(c, a.out) if a.sticker else render(c, a.out, pdf=not a.no_pdf)):
             print(p)
     return 0
 
