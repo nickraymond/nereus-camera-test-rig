@@ -61,7 +61,7 @@ import numpy as np
 
 from ..config import load_yaml
 from .card import Card, load_card
-from .ccm import leave_one_dive_out, matrix_at
+from .ccm import MIN_AFFINE_PATCHES, affine_leave_one_out, fit_affine, leave_one_dive_out, matrix_at
 from .metrics import score_linear, score_srgb8, srgb8_to_linear
 from .raw_io import RawFrame, bin2x2, normalize
 from .stages import run_parallel, verify_fresh, write_stage
@@ -81,10 +81,11 @@ COLUMNS = {  # method → the name used in sheets and reports
     "raw_depth_wb_haze_loso": "RAW + depth WB − haze (no card, leave-one-sweep-out)",
     "raw_card_wb_ccm": "RAW + card WB + depth matrix (v0.3)",
     "raw_depth_wb_haze_ccm": "RAW + depth WB − haze + depth matrix (no card, v0.3)",
+    "raw_card_affine": "RAW + per-frame card affine (leave-one-patch-out)",
 }
 NOT_RENDERED = {"raw_depth_wb_haze_loso"}  # a validation variant: scored, no images
 CLASSES = {"card_anchored": ("grvi_cheeca_v3", "jpeg_card_wb", "raw_card_wb",
-                             "raw_card_wb_haze", "raw_card_wb_ccm"),
+                             "raw_card_wb_haze", "raw_card_wb_ccm", "raw_card_affine"),
            "card_free": ("camera_jpeg", "olympus_preset_jpeg", "raw_depth_wb_haze",
                          "raw_depth_wb_haze_loso", "raw_depth_wb_haze_ccm")}
 ALL_GREYS = ("gray_white", "gray_light", "gray_mid", "gray_mid_left", "gray_mid_right",
@@ -166,6 +167,9 @@ def frame_maps(job: dict, image: np.ndarray) -> tuple[dict[str, tuple], dict[str
             green = (image[..., 1] - dark[1]).ravel()
             scale = TARGET_P99 / max(float(np.percentile(green, 99)), 1e-9)
             maps[method] = (dark.tolist(), (scale / colour).tolist())
+    if job.get("affine"):  # per-frame card affine A x + c, as (haze, gain, M): haze = −A⁻¹c
+        A, c = np.asarray(job["affine"]["A"]), np.asarray(job["affine"]["c"])
+        maps["raw_card_affine"] = ((-np.linalg.solve(A, c)).tolist(), [1.0] * 3, A.tolist())
     if job.get("ccm") is not None:  # v0.3: the same maps with the depth matrix (3rd element)
         for base in ("raw_card_wb", "raw_depth_wb_haze"):
             if base in maps:
@@ -187,6 +191,9 @@ def score(job: dict, maps: dict, card: Card, matrix: np.ndarray) -> dict[str, An
         haze, gain, M = _parts(entry, matrix)
         means = {pid: srgb8_to_linear(encode8(apply(v, haze, gain, M)))
                  for pid, v in job["raw_means"].items()}
+        if method == "raw_card_affine":  # colour patches: predicted from the other patches
+            means.update({pid: srgb8_to_linear(encode8(v))
+                          for pid, v in job["affine"]["loo"].items()})
         stds = {pid: apply_std(job["raw_stds"][pid], gain, M) for pid in means}
         neutral = ALL_GREYS if method in CLASSES["card_anchored"] else ()
         out[method] = score_linear(means, card, neutralized=neutral, anchor=lm,
@@ -235,6 +242,21 @@ def card_job(stem: str, row: dict, q: dict, patches: dict, grvi: Optional[dict],
                        if pid in keep and s.get("mean_norm")},
             raw_stds={pid: (np.asarray(s["std"]) / k).tolist() for pid, s in
                       raw_stats.items() if pid in keep and s.get("mean_norm")})
+    # per-frame affine on the card's own patches; each grey 128 half only stands in for a
+    # damaged whole (no patch counted twice)
+    raw = job.get("raw_means") or {}
+    ids = [p.id for p in card.patches if p.id in raw]
+    if "gray_mid" not in raw:
+        ids += [s.id for s in card.sub_patches if s.id in raw][:1]
+    if len(ids) >= MIN_AFFINE_PATCHES + 1:
+        x = {pid: raw[pid] for pid in ids}
+        t = {pid: srgb8_to_linear(card.patch(next((s.parent for s in card.sub_patches
+                                                     if s.id == pid), pid)).truth)
+             for pid in ids}
+        A, c = fit_affine(list(x.values()), list(t.values()))
+        loo = affine_leave_one_out(x, t, [p.id for p in card.group("color")])
+        job["affine"] = {"A": A.tolist(), "c": c.tolist(),
+                         "loo": {k: v.tolist() for k, v in loo.items()}}
     if (grvi or {}).get("no_card"):
         job["grvi_no_card"] = True
     elif grvi and "patches" in grvi:

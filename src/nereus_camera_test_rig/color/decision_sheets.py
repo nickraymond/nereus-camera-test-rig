@@ -35,6 +35,7 @@ from .report import STYLE
 SEED = "s2a-blind-2026-09-27"
 THUMB_W, BLIND_W = 300, 640
 CUT_COLUMNS = ("camera", "jpeg_card_wb", "raw_card_wb", "raw_card_wb_haze", "raw_card_wb_ccm",
+               "raw_card_affine",
                "raw_depth_wb_haze", "raw_depth_wb_haze_ccm", "grvi_cheeca_v3")
 BLIND = {"card_free": ("camera", "raw_depth_wb_haze"),
          "card_anchored": ("grvi_cheeca_v3", "raw_card_wb")}  # (baseline, Nereus)

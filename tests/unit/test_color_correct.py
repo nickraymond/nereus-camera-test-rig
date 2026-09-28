@@ -151,3 +151,19 @@ def test_v03_columns_use_the_frames_depth_matrix():
     worse = score({**j, "ccm": desat.tolist()}, frame_maps({**j, "ccm": desat.tolist()},
                                                           image)[0], CARD, np.eye(3))
     assert worse["raw_card_wb_ccm"]["de2000_median"] > scores["raw_card_wb"]["de2000_median"]
+
+
+def test_card_affine_column_scores_leave_one_patch_out():
+    from nereus_camera_test_rig.color.correct import card_job
+
+    means = card_means()  # an exactly affine card: haze + light
+    q = {"patches": {pid: {"usable": True} for pid in means}, "card_condition": "clean"}
+    row = {"category": "1_reference_A_iso100", "depth_m": "8.0", "dive_id": "3"}
+    patches = {"raw": {"exposure_factor": 1.0,
+                       "patches": {pid: {"mean_norm": v, "std": [1e-4] * 3}
+                                   for pid, v in means.items()}}}
+    j = {**card_job("F", row, q, patches, None, CARD, RHO), "table": None}
+    assert set(j["affine"]["loo"]) == {p.id for p in CARD.group("color")}
+    maps, _ = frame_maps(j, np.zeros((50, 50, 3)) + HAZE + 1e-6)
+    s = score(j, maps, CARD, np.eye(3))["raw_card_affine"]
+    assert s["n_de"] == 12 and s["de2000_median"] < 1.0
