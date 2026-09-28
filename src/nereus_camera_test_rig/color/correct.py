@@ -29,6 +29,7 @@ nearest A-mode reference frame in the same dive (``pair_a_mode``) for the preset
   the card, haze-free) instead of on the anchor grey, which also carries the haze: in turbid
   water grey 128 is mostly blue-green backscatter, so balancing on it over-boosts red. No haze
   is subtracted; green gets the same gain as ``raw_card_wb``, so brightness is unchanged.
+  Needs ``SLOPE_MIN_GREYS`` greys in the ramp (no column otherwise).
 - Card haze: the intercept of a straight line through the usable greys (``ramp_fit``), per
   channel, capped at the **dark floor** — the ``DARK_PERCENTILE`` of the image centre
   (``CENTRE`` of each side; the corners are vignetted). How often the cap binds is logged.
@@ -76,6 +77,7 @@ from .water_model import fit_settings, grey_reflectance, ramp_fit
 DARK_PERCENTILE = 0.5
 CENTRE = 0.6
 TARGET_P99 = 0.8
+SLOPE_MIN_GREYS = 3  # a 2-grey slope is unstable (TG-7 dive 4: grey 74 + grey 128 right → yellow)
 COLUMNS = {  # method → the name used in sheets and reports
     "camera_jpeg": "Camera JPEG",
     "olympus_preset_jpeg": "Olympus underwater preset JPEG",
@@ -156,7 +158,7 @@ def frame_maps(job: dict, image: np.ndarray) -> tuple[dict[str, tuple], dict[str
         a = np.asarray(raw[anchor])
         maps["raw_card_wb"] = ([0.0] * 3, (t / np.maximum(a, 1e-9)).tolist())
         ramp = job.get("ramp")
-        if ramp is not None and min(ramp["A"]) > 0:
+        if ramp is not None and len(ramp["greys"]) >= SLOPE_MIN_GREYS and min(ramp["A"]) > 0:
             A = np.asarray(ramp["A"])
             maps["raw_card_slope_wb"] = ([0.0] * 3,
                                          (t * A[1] / max(a[1], 1e-9) / A).tolist())

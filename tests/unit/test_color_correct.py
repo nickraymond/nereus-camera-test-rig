@@ -182,6 +182,9 @@ def test_card_slope_wb_balances_the_light_not_the_haze():
     assert slope[0] < anchor[0]  # less red gain than balancing on the hazy grey
     assert maps["raw_card_slope_wb"][0] == [0.0] * 3
     assert score(j, maps, CARD, np.eye(3))["raw_card_slope_wb"]["n_de"] == 12
-    # no usable ramp → no slope column
+    # no usable ramp, or only two greys → no slope column
     maps, _ = frame_maps({**j, "ramp": None}, np.zeros((50, 50, 3)) + haze)
+    assert "raw_card_slope_wb" not in maps
+    two = {**j["ramp"], "greys": j["ramp"]["greys"][:2]}
+    maps, _ = frame_maps({**j, "ramp": two}, np.zeros((50, 50, 3)) + haze)
     assert "raw_card_slope_wb" not in maps
