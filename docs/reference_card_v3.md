@@ -87,8 +87,20 @@ python -m host_tools.render_card configs/cards/nereus_v3_c1.yaml --sticker --out
   cutting error only trims grey.
 - All 10 copies share tag IDs 0–3: never put two of them in the same frame (the detector keys tags
   by ID). A two-card pool setup needs a second design (c2, IDs 4–7).
-- Mount each on a flat 3–6 mm rigid board, squeegeed from the centre out; measure tag spacing with
-  calipers after mounting (vinyl can stretch); measure 2–3 copies' patches (one print batch).
+- Settings: **Rectangle** sticker (matte is the only finish), custom size, custom quantity 10. Not
+  clear, holographic, mirror, prismatic, glitter, kraft or bumper (glossy) material.
+- Mounting for underwater use:
+  1. Rigid, flat 3–6 mm ACM (Dibond), PVC or acrylic, ~5 mm larger than the sticker on every side;
+     clean with isopropyl alcohol. Not polyethylene / polypropylene (poor adhesion).
+  2. Apply dry (no soapy-water method): hinge along one edge, squeegee from the centre out.
+  3. Cure 48–72 h before immersion (Sticker Mule's FAQ: at least 24 h before submerging).
+  4. Seal the sticker edge with a thin clear edge sealer for vinyl graphics, on the grey border only.
+  5. Measure tag spacing with calipers after mounting (vinyl can stretch); measure 2–3 copies'
+     patches dry and wet (one print batch).
+  6. Sacrifice one copy as the test coupon: 5-day salt-water soak, check edge lift, bubbles, colour.
+  7. After dives: fresh-water rinse, dry flat, store out of the sun.
+- Underwater glare: matte helps most in air; shoot with the card tilted 10–20° off square and the
+  sun / strobe not mirrored into the lens. No clear-coat spray over the print.
 
 Matte surfaces look glossier and darker when wet (water fills the surface texture), whichever vendor
 prints the card; the wet measurement (checklist step 6) captures this.
