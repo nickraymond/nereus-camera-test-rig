@@ -5,9 +5,24 @@
 dataset: tg7_channel_islands
 camera: om_tg7
 
-# The camera JPEG is the RAW cropped at (8, 8) — identical on all 308 ORFs (LibRaw crop
-# margins, verified 2026-09-26, S0.5). locate stores card quads in both frames.
-jpeg_offset_in_raw: [8, 8]
+# RAW-mosaic px -> camera-JPEG px (OQ-42). The JPEG is NOT a plain crop: the camera remaps it
+# radially (an in-air lens correction, although EXIF says DistortionCorrection Off), so a point
+# moves out by ~1 px at 350 px from the centre, 16 px at 950 px, ~130 px at 1800 px. Under water
+# the flat port cancels the lens barrel, so the RAW is the near-projective image (card homography
+# RMS ~1 px vs ~13 px on the JPEG); in air the reverse. JPEG px are in the stored orientation
+# (2 card frames carry EXIF Orientation "Rotate 90 CW"; tools read JPEGs ignoring it).
+# Fitted by `python -m host_tools.color jpeg-map` (2026-09-27, git e2feb9f): tags found separately
+# on RAW and JPEG, 534 of 548 pairs kept, error median 0.33 px / max 2.8 px; leave-one-dive-out
+# max 3.9 px (plain (8, 8) crop: median 42 px at 1000-1500 px radius, max 142 px). Model:
+#   jpeg = centre_jpeg + (raw - centre_raw) * (k0 + k1 rho^2 + k2 rho^4), rho = |raw - centre_raw| / 1000
+jpeg_from_raw:
+  source: jpeg-map stage, 548 tag pairs on 156 frames
+  centre_raw: [2006.8, 1510.9]
+  centre_jpeg: [1998.18, 1502.37]
+  k: [0.999463, 0.018777, 0.001719]
+  # Frames whose JPEG does not follow the map; their JPEG is not scored (exclude, never repair).
+  exclude_frames:
+    P9160648: "JPEG shifted 17 px from the RAW as a whole (3 tags agree); preset mode, 1/30 s, S-IS on; cause unknown"
 no_card_categories: [4_no_card]
 # Manual card corners (locate method c), clicked with `host_tools.color click`. Versioned here
 # because it is human work; `locate` only reads it. Path is relative to this file.

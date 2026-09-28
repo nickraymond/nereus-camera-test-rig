@@ -11,22 +11,31 @@ import cv2
 import numpy as np
 import pytest
 
-from nereus_camera_test_rig.analysis.apriltag_detector import DetectionOutcome, TagDetection
+from nereus_camera_test_rig.analysis.apriltag_detector import (
+    DetectionOutcome,
+    TagDetection,
+)
 from nereus_camera_test_rig.analysis.reference_card import (
     CardLocalizationError,
     infer_card_corners_from_tags,
     localize_card,
 )
+from nereus_camera_test_rig.color.card import load_card
+from nereus_camera_test_rig.color.jpeg_geometry import JpegMap
 from nereus_camera_test_rig.color.locate import (
     MANUAL_FILE,
+    RATIO_RANGE,
+    SCALES,
+    TagSpec,
+    frame_scales,
     locate,
     locate_frame,
     nearest_located,
     plausible,
     tag_geometry,
+    tag_spec,
     window_for,
 )
-from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.raw_io import RawFrame
 from nereus_camera_test_rig.color.stages import StaleInputError, verify_fresh, write_stage
 
@@ -34,6 +43,7 @@ REPO = Path(__file__).resolve().parents[2]
 RENDER = REPO / "tests" / "fixtures" / "reference_card" / "Nereus_Reef_Reference_Card_V2.png"
 CARD = REPO / "configs" / "cards" / "nereus_v2.yaml"
 CORNERS = {"tl": 0, "tr": 1, "bl": 2, "br": 3}
+CROP0, CROP8 = JpegMap.offset(0, 0), JpegMap.offset(8, 8)  # plain-crop RAW -> JPEG maps
 # Tag centres detected in the 3000x1941 render (fixture README).
 TRUE = {0: (232.5, 652.5), 1: (2767.5, 652.5), 2: (232.5, 1288.5), 3: (2767.5, 1288.5)}
 
@@ -64,7 +74,7 @@ def test_default_still_requires_all_four_tags():
 
 
 def test_locate_frame_on_the_card_render(tmp_path):
-    rec = locate_frame(None, RENDER, CORNERS, offset=(8, 8))
+    rec = locate_frame(None, RENDER, CORNERS, jpeg_map=CROP8)
     assert rec["located"] and rec["locate_method"] == "apriltag4"
     assert set(rec["found_at_scale"].values()) == {1.0}  # finest scale wins
     quad = np.array(rec["quad_jpeg"])
@@ -81,7 +91,7 @@ def test_locate_frame_infers_a_painted_out_tag(tmp_path):
                   (255, 255, 255), -1)
     path = tmp_path / "masked.png"
     cv2.imwrite(str(path), img)
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec["locate_method"] == "apriltag3" and rec["inferred_corners"] == ["br"]
     assert rec["quad_jpeg"][2] == pytest.approx(list(TRUE[3]), abs=2.0)
 
@@ -104,8 +114,8 @@ def test_three_tags_under_strong_perspective_use_the_tag_corner_homography(tmp_p
         np.float32([[TRUE[0], TRUE[1], TRUE[3], TRUE[2]]]), view)[0]
     idx = {0: 0, 3: 2}[dropped]
     geometry = tag_geometry(load_card(CARD))
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0), geometry=geometry)
-    old = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0, geometry=geometry)
+    old = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec["locate_method"] == "apriltag3" and rec["inference"] == "homography_tag_corners"
     assert old["inference"] == "parallelogram"
     err = np.linalg.norm(np.array(rec["quad_jpeg"][idx]) - truth[idx])
@@ -117,7 +127,7 @@ def test_three_tags_under_strong_perspective_use_the_tag_corner_homography(tmp_p
 def test_locate_frame_without_tags_is_recorded_not_dropped(tmp_path):
     path = tmp_path / "blank.png"
     cv2.imwrite(str(path), np.full((400, 600, 3), 128, np.uint8))
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec == {"tags_found": [], "tag_source": {}, "found_at_scale": {},
                    "tag_side_px_min": {}, "tag_centers_raw": {}, "located": False,
                    "locate_method": None, "reason": "0 of 4 card tags found (need 3)"}
@@ -159,7 +169,7 @@ def test_downscaled_pass_rescues_a_card_too_large_for_native_detection(tmp_path)
     big = cv2.GaussianBlur(big, (0, 0), 6)  # large, soft tags: the TG-7 near-frame case
     path = tmp_path / "big.png"
     cv2.imwrite(str(path), big)
-    rec = locate_frame(None, path, CORNERS, offset=(0, 0))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0)
     assert rec["located"], rec
     assert min(rec["found_at_scale"].values()) < 1.0
     expected = np.array([TRUE[0], TRUE[1], TRUE[3], TRUE[2]]) * 3
@@ -183,7 +193,7 @@ def raw_from_image(img_bgr: np.ndarray) -> RawFrame:
 
 def test_raw_first_detection_records_the_source(tmp_path):
     reader = lambda p: raw_from_image(cv2.imread(str(RENDER)))  # noqa: E731
-    rec = locate_frame(Path("x.orf"), None, CORNERS, offset=(8, 8), raw_reader=reader)
+    rec = locate_frame(Path("x.orf"), None, CORNERS, jpeg_map=CROP8, raw_reader=reader)
     assert rec["locate_method"] == "apriltag4"
     assert set(rec["tag_source"].values()) == {"raw"}
     expected = np.array([TRUE[0], TRUE[1], TRUE[3], TRUE[2]])
@@ -198,7 +208,7 @@ def test_jpeg_fills_a_tag_the_raw_missed(tmp_path):
     cv2.rectangle(masked, (int(x) - 150, int(y) - 150), (int(x) + 150, int(y) + 150),
                   (255, 255, 255), -1)
     reader = lambda p: raw_from_image(masked)  # noqa: E731
-    rec = locate_frame(Path("x.orf"), RENDER, CORNERS, offset=(0, 0), raw_reader=reader)
+    rec = locate_frame(Path("x.orf"), RENDER, CORNERS, jpeg_map=CROP0, raw_reader=reader)
     assert rec["locate_method"] == "apriltag4" and rec["inferred_corners"] == []
     assert rec["tag_source"] == {"0": "raw", "1": "jpeg", "2": "raw", "3": "raw"}
 
@@ -206,9 +216,9 @@ def test_jpeg_fills_a_tag_the_raw_missed(tmp_path):
 def test_window_search_only_looks_inside_the_window(tmp_path):
     reader = lambda p: raw_from_image(cv2.imread(str(RENDER)))  # noqa: E731
     around_card = (100.0, 500.0, 2900.0, 1450.0)
-    inside = locate_frame(Path("x.orf"), None, CORNERS, (0, 0), reader, window=around_card)
+    inside = locate_frame(Path("x.orf"), None, CORNERS, CROP0, reader, window=around_card)
     assert inside["locate_method"] == "window4"
-    empty = locate_frame(Path("x.orf"), None, CORNERS, (0, 0), reader,
+    empty = locate_frame(Path("x.orf"), None, CORNERS, CROP0, reader,
                          window=(0.0, 0.0, 200.0, 200.0))
     assert not empty["located"]
 
@@ -298,3 +308,48 @@ def test_manual_corners_path_comes_from_the_dataset_config(tmp_path):
     assert manual_corners_path(cfg, {"manual_corners": "ds_manual.json"}, tmp_path / "loc") == \
         tmp_path / "configs" / "ds_manual.json"
     assert manual_corners_path(cfg, {}, tmp_path / "loc") == tmp_path / "loc" / MANUAL_FILE
+
+
+# --- card V3 readiness: tag family and ratio from the card, small frames --------------------
+
+D25 = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_25h9)
+V3_SPEC = TagSpec("DICT_APRILTAG_25h9", (1.829 * 0.627, 1.829 * 1.506))
+
+
+def v3_frame(W=1600, H=1000, cx=800, cy=500, sx=662, sy=362, tag=120) -> np.ndarray:
+    """25h9 tags 0-3 at the corners of a V3-shaped tag quad (331 × 181 mm → ratio 1.829)."""
+    img = np.full((H, W, 3), 255, np.uint8)
+    for i, (x, y) in enumerate([(cx - sx / 2, cy - sy / 2), (cx + sx / 2, cy - sy / 2),
+                                (cx - sx / 2, cy + sy / 2), (cx + sx / 2, cy + sy / 2)]):
+        m = cv2.aruco.generateImageMarker(D25, i, tag, borderBits=1)
+        x0, y0 = int(round(x - tag / 2)), int(round(y - tag / 2))
+        xs, ys, xe, ye = max(0, x0), max(0, y0), min(W, x0 + tag), min(H, y0 + tag)
+        img[ys:ye, xs:xe] = m[ys - y0:ye - y0, xs - x0:xe - x0, None]
+    return img
+
+
+def test_the_card_sets_the_tag_family_and_quad_ratio(tmp_path):
+    card = load_card(CARD)
+    spec = tag_spec(card)
+    assert spec.family == "DICT_APRILTAG_36h11"
+    assert spec.ratio_range == pytest.approx(RATIO_RANGE, abs=0.01)  # V2's 2.5–6.0
+    path = tmp_path / "v3.png"
+    cv2.imwrite(str(path), v3_frame())
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0, spec=V3_SPEC)
+    assert rec["locate_method"] == "apriltag4"
+    np.testing.assert_allclose(rec["quad_raw"], [[469, 319], [1131, 319], [1131, 681],
+                                                 [469, 681]], atol=1.5)
+    assert not locate_frame(None, path, CORNERS, jpeg_map=CROP0)["tags_found"]  # 36h11
+    wrong_ratio = locate_frame(None, path, CORNERS, jpeg_map=CROP0,
+                               spec=TagSpec(V3_SPEC.family, RATIO_RANGE))
+    assert not wrong_ratio["located"] and "implausible" in wrong_ratio["reason"]
+
+
+def test_small_frames_get_a_2x_pass(tmp_path):
+    assert frame_scales((800, 1280), SCALES) == (1.0, 2.0, 0.5, 0.25)
+    assert frame_scales((3016, 4040), SCALES) == SCALES
+    path = tmp_path / "small.png"
+    cv2.imwrite(str(path), v3_frame(W=1280, H=800, cx=640, cy=400, sx=300, sy=164, tag=12))
+    rec = locate_frame(None, path, CORNERS, jpeg_map=CROP0, spec=V3_SPEC)
+    assert rec["locate_method"] == "apriltag4"
+    assert set(rec["found_at_scale"].values()) == {2.0}

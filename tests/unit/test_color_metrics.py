@@ -7,6 +7,7 @@ columns L1 a1 b1 L2 a2 b2 ΔE00)."""
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -25,9 +26,12 @@ from nereus_camera_test_rig.color.metrics import (
     srgb8_to_linear,
 )
 
+sys.path.insert(0, str(Path(__file__).parent))
+from _color_helpers import design_card_path  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 SHARMA = np.loadtxt(REPO / "tests" / "fixtures" / "color" / "ciede2000_sharma2005.txt")
-CARD = load_card(REPO / "configs" / "cards" / "nereus_v2.yaml")
+CARD = load_card(design_card_path())  # metric semantics on the design values (black = 0)
 TRUTH8 = {p.id: p.truth for p in CARD.patches}
 
 
@@ -103,5 +107,6 @@ def test_camera_to_linear_and_red_signal():
                                [0.2, 0.2, 0.15])
     m = np.array([[1.2, -0.2, 0], [0, 1, 0], [0, -0.1, 1.1]])
     np.testing.assert_allclose(camera_to_linear([0.2, 0.2, 0.2], [1, 1, 1], m), [0.2] * 3)
-    r = red_signal({"gray_white": {"mean": [0.04, 0.3, 0.3], "std": [0.01, 0.01, 0.01]}})
+    r = red_signal({"gray_white": {"mean": [0.04, 0.3, 0.3], "std": [0.01, 0.01, 0.01]}},
+                   ["gray_white", "gray_light"])
     assert r == {"gray_white": {"red_snr": 4.0, "red_full_scale": 0.04}}

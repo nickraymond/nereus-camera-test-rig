@@ -47,3 +47,18 @@ def write_dng(path: Path, mosaic, tags, *, subifd=False, compression=None) -> Pa
             tw.write(np.zeros((2, 2, 3), np.uint8), photometric="rgb", subfiletype=1, subifds=1)
         tw.write(mosaic, photometric=32803, extratags=tags, compression=compression)
     return path
+
+
+def design_card_path() -> "Path":
+    """The V2 card YAML without its ``measured`` block (design values as the truth), for tests
+    whose fixtures were rendered from the design."""
+    import tempfile
+
+    import yaml
+
+    repo = Path(__file__).resolve().parents[2]
+    data = yaml.safe_load((repo / "configs" / "cards" / "nereus_v2.yaml").read_text())
+    data.pop("measured", None)
+    path = Path(tempfile.mkdtemp()) / "nereus_v2_design.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return path

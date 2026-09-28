@@ -205,7 +205,7 @@ Items for Nick are marked **(Nick)**.
   (`raw/5_above_water_calibration/`, `raw/6_pool_distance_check/`) — the tool picks them up
   by folder; nothing already in the dataset is touched.
 - **[OPEN] OQ-30 — Leak sensor for the soak? (Nick).** *Blocks S7.*
-- **[RESOLVED-LOCATION] OQ-31 — Backend color correction as an S2a baseline.** *Blocks S2a.*
+- **[RESOLVED] OQ-31 — Backend color correction as an S2a baseline.** *Blocks S2a.*
   (The brief §1a cites "OQ 6" for this, but its §11 item 6 is the pool-housing question; this
   item replaces that reference.) Found by reading `nereus-vision-dev` (local checkout on
   `staging`, 2026-09-26): the backend's only image filter is **GRVI**, processor
@@ -226,6 +226,15 @@ Items for Nick are marked **(Nick)**.
   colorimetry — score it as production runs it. Its card truth (`profiles/template_layout_v2.json`,
   SVG design fills) becomes the V2 truth in `configs/cards/nereus_v2.yaml`. Remaining for Nick: confirm `staging` (vs
   `main`) is the right baseline branch.
+  **Run 2026-09-27 (`grvi` stage, SPEC §4 S2a):** backend `03272be` (origin/staging), exported
+  with `git archive`, run in `.venv-grvi` (`make grvi-env`: the backend's own pins, numpy 2.5.1,
+  OpenCV 5.0.0, scipy 1.18.1, Pillow 12.3.0), `PROCESSING_DETECT_SCALES` unset (native only).
+  GRVI found the card on **128 of 269** located TG-7 frames (the rig's RAW-first locate + clicks:
+  270). On the 118 scored frames where it found the card: ΔE00 median **34.4** vs 39.6 camera
+  JPEG and **18.1 RAW + card WB** (RAW + card WB better on 118/118). Its `cheeca_v3` render
+  targets sit ΔE00 12–25 from the V2 design values (grey 128 itself 12.4, a warm tint), so part
+  of the gap is the look by design; the rest is its JPEG input (red already clipped to 0 under
+  water) — deep frames come out washed-out cyan. Near the surface it is close (ΔE00 ~15).
 - **[RESOLVED] OQ-32 — Physical V2 card dimensions (for distance `z`).** Measured from the
   vector print master (Nick's direction, 2026-09-26) by reading the PDF drawing operators:
   tag-centre spacing **364.900 × 91.566 mm**, tag edge **31.980 mm**, card **410.000 ×
@@ -311,25 +320,54 @@ Items for Nick are marked **(Nick)**.
   at ΔE00 ≈ 19 under water (≈ 10 in air) — chroma loss under blue-green light that no single
   daylight matrix fixes (a matrix fitted in air: 6.4 in air, 19.2 under water). Next step: a
   light-dependent matrix fitted on the card per depth, validated leave-one-sweep/dive-out.
+  **v0.3 tried (2026-09-27, SPEC §4 S2a):** a depth-dependent matrix fitted on the card's colour
+  patches, leave-one-dive-out, brings card-anchored ΔE00 from 19.6 to 13.1 (100 % of frames), so
+  most of the floor is the matrix, not the data. Remaining: blue / magenta stay at ~20; without a
+  card the matrix amplifies white-balance error (ψ 9.8° → 19.1°); whether a matrix fitted on
+  printed patches is right for scene colours (it warms rocks and algae strongly) needs the
+  measured card and scene references of the V3 dive (OQ-40).
 - **[OPEN] OQ-40 — True printed values of the reference card.** *S2b, V3 dive.* The V2 print is
   not its design: after white balance the grey ramp reads white 0.78, grey 200 0.47, grey 74
   0.114 (design 1, 0.578, 0.068), colours come out lighter (median ΔL* +5), and the black patch's
   reflectance is uncertain (0.027 on one near-surface frame, ≈ 0.076 on deep frames). Until the
   card is measured (daylight reference shots, X-Rite, OQ-27), ΔE00 is provisional and haze cannot
   be separated from print non-linearity. The V3 dive plan includes the dry reference shots.
+  **Measured 2026-09-27 (in air, 3 deck frames, WB on grey, camera daylight matrix):** the print is
+  far less saturated than the design file — yellow / orange / red-orange 30–40 C\* lower, earth
+  tones 15–30. A colour matrix fitted to the design values adds that chroma back to the whole
+  scene (the v0.3 "yellow cast" Nick rejected in the blind review); fitted to the in-air reading
+  it does not. Until the card is measured with an instrument, the in-air reading is the better
+  truth for fitting; the V3 dive's dry reference shots are the minimum, a spectro reading better.
+  **Flare caveat (2026-09-27, `measure-card`, PR #50):** scaled so grey 128 = 128, the in-air
+  reading puts white at 268 and **black at 83** on the 8-bit scale — the grey ramp is compressed at
+  both ends. A matte black print should read far lower, so flare or glare on the deck frames
+  likely lifts the dark end (and pales dark colours). The measured greys and dark patches are
+  therefore upper bounds; a flare-free reading (shaded, black surround, or an instrument) is
+  needed before black is trusted for haze.
 - **[OPEN] OQ-41 — Light changes between frames.** *S2a fit.* Exposure-normalized brightness jumps
   up to 3× between consecutive frames on shallow sunny dives (caustics), and dives 1–2 drift
   through the dive (sunset, morning). The colour of the light is stable enough to use (ratios
   cancel it); absolute light levels are not transferable between frames or dives.
 
-- **[OPEN] OQ-42 — The TG-7 JPEG is lens-corrected; the RAW is not.** *S2a (JPEG baselines).*
-  Found by Nick on the v0.2 cut sheet, measured 2026-09-27: AprilTag centres detected separately
-  on RAW and JPEG agree to ~1 px near the centre but the JPEG's sit 16 px farther out at 950 px
-  radius and 125–140 px at 1800 px — in-camera barrel-distortion correction, although EXIF says
-  `DistortionCorrection: Off`. `locate` maps RAW → JPEG as a pure (8, 8) crop, so JPEG-baseline
-  patch samples are misplaced on off-centre cards. Fix in S2a: detect the card on the JPEG itself
-  (or fit the radial RAW → JPEG map). Whether the ORF maker notes carry the correction
-  parameters is unverified.
+- **[RESOLVED] OQ-42 — The TG-7 JPEG is radially remapped from the RAW.** *S2a (JPEG baselines).*
+  Found by Nick on the v0.2 cut sheet. Measured 2026-09-27 with the `jpeg-map` stage (AprilTag
+  centres found separately on RAW and JPEG, 548 pairs on 156 frames): the JPEG is a fixed radial
+  remap of the RAW, `jpeg = c_j + (raw − c_r)·(k0 + k1ρ² + k2ρ⁴)`, ρ = r/1000 px — median error
+  0.33 px, max 2.8 px, the same map on every dive (leave-one-dive-out max 3.9 px); a point moves
+  out by ~16 px at 950 px radius and ~130 px at 1800 px. EXIF says `DistortionCorrection: Off`
+  and the maker notes carry no parameters (exiftool 13.55). **Which image is rectilinear depends
+  on the medium:** a 16-corner card homography fits the RAW to ~1 px RMS under water but the JPEG
+  to ~13 px on wide cards; in air (3 deck frames) the JPEG fits to 0.6–1.0 px and the RAW to up to
+  11 px. So the camera applies an in-air lens correction to every JPEG, and under water the flat
+  port's refraction cancels the lens barrel, leaving the RAW near-projective. **Fix (SPEC §4 S2a):**
+  the map is dataset config (`jpeg_from_raw`); `locate` maps quads RAW → JPEG and JPEG-found tags
+  back to RAW; `patches` samples the JPEG on the RAW card area through the map. Two more bugs found
+  on the way: OpenCV applied EXIF Orientation to 2 card frames (P9150342, P9160565 are stored
+  rotated 90°) — JPEGs are now read in stored orientation; and 5 frames whose missing tags came
+  from the JPEG had RAW quads up to 37 px off. **Still unknown:** P9160648's JPEG is shifted 17 px
+  from its RAW as a whole (preset mode, 1/30 s, sensor-shift IS on) — excluded from JPEG scoring
+  (`exclude_frames`); whether the RAW needs a distortion model in air is left to the S2b
+  checkerboards.
 
 ### Card V3 (design 2026-09-27, `docs/reference_card_v3.md`)
 
@@ -357,22 +395,26 @@ Items for Nick are marked **(Nick)**.
   options"): a Sticker Mule vinyl sticker mounted on a rigid board (cheap prototypes, no colour
   control) or a calib.io custom card (UV print on 6 mm ACM, Nick's quote ~$350 / card, ~3 weeks).
   Nick is evaluating a calib.io stock ChArUco board (400 × 300 mm, €134) first.
-- **[OPEN] OQ-46 — Measured card truth in the card YAML.** *Before the V3 dive.* `color/card.py`
-  accepts only integer sRGB `truth`. Measured values (reflectance or Lab, dry and wet, per physical
-  card) need a schema addition, e.g. `truth: design | measured` with per-patch measured values and
-  their source. The S2a session agreed to add a `truth:` option once dry reference shots exist.
-- **[IN-PROGRESS] OQ-47 — Pipeline "card V3 readiness".** *Before V3 data.* Done in the S2a
+- **[RESOLVED] OQ-46 — Measured card truth in the card YAML.** *Before the V3 dive.* Resolved by
+  PR #50 (2026-09-27): the `measure-card` stage reads the card on in-air frames (dataset
+  `card_reference_frames`) and prints a `measured:` block, reviewed and pasted into the card YAML;
+  `color/card.py` then uses the measured values as the truth everywhere and keeps each patch's
+  design value beside it (`decide` shows both). V2: `configs/cards/nereus_v2.yaml`, 3 deck frames,
+  scaled so grey 128 = 128. V3 cards need the same block from their dry reference shots (or an
+  instrument reading) before their results are trusted.
+- **[RESOLVED] OQ-47 — Pipeline "card V3 readiness".** *Before V3 data.* Resolved by the S2a
   session's PRs #46 (card roles: `Card` reads `roles` {wb_anchors, ramp, haze}, `quad_ratio`, the
   OpenCV dictionary from `apriltag.family`; grey reflectance relative to paper white, so a card
   without a white patch works) and #47 (`locate` takes family and ratio range from the card —
   `quad_ratio` × 0.627–1.506, exactly V2's old 2.5–6.0 — and gives frames ≤ 3 MP a 2× detection
-  pass). TG-7 results are byte-identical with V2's roles. Remaining: a test loading
-  `nereus_v3_c1..c4` through the new card code once #45 and #46–#47 are merged. **Border-cut
-  tags: a position guard was tried and dropped** — a tag cut by 2–5 px decodes with its edge ~6 px
-  inside the frame, while whole tags near the edge sit 6–12 px from it, so a ½-cell margin rejected
-  whole TG-7 tags (P9160475 tags 1 and 3, P9160572 tag 1). OpenCV already drops corners within
-  3 px of the border. If V3 frames show cut tags, it needs another cue (e.g. checking the tag's
-  outer black ring is complete in the image).
+  pass). TG-7 results are byte-identical with V2's roles. The end-to-end test loading
+  `nereus_v3_c1..c4` through the card code and locating the c1 example frame is
+  `tests/unit/test_color_card_v3_e2e.py`. **Border-cut tags: a position guard was tried and
+  dropped** — a tag cut by 2–5 px decodes with its edge ~6 px inside the frame, while whole tags
+  near the edge sit 6–12 px from it, so a ½-cell margin rejected whole TG-7 tags (P9160475 tags 1
+  and 3, P9160572 tag 1). OpenCV already drops corners within 3 px of the border. If V3 frames
+  show cut tags, it needs another cue (e.g. checking the tag's outer black ring is complete in the
+  image).
 - **[RESOLVED-DECISION] OQ-48 — Light trap on the card.** Decision (Nick + design session,
   2026-09-27): not on the card. A hole to a black cavity would give a true zero for haze, but the
   per-frame affine's offset (S2a PR #44) already absorbs haze, measuring the printed black fixes the
