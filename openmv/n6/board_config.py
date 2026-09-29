@@ -54,8 +54,9 @@ STREAM_DEFAULT_FRAMESIZE = "VGA"
 STREAM_DEFAULT_QUALITY = 70
 STREAM_MAX_SECONDS = 300          # safety cap so a dead host can't stream forever
 
-# The sensor is physically mounted rotated relative to "upright". Recorded as metadata
-# so raw frames stay un-rotated (raw evidence, §11) and the host/analysis layer applies
-# the correction. Convention: degrees to rotate the raw frame COUNTER-CLOCKWISE for
-# an upright image (verified: a +90° CCW rotation put the scene upright, 2026-07-14).
-MOUNT_ROTATION_DEG = 90
+# How the board is mounted on the rig relative to "upright". Recorded as metadata so raw
+# frames stay un-rotated (raw evidence, §11) and the host/analysis layer applies the
+# correction. Convention: degrees to rotate the raw frame COUNTER-CLOCKWISE for an upright
+# image. A property of the mount, not the board: 90 on nereus000 (verified 2026-07-14);
+# **0 on nereus002** (verified 2026-09-28: the V1 card and room read upright in the raw frame).
+MOUNT_ROTATION_DEG = 0
