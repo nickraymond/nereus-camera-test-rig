@@ -244,6 +244,11 @@ Items for Nick are marked **(Nick)**.
   it — a 2 MB frame must finish inside that. Expected payload is 1.0 MB (8-bit) or 2.0 MB (16-bit) per HD frame over
   the existing length-framed path (512 B board-side chunks, SHA-256 verified). Measure on
   both boards; log it in `capture.json`.
+- *(2026-09-29 addendum to OQ-24)* **rpicam-still (rpicam-apps 1.12) truncates its `-o`
+  path to 127 characters and still exits 0** (measured on `nereus002`: any path ≥ 128 chars is
+  written as its first 127). `cameras/imx708.py` now runs rpicam with `cwd` = the capture folder
+  and bare file names. `scripts/capture_raw_imx708.py` still passes full paths — safe with its
+  default `results/raw_imx708/<UTC>/` (~70 chars), not with a long `--out`.
 - **[RESOLVED 2026-09-28] OQ-24 — `rpicam-still --raw` on the rig Pi (`nereus002`, Zero 2 W; was
   "on the Pi 5").** **Answer (real hardware, `scripts/capture_raw_imx708.py`):** one exposure
   gives JPEG + DNG; with `--mode 4608:2592` the DNG is full resolution, 16-bit, uncompressed,
