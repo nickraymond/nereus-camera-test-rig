@@ -212,6 +212,7 @@ Not started until S2a is **Go**; a no-go changes what the rig should test. Each 
 - **S5 — `bmcam001` recipe + arms A / A′ / B / C** in the coordinator (P3) — bench A/B/C sheet on the card (OQ-28).
 - **S6 — Pool depth sweep** (3/6/9 ft, two cards) + gain/exposure sweep (P4) — depth-sweep report (OQ-26).
 - **S7 — `nereus-rig soak`** loop (foreground, §2), daily summary + data pull; run the 5-day soak (P5) (OQ-30).
+  - [~] Capture-only HIL rehearsal: `scripts/hil_soak.py run` — `nereus-rig experiment --raw --no-analysis` every N min, each cycle in a fresh process (hard timeout), one JSON health line per cycle (per-camera still + RAW status / duration / exposure / gain; Pi CPU temp, free RAM + disk, throttle flags, OpenMV USB presence); `summary` prints success rates and failure cycles. *(Trial 2026-09-29 on `nereus002`: 2/2 cycles, 45 s each, 29 MB per cycle. First overnight run started 2026-09-29 04:30 UTC: 5 min × 12 h, no card in frame — reliability incl. ~290 AE3 resets, and a dusk-to-dawn low-light sweep.)*
 - **S8 — Final analysis + report** (P6): A-vs-C per camera, RQ-1, gain-sweep answer, `bmcam001` quick wins.
 
 ### MVP acceptance (all phases)
