@@ -117,8 +117,8 @@ def run(args) -> int:
                                   timeout=CYCLE_TIMEOUT_S)
             line["exit_code"] = proc.returncode
             line["stdout_tail"] = proc.stdout.strip().splitlines()[-6:]
-            if proc.returncode not in (0, 1):
-                line["stderr_tail"] = proc.stderr.strip().splitlines()[-6:]
+            if proc.returncode != 0:  # 1 = partial run; a traceback lands here too
+                line["stderr_tail"] = proc.stderr.strip().splitlines()[-12:]
         except subprocess.TimeoutExpired:
             line["exit_code"] = "timeout"
         new = sorted(set(run_dir.glob("*/exp_*")) - before)
