@@ -197,6 +197,10 @@ Codec only, for the next field deployment's "RAW to the cloud" path; no BM / cel
 #### S3–S8 — Rig work (outline, gated on the S2a decision)
 Not started until S2a is **Go**; a no-go changes what the rig should test. Each gets full checklist items + exit criteria when scheduled.
 - **S3 — RAW capture on the rig** (brief P0): IMX708 `rpicam-still --raw` (DNG + JPEG, one exposure); OpenMV allowlisted `capture_raw` (Bayer + width/height/CFA/bit depth/black level + read-back exposure/gain/WB); locked recipes; lock check; OQ-19 firmware decision (OQ-21…24). Capture changes behind `raw: true` flags. *Demo:* one command → 3 cameras × RAW + ISP JPEG + metadata.
+  - [x] OpenMV RAW probe on both boards (OQ-21, OQ-23): 8-bit HD Bayer, **CFA BGGR** (decided on the V1 card), black level 0 (on-chip, clipped), ISP WB gains not in the Bayer data (`rgb_gain_db` unusable as as-shot WB), min gain 3.15 dB, min exposure 80 µs; `get_file` 1 MB in 0.77 s (N6) / 0.91 s (AE3). *(`openmv/probes/raw_probe2_v5.py`, 2026-09-28.)*
+  - [ ] Allowlisted `capture_raw` in the shared board service (`csi`): Bayer → `/flash` → `get_file` + SHA-256, JSON sidecar (W, H, CFA, bits, black level, read-back exposure / gain); host reader → `RawFrame`; `jxl-check --card configs/cards/nereus_v1.yaml` on N6 and AE3 RAW; hardware tests on both boards (AE3 reset before each capture).
+  - [ ] Locked-exposure recipe on the OpenMV boards (meter on the card → lock → capture) + lock check.
+  - [ ] Coordinator `raw: true` profile flag → *demo:* one command → 3 cameras × RAW + ISP JPEG + metadata.
 - **S4 — Above-water calibration** (P2) + card truth v1 → `configs/calibration/<camera_id>.yaml`, CCM residuals (OQ-27).
 - **S5 — `bmcam001` recipe + arms A / A′ / B / C** in the coordinator (P3) — bench A/B/C sheet on the card (OQ-28).
 - **S6 — Pool depth sweep** (3/6/9 ft, two cards) + gain/exposure sweep (P4) — depth-sweep report (OQ-26).
