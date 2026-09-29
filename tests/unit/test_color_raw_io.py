@@ -126,3 +126,43 @@ def test_invalid_frames_fail_loudly(kwargs, message):
                 black_level=(256, 257, 258, 259), white_level=WHITE)
     with pytest.raises(ValueError, match=message):
         RawFrame(**{**base, **kwargs})
+
+
+def _write_bayer(tmp_path, data: bytes, **over):
+    import hashlib
+    import json
+
+    side = {"format": "openmv_bayer", "width": 4, "height": 2, "bits": 8, "cfa": "BGGR",
+            "black_level": 0, "white_level": 255, "exposure_us": 5744, "gain_db": 3.15,
+            "sha256": hashlib.sha256(data).hexdigest(), **over}
+    path = tmp_path / "raw.bayer"
+    path.write_bytes(data)
+    path.with_suffix(".json").write_text(json.dumps(side))
+    return path
+
+
+def test_read_openmv_bayer(tmp_path):
+    """The .bayer + sidecar pair → RawFrame (layout, CFA, levels, exposure from the sidecar)."""
+    from nereus_camera_test_rig.color.raw_io import read_openmv_bayer
+    from nereus_camera_test_rig.color.stages import open_raw
+
+    data = bytes(range(10, 18))
+    fr = read_openmv_bayer(_write_bayer(tmp_path, data))
+    assert fr.mosaic.shape == (2, 4) and fr.mosaic[1, 0] == 14
+    assert fr.cfa == "BGGR" and fr.black_level == (0.0,) * 4 and fr.white_level == 255
+    assert fr.exposure_s == pytest.approx(0.005744) and fr.source["gain_db"] == 3.15
+    assert fr.as_shot_wb is None  # the ISP gains are not usable as as-shot WB (OQ-21)
+    assert open_raw(tmp_path / "raw.bayer").mosaic.tolist() == fr.mosaic.tolist()
+
+
+@pytest.mark.parametrize("over, data, match", [
+    ({"sha256": "0" * 64}, bytes(8), "sha256"),
+    ({}, bytes(7), "expected 4x2"),
+    ({"bits": 10}, bytes(8), "10-bit"),
+    ({"format": "dng"}, bytes(8), "not an openmv_bayer"),
+])
+def test_read_openmv_bayer_rejects(tmp_path, over, data, match):
+    from nereus_camera_test_rig.color.raw_io import read_openmv_bayer
+
+    with pytest.raises(ValueError, match=match):
+        read_openmv_bayer(_write_bayer(tmp_path, data, **over))

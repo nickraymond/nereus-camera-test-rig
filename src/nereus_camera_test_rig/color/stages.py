@@ -23,10 +23,11 @@ from typing import Any, Callable, Iterable, Optional
 import cv2
 import numpy as np
 
-from .raw_io import RawFrame, bin2x2, normalize, read_dng
+from .raw_io import RawFrame, bin2x2, normalize, read_dng, read_openmv_bayer
 
 STAGE_FILE = "stage.json"
-READERS: dict[str, Callable[[Path], RawFrame]] = {".dng": read_dng}
+READERS: dict[str, Callable[[Path], RawFrame]] = {".dng": read_dng,
+                                                  ".bayer": read_openmv_bayer}
 
 
 class StaleInputError(RuntimeError):

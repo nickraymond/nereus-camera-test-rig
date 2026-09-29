@@ -43,6 +43,10 @@ def _handle_line(usb, line):
         elif action == "capture_image":
             output = capture_service.capture_image(board_config, settings)
             _send(usb, cp.completed_response(command_id, output))
+        elif action == "capture_raw":
+            # Bayer RAW at a locked exposure, streamed from RAM (S3); emits its own framed
+            # response (sending header -> bytes -> completed). Board facts: board_config.RAW_*.
+            capture_service.capture_raw(usb, command_id, board_config, settings)
         elif action == "get_file":
             # send_file emits its own framed response(s).
             capture_service.send_file(usb, command_id, settings.get("filename"))

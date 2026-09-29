@@ -20,7 +20,7 @@ Usage::
     python -m host_tools.color decide results/color/<dataset_id>/correct --config <dataset.yaml>
     python -m host_tools.color grvi results/color/<dataset_id>/locate --config <dataset.yaml> \
         --backend <nereus-vision-dev checkout> --python <backend env python>   # before correct
-    python -m host_tools.color jxl-check <file.orf|file.dng> [--jxl-distance 0.5 1.0]  # transport
+    python -m host_tools.color jxl-check <.orf|.dng|.bayer> [--jxl-distance 0.5 1.0]  # transport
 """
 
 from __future__ import annotations

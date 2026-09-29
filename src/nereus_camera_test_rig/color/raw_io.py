@@ -267,3 +267,49 @@ def read_dng(path) -> RawFrame:
                     "color_matrix": matrix_note,
                     "make": _text(tf, page, 271), "model": _text(tf, page, 272)},
         )
+
+
+def read_openmv_bayer(path) -> RawFrame:
+    """Read an OpenMV ``capture_raw`` frame (``<stem>.bayer`` + ``<stem>.json`` sidecar,
+    written by ``cameras/openmv_usb.py``) into a ``RawFrame``.
+
+    The ``.bayer`` file is the mosaic bytes, row-major, ``bits`` per pixel (8 on OpenMV v5).
+    The sidecar is the only source of W / H / CFA / black / white level; the file's SHA-256
+    must match it. No ISO, f-number, as-shot WB or colour matrix: the analogue gain is kept
+    in ``source`` (the sensor has no ISO), the fixed aperture belongs in the camera's
+    calibration file, and the firmware's ``isp_rgb_gain_db`` is not usable as as-shot WB
+    (OQ-21) — white balance comes from the card or a calibration.
+    """
+    import hashlib
+    import json
+    from pathlib import Path
+
+    path = Path(path)
+    side_path = path.with_suffix(".json")
+    if not side_path.is_file():
+        raise ValueError(f"{path}: missing sidecar {side_path.name}")
+    side = json.loads(side_path.read_text())
+    if side.get("format") != "openmv_bayer":
+        raise ValueError(f"{side_path}: not an openmv_bayer sidecar "
+                         f"(format={side.get('format')!r})")
+    data = path.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    if sha != side.get("sha256"):
+        raise ValueError(f"{path}: sha256 {sha} != sidecar {side.get('sha256')}")
+    w, h, bits = int(side["width"]), int(side["height"]), int(side["bits"])
+    if bits != 8:
+        raise ValueError(f"{path}: {bits}-bit OpenMV Bayer not handled (only 8-bit measured)")
+    if len(data) != w * h:
+        raise ValueError(f"{path}: {len(data)} B, expected {w}x{h} = {w * h} B")
+    exposure_us = side.get("exposure_us")
+    return RawFrame(
+        mosaic=np.frombuffer(data, dtype=np.uint8).reshape(h, w).astype(np.uint16),
+        cfa=side["cfa"],
+        black_level=(float(side["black_level"]),) * 4,
+        white_level=float(side["white_level"]),
+        exposure_s=exposure_us / 1e6 if exposure_us else None,
+        source={"reader": "openmv_bayer", "path": str(path), "bits_per_sample": bits,
+                "gain_db": side.get("gain_db"), "camera": side.get("camera"),
+                "mount_rotation_deg": side.get("mount_rotation_deg"),
+                "isp_rgb_gain_db": side.get("isp_rgb_gain_db")},
+    )

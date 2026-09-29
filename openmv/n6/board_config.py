@@ -34,6 +34,17 @@ PIXEL_FORMATS = {
 }
 DEFAULT_PIXEL_FORMAT = "RGB565"
 
+# Bayer RAW (``capture_raw``, csi module), measured on OpenMV v5.0.1 on ``nereus002``
+# 2026-09-28 (OQ-21, ``openmv/probes/raw_probe2_v5.py``): ``csi.BAYER`` is 8 bit, 1 byte/px;
+# CFA of the delivered bytes is BGGR (decided on the V1 card: patch hues within 9 deg of
+# truth, RGGB 180 deg off); black level 0 (subtracted on chip, noise clipped at 0). Only HD
+# was probed — whether smaller sizes bin or crop the mosaic is unknown, so they are not offered.
+RAW_FRAMESIZES = {"HD": "HD"}
+RAW_DEFAULT_FRAMESIZE = "HD"
+RAW_CFA = "BGGR"
+RAW_BITS = 8
+RAW_BLACK_LEVEL = 0
+
 DEFAULT_JPEG_QUALITY = 90
 DEFAULT_WARMUP_MS = 2000          # let auto-exposure settle before the snapshot
 
