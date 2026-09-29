@@ -524,7 +524,15 @@ Items for Nick are marked **(Nick)**.
   meaningless (grey 27, colour 45 on the first rig run). Options: point it at a card YAML, or
   label it V2-only. V2 prints no longer exist (Nick); V3 is in production.
 
-- **[OPEN] OQ-51 — OpenMV exposure ceiling for long (under-water) exposures.** At HD Bayer the
+- **[RESOLVED 2026-09-28] OQ-51 — OpenMV exposure ceiling for long (under-water) exposures.**
+  **Answer:** Nick approved the port. `capture_raw` now lengthens the frame through the PAG7936
+  frame-time registers (Nick's `set_frame_time`, unchanged) **only when the lock clamps**, then
+  restores the previous frame time after the frame is sent. Verified on both boards
+  (`nereus002`): 16 / 50 / 200 ms read back exactly (frame time = exposure + 5 ms), no wedge,
+  a 200 ms capture takes 1.1–1.4 s; brightness scales linearly between 16, 50 and 200 ms
+  (within 3 %); a 4 ms capture after a 200 ms one locks + snapshots in 42 ms (restored). Note
+  auto-exposure alone reaches 16.6 ms on the N6 in a dim room (plus 23.8 dB gain) — the
+  default ceiling applies to *locked* exposures. *Original:* At HD Bayer the
   sensor silently clamps exposure to its frame time: **N6 8,248 µs, AE3 16,584 µs** (asked for
   up to 100 ms, read back; `nereus002`, 2026-09-28). `scripts/capture_raw_openmv.py` makes the
   shortfall up with gain (N6 in air: +1.0 dB), but in dark water that means high gain and noise.

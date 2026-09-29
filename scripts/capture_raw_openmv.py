@@ -11,9 +11,9 @@ Run ON the rig Pi from the repo root, with the rig venv (needs the serial + colo
 2. **Lock:** gain at the sensor's floor (3.15 dB, OQ-21); exposure = metered exposure x metered
    gain / floor gain x target / level — the card's brightest channel lands on ``--target`` of
    full scale. A clipped reference halves the exposure and meters again (up to 3 meter shots).
-3. **Capture** the locked RAW. The sensor silently clamps exposure to its frame time (N6
-   8248 us, AE3 16584 us at HD Bayer, measured 2026-09-28); if the read-back is short, the
-   shortfall goes into gain and the locked shot is taken again.
+3. **Capture** the locked RAW. The board lengthens the frame for exposures past its default
+   frame time (OQ-51, up to ~2 s); if the read-back is still short, the shortfall goes into
+   gain and the locked shot is taken again.
 4. **Verify:** read-back exposure within 5 % and gain within one sensor step (0.75 dB) of the
    request, the card found again, its brightest channel within 15 % of the target and unclipped.
 
@@ -103,8 +103,8 @@ def main() -> int:
 
         side = shot(cam, out / "locked.bayer", settings)
         if side["exposure_us"] < (1 - TOL_EXPOSURE) * settings["exposure_us"]:
-            # The sensor clamps exposure to its frame time without saying so (nereus002: N6
-            # 8248 us, AE3 16584 us at HD Bayer); make the rest up with gain and shoot again.
+            # Still clamped (past the board's ~2 s frame-time limit, or a service without the
+            # OQ-51 frame-time port): make the rest up with gain and shoot again.
             deficit_db = 20 * math.log10(settings["exposure_us"] / side["exposure_us"])
             summary["exposure_ceiling_us"] = side["exposure_us"]
             print(f"exposure clamped at {side['exposure_us']} us (asked "
