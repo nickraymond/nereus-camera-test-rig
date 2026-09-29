@@ -40,7 +40,12 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 - **[NEEDS-DOCS] OQ-6 — On-board AprilTag capability.** Whether N6/AE3 can/should run any
   detection on-device, or whether all analysis stays host-side (Pi). Affects nothing in the
   MVP (analysis is host-side) but relevant to the down-select (Spec §17–18).
-- **[NEEDS-HARDWARE] OQ-18 — AE3 sensor mount rotation.** The AE3 carries the same PAG7936
+- **[RESOLVED 2026-09-28] OQ-18 — AE3 sensor mount rotation.** **Answer (`nereus002`):** all
+  three cameras deliver upright raw frames on this rig — V1 card text and the room read upright
+  in the IMX708, N6 and AE3 frames. `MOUNT_ROTATION_DEG` = 0 on both OpenMV boards (the N6's 90
+  was the `nereus000` mount); the IMX708 has no rotation field and is no longer inverted (the
+  Phase 6 "mounted inverted" note was `nereus000`). Mount rotation is a rig fact, re-check it
+  after any re-mount. *Original:* The AE3 carries the same PAG7936
   sensor as the N6 but on a different PCB, so its physical mount rotation is not necessarily
   the N6's 90°. The bring-up recon shot (2026-07-15) was a ceiling scene with no reliable
   gravity cue, so `openmv/ae3/board_config.py` sets `MOUNT_ROTATION_DEG = 0` as a placeholder.

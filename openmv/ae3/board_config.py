@@ -65,9 +65,6 @@ STREAM_MAX_SECONDS = 300          # safety cap so a dead host can't stream forev
 # correction. Convention: degrees to rotate the raw frame COUNTER-CLOCKWISE for an
 # upright image (matches the N6 convention).
 #
-# UNVERIFIED for the AE3 (OQ-18): unlike the N6, the AE3's mount rotation has not been
-# confirmed against a known-orientation reference capture — the bring-up recon shot was a
-# ceiling scene with no reliable gravity cue. This value does NOT affect capture,
-# checksums, or the Phase 4 exit criteria (it is metadata only). Left at 0 until a
-# known-orientation shot is taken; do not assume it matches the N6's 90°.
+# 0 on nereus002, verified 2026-09-28 (OQ-18): the V1 card and room read upright in the raw
+# frame. A property of the mount, not the board.
 MOUNT_ROTATION_DEG = 0
