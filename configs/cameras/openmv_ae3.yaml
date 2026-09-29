@@ -28,3 +28,8 @@ image:
 # focus streaming (start_stream) is available via the shared capture service.
 video:
   enabled: false
+
+# Phase 8 S3: also take a RAW after the still (IMX708: DNG + JPEG from one exposure;
+# OpenMV: 8-bit BGGR Bayer at a locked exposure). Off = the Phase 5 path unchanged.
+# `nereus-rig experiment --raw` turns it on for one run.
+raw: false

@@ -32,3 +32,8 @@ camera_controls:
   white_balance: { enabled: false, mode: "auto", red_gain: null, blue_gain: null }
   exposure: { enabled: false, shutter_us: null, analogue_gain: null }
   image_processing: { enabled: false }
+
+# Phase 8 S3: also take a RAW after the still (IMX708: DNG + JPEG from one exposure;
+# OpenMV: 8-bit BGGR Bayer at a locked exposure). Off = the Phase 5 path unchanged.
+# `nereus-rig experiment --raw` turns it on for one run.
+raw: false

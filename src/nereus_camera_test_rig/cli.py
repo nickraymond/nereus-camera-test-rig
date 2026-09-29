@@ -46,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_experiment.add_argument(
         "--no-analysis", action="store_true", help="skip the reference-card analysis pass"
     )
+    p_experiment.add_argument(
+        "--raw", action="store_true",
+        help="also take a RAW after each still (Phase 8 S3; overrides the profiles' raw flag)")
     p_experiment.set_defaults(func=_cmd_experiment)
 
     return parser
@@ -108,6 +111,7 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
         operator_notes=args.notes,
         camera_names=subset,
         analysis=not args.no_analysis,
+        raw=True if args.raw else None,
     )
 
     print(f"[nereus-rig] experiment {outcome.record.experiment_id}")
@@ -120,6 +124,11 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
             if c.analysis is not None:
                 note = f" · analysis={c.analysis.status} tags={c.analysis.tags_detected}"
             print(f"  [ok]   {c.camera_name}: {dims}{r.size_bytes} bytes{note}")
+            if c.raw_result is not None:
+                rr = c.raw_result
+                print(f"         raw: {rr.image_format} {rr.size_bytes} bytes" if rr.ok else
+                      f"         raw FAILED: {(rr.error or {}).get('code')}: "
+                      f"{(rr.error or {}).get('message')}")
         else:
             err = c.result.error or {}
             print(f"  [FAIL] {c.camera_name}: {err.get('code')}: {err.get('message')}")

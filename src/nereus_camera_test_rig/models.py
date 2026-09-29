@@ -135,6 +135,9 @@ class ExperimentRecord:
     experiment_type: str = ""
     cameras: list[CameraIdentity] = field(default_factory=list)
     captures: list[CaptureResult] = field(default_factory=list)
+    # Phase 8 S3: RAW captures taken after the still when a camera profile has ``raw: true``
+    # (or the run asks for it); empty otherwise, so older records read the same.
+    raw_captures: list[CaptureResult] = field(default_factory=list)
     analyses: list[DetectionResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)

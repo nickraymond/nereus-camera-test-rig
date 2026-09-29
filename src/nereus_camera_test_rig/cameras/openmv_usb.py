@@ -138,6 +138,7 @@ class OpenMvUsbCamera(CameraDevice):
     """Host adapter driving an OpenMV board over USB serial (N6 today, AE3 in Phase 4)."""
 
     driver = "openmv_usb"
+    raw_extension = "bayer"
 
     def __init__(
         self,
