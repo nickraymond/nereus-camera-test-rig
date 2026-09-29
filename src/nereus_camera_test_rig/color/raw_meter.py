@@ -21,9 +21,39 @@ DEFAULT_TARGET = 0.80  # brightest card channel, fraction of full scale: headroo
 WHITE_PATCHES = ("gray_white", "gray_light")  # brightest first; the first one found is used
 
 
+# Mosaic px for metering. A 12 MP IMX708 DNG OOM-killed the Zero 2 W (415 MB RAM); most of the
+# cost is OpenCV's tag search on locate's 2x pass for small frames (+60 MB at 3 MP, +100 MB at
+# 5 MP, measured on nereus002). 1.1 MP leaves the 1 MP OpenMV frames as they are and takes
+# the IMX708 to every 4th cell (0.75 MP): whole-locate peak ~146 MB with no card in view.
+MAX_METER_PIXELS = 1_100_000
+
+
+def decimate_cells(frame: RawFrame, max_pixels: int = MAX_METER_PIXELS) -> RawFrame:
+    """Keep every k-th 2x2 CFA cell in each direction until the mosaic has at most
+    ``max_pixels`` — same CFA phase and levels, k^2 x less memory. For metering only: a V1
+    colour patch is ~140 px on the full-res IMX708, ~35 px at k = 4 (12 MP -> 0.75 MP)."""
+    k = 1
+    h, w = frame.mosaic.shape
+    while (h // (2 * k) * 2) * (w // (2 * k) * 2) > max_pixels:
+        k += 1
+    if k == 1:
+        return frame
+    x, y, cw, ch = frame.valid_crop or (0, 0, w, h)
+    m = frame.mosaic[y:y + ch // 2 * 2, x:x + cw // 2 * 2]
+    cells = m.reshape(m.shape[0] // 2, 2, m.shape[1] // 2, 2)[::k, :, ::k, :]
+    sub = cells.reshape(cells.shape[0] * 2, cells.shape[2] * 2)
+    black = np.roll(np.asarray(frame.black_level).reshape(2, 2), (-(y % 2), -(x % 2)), (0, 1))
+    return RawFrame(mosaic=np.ascontiguousarray(sub), cfa=frame.active()[1],
+                    black_level=tuple(float(v) for v in black.ravel()),
+                    white_level=frame.white_level, exposure_s=frame.exposure_s,
+                    source={**frame.source, "decimated_cells": k})
+
+
 def card_levels(frame: RawFrame, card) -> dict[str, Any]:
     """Locate ``card`` on ``frame``'s RAW and return its patch means (binned linear camera RGB,
-    0 = black, 1 = white level) plus clip fractions. Raises ``ValueError`` if not located."""
+    0 = black, 1 = white level) plus clip fractions. Raises ``ValueError`` if not located.
+    Large frames are decimated first (``decimate_cells``); the quad is in decimated px."""
+    frame = decimate_cells(frame)
     from .jpeg_geometry import JpegMap
     from .locate import locate_frame, tag_geometry, tag_spec
     from .patches import _boxes, homography, mosaic_to_binned, sample

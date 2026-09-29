@@ -5,6 +5,11 @@ Run ON the rig Pi from the repo root (stdlib only, no venv needed):
 
     python3 scripts/capture_raw_imx708.py [--stops -1 0 1] [--gain 1.0] [--mode 4608:2592]
 
+Card-metered (S3/S4; needs the rig venv for the card finder):
+
+    .venv/bin/python scripts/capture_raw_imx708.py --card configs/cards/nereus_v1.yaml \
+        [--target 0.8]
+
 1. **Meter:** one auto shot (`--metadata`); read back ExposureTime, AnalogueGain, ColourGains,
    LensPosition — what auto-exposure / AWB / AF chose.
 2. **Lock:** analogue gain fixed at ``--gain`` (default 1.0 = as low as the sensor goes); a
@@ -12,6 +17,9 @@ Run ON the rig Pi from the repo root (stdlib only, no venv needed):
    range (IMX708 on ``nereus002``: 1.0 → 1.1228, 2026-09-28) — and that gain is used. Shutter
    = metered exposure × metered gain / applied gain (the same total exposure), then × 2^stop
    for each ``--stops``; WB fixed to the metered ColourGains, focus to the metered LensPosition.
+   With ``--card``, the probe is also a RAW: the card is found on it and stop 0 is scaled so the
+   card's brightest channel lands on ``--target`` (scene metering left the V1 card's white at
+   0.14 of full scale in the 2026-09-28 run-through); stop 0 is then checked on the card.
 3. **Capture** each stop with ``--raw`` (JPEG + DNG from one exposure) and ``--metadata``.
 4. **Verify** every shot: JPEG + DNG exist, the DNG size fits the sensor mode (16-bit), and the
    read-back ExposureTime / AnalogueGain / ColourGains / LensPosition match what was asked.
@@ -37,6 +45,29 @@ ROOT = Path(__file__).resolve().parents[1]
 TOL = {"ExposureTime": (0.02, 50.0), "AnalogueGain": (0.03, 0.0),  # (relative, absolute)
        "ColourGains": (0.01, 0.0), "LensPosition": (0.0, 0.05)}
 DNG_HEADER_MAX = 2_000_000  # tags + embedded thumbnail, bytes
+
+
+MAX_CARD_PROBES = 3
+TOL_TARGET = 0.15  # card-on-target check at stop 0, relative
+
+
+def card_plan(dng: Path, card_yaml: Path, exposure_us: float, target: float) -> dict:
+    """Card metering on one DNG (``color.raw_meter``, same rule as the OpenMV recipe).
+    Imported here so the script stays stdlib-only without ``--card``."""
+    if str(ROOT / "src") not in sys.path:
+        sys.path.insert(0, str(ROOT / "src"))
+    from nereus_camera_test_rig.color.card import load_card
+    from nereus_camera_test_rig.color.raw_io import read_dng
+    from nereus_camera_test_rig.color.raw_meter import (
+        card_levels,
+        card_reference,
+        exposure_for_target,
+    )
+
+    ref = card_reference(card_levels(read_dng(dng), load_card(card_yaml)))
+    plan = exposure_for_target(exposure_us, ref["level"], target, ref["clipped"],
+                               hi_us=10_000_000)
+    return {"reference": ref, **plan}
 
 
 def run(cmd: list[str], timeout: float) -> None:
@@ -71,6 +102,10 @@ def main(argv=None) -> int:
     ap.add_argument("--shot-ms", type=int, default=1000, help="locked shot settle time")
     ap.add_argument("--rpicam", default="rpicam-still")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--card", type=Path, help="card YAML: meter on the card, not the scene "
+                    "(needs the rig venv: .venv/bin/python)")
+    ap.add_argument("--target", type=float, default=0.80,
+                    help="with --card: brightest card channel at stop 0, fraction of full scale")
     args = ap.parse_args(argv)
     w, h = (int(v) for v in args.mode.split(":")[:2])
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -91,15 +126,43 @@ def main(argv=None) -> int:
     if lens is not None:
         locks += ["--autofocus-mode", "manual", "--lens-position", f"{float(lens):.4f}"]
 
-    # probe (JPEG only): which gain does the sensor actually apply for the one we ask?
-    run([args.rpicam, "-n", "-t", str(args.shot_ms), *size, "-o", str(out / "probe.jpg"),
-         "--metadata", str(out / "probe.json"), "--metadata-format", "json",
-         "--shutter", str(round(total_us / args.gain)), "--gain", f"{args.gain:.4f}", *locks],
-        timeout)
-    gain = float(metadata(out / "probe.json")["AnalogueGain"])
+    # probe: which gain does the sensor actually apply for the one we ask? With --card it is
+    # also a RAW, and the card on it sets the exposure.
+    card_metering = []
+    probe_us = round(total_us / args.gain)
+    for n in range(MAX_CARD_PROBES if args.card else 1):
+        name = "probe" if n == 0 else f"probe_{n}"
+        run([args.rpicam, "-n", "-t", str(args.shot_ms), *size, "-o", str(out / f"{name}.jpg"),
+             "--metadata", str(out / f"{name}.json"), "--metadata-format", "json",
+             *(["--raw"] if args.card else []),
+             "--shutter", str(probe_us), "--gain", f"{args.gain:.4f}", *locks], timeout)
+        p = metadata(out / f"{name}.json")
+        gain = float(p["AnalogueGain"])
+        exposure_us = total_us / gain
+        if not args.card:
+            break
+        try:
+            plan = card_plan(out / f"{name}.dng", args.card, float(p["ExposureTime"]),
+                             args.target)
+        except ValueError as exc:  # card not in view / not located: a failed check
+            (out / "capture_raw.json").write_text(json.dumps(
+                {"utc": stamp, "card": str(args.card), "card_metering": card_metering,
+                 "error": f"card metering on {name}.dng: {exc}", "passed": False},
+                indent=1) + "\n")
+            print(f"FAIL: card metering on {name}.dng: {exc}  ({out})")
+            return 1
+        card_metering.append({"probe": name, **plan})
+        print(f"-- card {plan['reference']['patch']}.{plan['reference']['channel']} = "
+              f"{plan['reference']['level']:.3f} at {p['ExposureTime']} us -> "
+              f"{plan['exposure_us']} us for {args.target}")
+        exposure_us = plan["exposure_us"]
+        if not plan["remeter"]:
+            break
+        probe_us = plan["exposure_us"]
+    else:
+        raise SystemExit(f"FAIL: card still clipped after {MAX_CARD_PROBES} probes")
     if not close(args.gain, gain, "AnalogueGain"):
         print(f"-- gain {args.gain:g} not available: the sensor applies {gain:g}; using it")
-    exposure_us = total_us / gain
 
     shots, ok_all = [], True
     for stop in args.stops:
@@ -125,6 +188,13 @@ def main(argv=None) -> int:
                       "readback": {k: got.get(k) for k in (*want, "DigitalGain", "Lux",
                                                             "SensorTemperature")},
                       "checks": checks, "passed": passed})
+        if args.card and stop == 0:
+            ref = card_plan(dng, args.card, float(got["ExposureTime"]), args.target)["reference"]
+            checks["card_on_target"] = abs(ref["level"] / args.target - 1) <= TOL_TARGET
+            checks["card_unclipped"] = not ref["clipped"]
+            passed = all(checks.values())
+            ok_all &= passed
+            shots[-1].update(card=ref, checks=checks, passed=passed)
         failed = [k for k, v in checks.items() if not v]
         print(f"PASS {name}" if passed else f"FAIL {name}: {', '.join(failed)}")
 
@@ -133,6 +203,8 @@ def main(argv=None) -> int:
                "meter": {k: m.get(k) for k in ("ExposureTime", "AnalogueGain", "DigitalGain",
                                                "ColourGains", "LensPosition", "Lux")},
                "locked_exposure_us_at_stop0": round(exposure_us), "shots": shots,
+               "card": str(args.card) if args.card else None, "target": args.target,
+               "card_metering": card_metering,
                "passed": ok_all}
     (out / "capture_raw.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(f"{'PASS' if ok_all else 'FAIL'}: {len(shots)} locked RAW shots in {out}")
