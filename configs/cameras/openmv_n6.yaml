@@ -9,11 +9,12 @@ board: "n6"
 device_id: null                 # assigned/discovered via USB handshake (OQ-2)
 firmware: null                  # real value once a board is in hand (OQ-5)
 
-# Hard-reset the board before each coordinated capture (~4 s), clearing any firmware 3A
-# state left by a previous experiment (stale-AWB hazard observed on the AE3 2026-07-16;
-# the N6's firmware recovered on its own, but the reset keeps every experiment starting
-# from the same known state — one variable at a time, CLAUDE.md §10).
-reset_before_capture: true
+# No hard reset before captures on the N6 (was true). The reset exists for the AE3: its
+# stale-AWB green cast (2026-07-16) and its one-camera-session-per-boot limit on OpenMV v5.
+# The N6 reconverges AWB per frame and takes repeated sessions per boot (6/6, 10/10 on
+# nereus002). Measured cost of resetting it: the overnight HIL soak (2026-09-29, 134 cycles)
+# had the N6 reboot by itself during the still right after its reset in 9 cycles.
+reset_before_capture: false
 
 # Illustrative capture settings from Spec §8 — verify supported values (OQ-1).
 image:
