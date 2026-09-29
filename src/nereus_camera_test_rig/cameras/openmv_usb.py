@@ -70,6 +70,13 @@ class OpenMvTimeout(OpenMvError):
         super().__init__("timeout", message)
 
 
+class OpenMvDisconnected(OpenMvError):
+    """The USB port went away mid-command (board rebooted or dropped off the bus)."""
+
+    def __init__(self, message: str):
+        super().__init__("device_disconnected", message)
+
+
 class _SerialIO:
     """Buffered line/binary reader over a ``read(n)``/``write(bytes)`` transport.
 
@@ -92,7 +99,15 @@ class _SerialIO:
             ) from exc
 
     def _read_some(self) -> bytes:
-        return self._t.read(_READ_CHUNK) or b""
+        try:
+            return self._t.read(_READ_CHUNK) or b""
+        except OSError as exc:  # pyserial SerialException: "device reports readiness to
+            # read but returned no data" — the port vanished. Overnight soak on nereus002
+            # (2026-09-29): the N6 rebooted mid-capture in 9 of 134 cycles, this escaped the
+            # adapter and aborted the whole experiment (no experiment.json, AE3 never tried).
+            raise OpenMvDisconnected(
+                "USB port lost mid-command (%s) — the board rebooted or dropped off the bus"
+                % exc) from exc
 
     def read_line(self, timeout: Optional[float] = None) -> bytes:
         deadline = time.monotonic() + (self._default_timeout if timeout is None else timeout)
@@ -185,7 +200,11 @@ class OpenMvUsbCamera(CameraDevice):
             )
         self._port = port
         # Short per-read timeout; overall deadlines are enforced in _SerialIO.
-        return serial.Serial(port, self._baudrate, timeout=0.2, write_timeout=WRITE_TIMEOUT)
+        try:
+            return serial.Serial(port, self._baudrate, timeout=0.2,
+                                 write_timeout=WRITE_TIMEOUT)
+        except OSError as exc:  # port vanished between discovery and open (re-enumerating)
+            raise OpenMvDisconnected("could not open %s: %s" % (port, exc)) from exc
 
     def _resolve_port(self) -> Optional[str]:
         from host_tools.discover_openmv import find_port
@@ -325,7 +344,7 @@ class OpenMvUsbCamera(CameraDevice):
         started = time.monotonic()
         try:
             self._command("reset_board")
-        except OpenMvTimeout as exc:
+        except (OpenMvTimeout, OpenMvDisconnected) as exc:
             # The ack can be lost when the board resets before its CDC buffer drains —
             # the port vanishes mid-read (pyserial SerialException, an OSError) or goes
             # silent. That is the reset we asked for; only a structured refusal (e.g.
@@ -333,9 +352,6 @@ class OpenMvUsbCamera(CameraDevice):
             # 2026-09-28): ~1 in 8 resets right after a 1 MB capture_raw lost the ack.
             logger.info("reset_board ack not received (serial=%r: %s) — board is resetting",
                         self._serial_number, exc.message)
-        except OSError as exc:
-            logger.info("reset_board: port dropped before the ack (serial=%r: %s) — board "
-                        "is resetting", self._serial_number, exc)
         if not self._owns_transport:
             # Injected transport (tests/loopback): no real USB to re-enumerate — just
             # re-handshake over the same transport.

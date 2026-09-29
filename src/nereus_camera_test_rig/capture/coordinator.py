@@ -219,9 +219,20 @@ def _capture_one_camera(
     raw_result = None
     want_raw = profile.get("raw", False) if raw is None else raw
     try:
-        result = device.capture_image(str(dest), request)  # adapters never raise on failure
+        # Adapters return failed results rather than raise; this guard keeps one that does
+        # anyway (an unmapped transport error) from aborting every later camera — Spec §11.
+        try:
+            result = device.capture_image(str(dest), request)
+        except Exception as exc:
+            logger.exception("camera %s: adapter raised during capture", name)
+            result = _synth_failed_result(name, camera_cfg, "adapter_exception", repr(exc))
         if want_raw:
-            raw_result = _capture_raw(name, device, profile, cap_dir, when)
+            try:
+                raw_result = _capture_raw(name, device, profile, cap_dir, when)
+            except Exception as exc:
+                logger.exception("camera %s: adapter raised during RAW capture", name)
+                raw_result = _synth_failed_result(name, camera_cfg, "adapter_exception",
+                                                  repr(exc))
     finally:
         close = getattr(device, "close", None)
         if callable(close):
