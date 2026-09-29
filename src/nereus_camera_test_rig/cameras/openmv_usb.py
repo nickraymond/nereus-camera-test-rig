@@ -495,7 +495,7 @@ class OpenMvUsbCamera(CameraDevice):
 
 
 _RAW_KEYS = ("width", "height", "framesize", "cfa", "bits", "black_level", "white_level",
-             "exposure_us", "gain_db", "requested", "metered", "isp_rgb_gain_db",
+             "exposure_us", "gain_db", "requested", "frame_time_us", "metered", "isp_rgb_gain_db",
              "mount_rotation_deg", "timing_ms")
 
 
