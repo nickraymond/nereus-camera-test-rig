@@ -184,14 +184,14 @@ class Imx708Camera(CameraDevice):
                 "--width", str(width),
                 "--height", str(height),
                 "-q", str(quality),
-                "--metadata", str(meta_path),
+                "--metadata", meta_path.name,
                 "--metadata-format", "json",
             ]
             cmd += _control_args(settings.get("camera_controls") or {})
             if raw:
                 cmd += ["--raw", "--mode", f"{width}:{height}"]
-            cmd += ["-o", str(dest)]
-            self._run(cmd, timeout)
+            cmd += ["-o", dest.name]
+            self._run(cmd, timeout, cwd=dest.parent)
         except CaptureError as exc:
             elapsed = self._clock() - started
             return self._failed(camera, request, "capture_failed", str(exc), elapsed)
@@ -240,9 +240,9 @@ class Imx708Camera(CameraDevice):
                 "--width", str(width),
                 "--height", str(height),
                 "--codec", codec,
-                "-o", str(dest),
+                "-o", dest.name,
             ]
-            self._run(cmd, timeout)
+            self._run(cmd, timeout, cwd=dest.parent)
         except CaptureError as exc:
             elapsed = self._clock() - started
             return self._failed(camera, request, "capture_failed", str(exc), elapsed)
@@ -264,10 +264,16 @@ class Imx708Camera(CameraDevice):
         }
 
     # -- helpers -------------------------------------------------------------
-    def _run(self, cmd: list[str], timeout: float) -> None:
+    def _run(self, cmd: list[str], timeout: float, cwd: Optional[Path] = None) -> None:
+        """Output files are passed as bare names with ``cwd`` = their folder: rpicam-still
+        (rpicam-apps 1.12, nereus002) silently truncates an ``-o`` path to 127 characters and
+        exits 0 — an absolute results path + experiment type went past that and the still
+        was written as ``imx708_image_20260929T03`` (2026-09-28)."""
         joined = " ".join(cmd)
         try:
-            result = self._runner(cmd, capture_output=True, timeout=timeout, check=False)
+            kwargs = {"cwd": str(cwd)} if cwd is not None else {}
+            result = self._runner(cmd, capture_output=True, timeout=timeout, check=False,
+                                  **kwargs)
         except subprocess.TimeoutExpired as exc:
             raise CaptureError(f"camera command timed out after {timeout}s: {joined}") from exc
         except FileNotFoundError as exc:

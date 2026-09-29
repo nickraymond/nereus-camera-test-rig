@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+from pathlib import Path
 
 
 def make_jpeg(width: int, height: int) -> bytes:
@@ -38,8 +39,9 @@ class FakeRunner:
         self.raises = raises
         self.calls = []
 
-    def __call__(self, cmd, capture_output=False, timeout=None, check=False):
+    def __call__(self, cmd, capture_output=False, timeout=None, check=False, cwd=None):
         self.calls.append(cmd)
+        base = Path(cwd) if cwd else Path(".")
         if self.raises is not None:
             raise self.raises
         if "--list-cameras" in cmd:
@@ -47,10 +49,10 @@ class FakeRunner:
         if self.returncode == 0:
             out = arg_value(cmd, "-o")
             if out:
-                with open(out, "wb") as fh:
+                with open(base / out, "wb") as fh:
                     fh.write(make_jpeg(self.width, self.height))
             meta = arg_value(cmd, "--metadata")
             if meta:
-                with open(meta, "w") as fh:
+                with open(base / meta, "w") as fh:
                     fh.write('{"ExposureTime": 13539, "AnalogueGain": 1.5, "AfState": 2}')
         return Completed(self.returncode, stderr=self.stderr)
