@@ -138,6 +138,46 @@ def _finite(v):
     return v if v == v and v not in (float("inf"), float("-inf")) else None
 
 
+# PAG7936 frame-time registers (us, 21 bit) + the sensor-update commit — the sensor on both
+# boards. Ported unchanged from Nick's ``ADIN_SPI_OpenMV/pi/s28/s28_board_burst.py``
+# (``set_frame_time``, verified there 2026-09-03: exposure read-back exact, no wedge). The
+# exposure lock clamps to the live frame time (N6 8,248 us, AE3 16,584 us at HD Bayer by
+# default, OQ-51), so a longer exposure needs a longer frame first. ``csi.framerate()`` would
+# do this through a mode rewrite + capture abort that wedges the board — never call it.
+_FT_H, _FT_M, _FT_L = 0x004E, 0x004D, 0x004C
+_SENSOR_UPDATE, _SU_FLAG = 0x00EB, 0x80
+_FT_SLACK_US = 5000  # frame time = exposure + slack (the sensor keeps an 80 us margin)
+_FT_MAX_US = 2000000
+
+
+def _set_frame_time(cam, ft_us):
+    ft_us = min(max(int(ft_us), 200), _FT_MAX_US)
+    h = cam.__read_reg(_FT_H)
+    cam.__write_reg(_FT_H, (h & 0xE0) | ((ft_us >> 16) & 0x1F))
+    cam.__write_reg(_FT_M, (ft_us >> 8) & 0xFF)
+    cam.__write_reg(_FT_L, ft_us & 0xFF)
+    cam.__write_reg(_SENSOR_UPDATE, _SU_FLAG)
+    return ft_us
+
+
+def _get_frame_time(cam):
+    return (((cam.__read_reg(_FT_H) & 0x1F) << 16) | (cam.__read_reg(_FT_M) << 8)
+            | cam.__read_reg(_FT_L))
+
+
+def _snap(cam, tries=4):
+    """``snapshot()`` that retries the transient "Frame capture has timed out." seen on the
+    first frame after a frame-time change (Nick's ``snap``, measured 2026-09-02)."""
+    for i in range(tries):
+        try:
+            return cam.snapshot()
+        except RuntimeError as e:
+            if "timed out" in str(e) and i < tries - 1:
+                time.sleep_ms(60)
+                continue
+            raise
+
+
 def capture_raw(usb, command_id, board_config, settings):
     """Bayer RAW at a locked exposure, streamed straight from RAM to the host (S3, OQ-21).
 
@@ -147,7 +187,9 @@ def capture_raw(usb, command_id, board_config, settings):
     flushed (a changed exposure can leave two stale frames buffered; Nick's
     ``s28_board_burst.py``) before the snapshot, so the read-back values describe this
     frame. The ISP WB gains are *not* in the Bayer data and ``rgb_gain_db()`` lists the
-    top-left site first (OQ-21): reported as-is, for diagnosis only. Never calls
+    top-left site first (OQ-21): reported as-is, for diagnosis only. An exposure longer than
+    the default frame time allows is reached by lengthening the frame through the sensor's
+    registers (``_set_frame_time``, OQ-51; reported as ``frame_time_us``). Never calls
     ``csi.framerate()`` (wedges the board). On the AE3 this is a camera session:
     ``reset_board`` first (one session per boot on v5).
 
@@ -182,10 +224,29 @@ def capture_raw(usb, command_id, board_config, settings):
     cam.auto_exposure(False, exposure_us=exposure_us)
     cam.auto_gain(False, gain_db=gain_db)
     cam.auto_whitebal(False)
+    frame_time_us = default_ft = None
+    if cam.exposure_us() < exposure_us * 0.95:
+        # Clamped by the frame time: lengthen the frame, then lock the exposure again. Only
+        # then — the default path never touches sensor registers. The previous frame time is
+        # put back after the frame is sent, so a long capture leaves no state behind (a
+        # later short locked capture would otherwise still run one frame per long period).
+        default_ft = _get_frame_time(cam)
+        frame_time_us = _set_frame_time(cam, exposure_us + _FT_SLACK_US)
+        cam.auto_exposure(False, exposure_us=exposure_us)
+    try:
+        _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
+                                 metered, exposure_us, gain_db, frame_time_us)
+    finally:
+        if default_ft is not None:
+            _set_frame_time(cam, default_ft)
+
+
+def _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
+                             metered, exposure_us, gain_db, frame_time_us):
     t_locked = time.ticks_ms()
     for _ in range(3):
-        cam.snapshot()
-    img = cam.snapshot()
+        _snap(cam)
+    img = _snap(cam)
     t_snap = time.ticks_ms()
 
     data = memoryview(img.bytearray())
@@ -208,6 +269,7 @@ def capture_raw(usb, command_id, board_config, settings):
         "exposure_us": cam.exposure_us(),
         "gain_db": _finite(cam.gain_db()),
         "requested": {"exposure_us": exposure_us, "gain_db": gain_db},
+        "frame_time_us": frame_time_us,
         "metered": metered,
         "isp_rgb_gain_db": [_finite(v) for v in cam.rgb_gain_db()],
         "size_bytes": size,

@@ -88,3 +88,16 @@ def test_capture_raw_locked_exposure(board, tmp_path):
     # The sensor quantizes exposure to its line time; allow 5 %.
     assert abs(meta["exposure_us"] - LOCK_EXPOSURE_US) <= 0.05 * LOCK_EXPOSURE_US, meta
     assert meta["gain_db"] == pytest.approx(MIN_GAIN_DB, abs=0.05), meta
+
+
+@pytest.mark.parametrize("board", sorted(BOARDS))
+def test_capture_raw_long_exposure(board, tmp_path):
+    """Past the default frame time (N6 8.2 ms, AE3 16.6 ms at HD Bayer) the board lengthens
+    the frame through the PAG7936 registers (OQ-51) and the exposure reads back exactly."""
+    dest = _out_dir(tmp_path) / ("%s_long.bayer" % board)
+    result = _capture(board, dest, {"warmup_ms": 300, "exposure_us": 50000,
+                                    "gain_db": MIN_GAIN_DB})
+    assert result.ok, result.error
+    meta = result.sensor_metadata
+    assert abs(meta["exposure_us"] - 50000) <= 0.05 * 50000, meta
+    assert meta["frame_time_us"] == 55000, meta
