@@ -517,6 +517,22 @@ Items for Nick are marked **(Nick)**.
   meaningless (grey 27, colour 45 on the first rig run). Options: point it at a card YAML, or
   label it V2-only. V2 prints no longer exist (Nick); V3 is in production.
 
+- **[OPEN] OQ-51 — OpenMV exposure ceiling for long (under-water) exposures.** At HD Bayer the
+  sensor silently clamps exposure to its frame time: **N6 8,248 µs, AE3 16,584 µs** (asked for
+  up to 100 ms, read back; `nereus002`, 2026-09-28). `scripts/capture_raw_openmv.py` makes the
+  shortfall up with gain (N6 in air: +1.0 dB), but in dark water that means high gain and noise.
+  `csi.framerate()` wedges the board (Nick's workbench notes); Nick's `s28_board_burst.py`
+  lengthens the frame time with direct PAG7936 register writes (`set_frame_time`, exposures up
+  to ~2 s). Porting that into the rig service is a sensor-register change on Nick's boards —
+  **needs Nick's OK**. Decide before the pool sweep (S6).
+
+- **[OPEN] OQ-52 — OpenMV RAW has no ISO or f-number.** `RawFrame.exposure_factor()` (t · ISO /
+  N²) needs both, so the `patches` stage (`sample_raw`) refuses OpenMV frames; `jxl-check` and
+  `color.raw_meter` don't need them. The sidecar records exposure and analogue gain (dB). Proposal
+  for S4: the fixed aperture goes in `configs/calibration/<camera_id>.yaml`, and the reader maps
+  gain to a relative ISO (100 × linear gain above the 3.15 dB floor) — a convention, recorded as
+  such, not a sensor rating.
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
