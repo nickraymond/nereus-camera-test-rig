@@ -558,6 +558,18 @@ Items for Nick are marked **(Nick)**.
   gain to a relative ISO (100 × linear gain above the 3.15 dB floor) — a convention, recorded as
   such, not a sensor rating.
 
+- **[OPEN] OQ-53 — N6 reboots itself mid-capture / USB boot loop: cable, power or board?**
+  Overnight HIL soak (2026-09-29, 135 cycles): the N6 rebooted during a capture in 9 cycles
+  (IMX708 and AE3: 0). Confirmation soak without the N6 pre-capture reset (90 cycles): it rebooted
+  in cycle 4 anyway, then sat in a USB boot loop (bootloader re-enumerating, `error -71`,
+  ~15,000 kernel USB lines/h) for ~10 h until the rig was physically moved. The reset is not the
+  cause (kept on). Since #82 a lost N6 fails only its own slot. **Cable A/B (Nick, 2026-09-29):**
+  the suspect **white** USB cable (was on the N6) moved to the **AE3**, the **black** cable to the
+  N6. If the reboots / `-71` loops follow the white cable to the AE3 → cable; if they stay on the
+  N6 → board or its power. Check with `scripts/hil_soak.py` + `journalctl -k | grep -c "usb 1-1"`
+  per hour (which port is which: `lsusb -t`). Nick's bench rule already says shielded USB cables
+  only on the camera boards (ADIN_SPI_OpenMV SPEC, 2026-08-25 N6 drops).
+
 ---
 
 *When an item is resolved, change its status to `RESOLVED`, add the source (doc URL, commit,
