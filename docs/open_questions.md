@@ -577,6 +577,41 @@ Items for Nick are marked **(Nick)**.
   errors — every re-enumeration was a commanded `reset_board` (N6 21 of 21, AE3 20 of 20). Too short to
   conclude. **Confound:** the swap also moved hub ports — N6 1-1.1 → 1-1.3, AE3 1-1.3 → 1-1.1 — so a
   failure now tests cable *and* port. Next: overnight soak as is; if clean, swap only the ports.
+  **2026-10-01 (compression study Phase 2):** 4 N6 probe sessions + 1 AE3 session (mpremote run +
+  reset + handshake each): 0 `error -71`, 0 spontaneous reboots; every re-enumeration was the
+  commanded reset. Still too short to conclude.
+
+- **[RESOLVED 2026-10-01] OQ-54 — OpenMV "raw" Bayer is processed on the sensor: lens shading + denoise.**
+  Found by the compression study's fact-check (2026-09-30) and read back on both boards
+  (2026-10-01, `openmv/probes/compress_probe_v5.py`, register reads only): DENOISE_EN (PAG7936
+  0x0882) = 3 and the lens-shading registers 0x0820–0x0833 populated (20 of 20 non-zero, identical on both boards) in
+  HD Bayer. Evidence in the data: temporal var/mean doubles from centre to corner (a radial
+  digital gain), neighbouring noise correlated +0.4–0.5 (IMX708: +0.03), measured 8×8 block-mean
+  noise 2–3× the white-noise value. With the 8-bit `csi.BAYER` path and black over-subtracted by
+  ~1 DN and clipped at 0, OpenMV RAW is "processed 8-bit Bayer": linear above ~20 DN, bent below
+  ~10 DN — exactly where under-water red sits. The compression study treats it as its own class.
+  **Needs Nick's OK:** a capture with DENOISE_EN = 0 and the LSC coefficients zeroed (sensor
+  register writes, reverted by `reset_board`) to see whether truly raw data is reachable, and
+  whether the PAG7936 can deliver 10 bits through any v5 path.
+  **Resolved (Nick approved the writes, 2026-10-01; `openmv/probes/raw_isp_probe_v5.py`, both
+  boards, dark room, restored by reset + handshake):** truly raw 8-bit Bayer IS reachable with
+  `DENOISE_EN` (0x0882) = 0 and the six LSC gains (0x0820–0x0825) = 0, committed with 0x00EB = 0x80.
+  N6: neighbour noise correlation 0.27 → 0.04 (AE3 0.42 → 0.005); temporal noise variance centre
+  0.79 → 4.6 DN² (the on-chip denoise removes ~80–85 % of it); with LSC gains zeroed the noise and
+  the mean go flat from centre to corner (N6 var 4.0–4.6 everywhere, was 0.8 → 2.7). Zero gain = LSC
+  off, as assumed. Consequences: truly raw frames cost more bytes (noise is incompressible) and
+  need vignetting handled downstream (a flat-field, S4); the denoise trades resolution for size.
+  Still open: 10-bit output (no v5 path found). **Decision (Nick, 2026-10-01): keep denoise and
+  lens shading ON** — they improve image quality and reduce file size; nothing in the rig changes
+  (they are the sensor defaults).
+
+- **[OPEN] OQ-55 — The OpenMV USB console drops ~512-byte blocks under sustained output.**
+  `mpremote run` stdout from the N6 lost data in 8 % of 1 KB lines (blocks of ~500 characters
+  missing, newlines lost so lines merged), unchanged by 5× slower pacing (2026-10-01). Short
+  lines (256 characters) with a CRC each, sent 3×, got every payload through on the N6 and AE3
+  (3–5 % of copies damaged). Anything that moves data over the console (probes, debug dumps)
+  needs framing + CRC; the rig service's framed, SHA-256-checked protocol is not affected (it
+  checks every transfer). Worth knowing before Phase 2 moves bigger payloads.
 
 ---
 

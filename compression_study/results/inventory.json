@@ -1,0 +1,458 @@
+{
+ "imx708": {
+  "format": "DNG (rpicam-still --raw)",
+  "size": "4608x2592",
+  "stored": "10-bit values in a 16-bit container",
+  "cfa": "BGGR",
+  "black": 64.0,
+  "white": 1023.0,
+  "illuminants": {
+   "cool": {
+    "frames": 9,
+    "stops": {
+     "stop_+0": {
+      "mean_DN": {
+       "R": 124.2,
+       "G1": 211.5,
+       "G2": 211.7,
+       "B": 100.1
+      },
+      "clipped_pct": {
+       "R": 0.005,
+       "G1": 4.677,
+       "G2": 4.674,
+       "B": 0.004
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 206010,
+      "gain": 1.122807
+     },
+     "stop_+1": {
+      "mean_DN": {
+       "R": 240.8,
+       "G1": 344.8,
+       "G2": 345.2,
+       "B": 189.0
+      },
+      "clipped_pct": {
+       "R": 4.604,
+       "G1": 10.797,
+       "G2": 10.779,
+       "B": 5.145
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 412021,
+      "gain": 1.122807
+     },
+     "stop_-1": {
+      "mean_DN": {
+       "R": 62.0,
+       "G1": 109.3,
+       "G2": 109.4,
+       "B": 50.1
+      },
+      "clipped_pct": {
+       "R": 0.001,
+       "G1": 0.009,
+       "G2": 0.01,
+       "B": 0.001
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 103005,
+      "gain": 1.122807
+     }
+    }
+   },
+   "warm": {
+    "frames": 9,
+    "stops": {
+     "stop_+0": {
+      "mean_DN": {
+       "R": 163.2,
+       "G1": 215.8,
+       "G2": 216.1,
+       "B": 67.1
+      },
+      "clipped_pct": {
+       "R": 0.009,
+       "G1": 4.682,
+       "G2": 4.681,
+       "B": 0.003
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 223494,
+      "gain": 1.122807
+     },
+     "stop_+1": {
+      "mean_DN": {
+       "R": 291.3,
+       "G1": 353.0,
+       "G2": 353.4,
+       "B": 134.3
+      },
+      "clipped_pct": {
+       "R": 8.416,
+       "G1": 10.954,
+       "G2": 10.945,
+       "B": 0.006
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 446988,
+      "gain": 1.122807
+     },
+     "stop_-1": {
+      "mean_DN": {
+       "R": 81.4,
+       "G1": 111.3,
+       "G2": 111.4,
+       "B": 33.5
+      },
+      "clipped_pct": {
+       "R": 0.004,
+       "G1": 0.01,
+       "G2": 0.011,
+       "B": 0.0
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 111733,
+      "gain": 1.122807
+     }
+    }
+   }
+  }
+ },
+ "n6": {
+  "format": "raw Bayer dump + JSON sidecar (OpenMV capture_raw)",
+  "size": "1280x800",
+  "stored": "8-bit",
+  "cfa": "BGGR",
+  "black": 0.0,
+  "white": 255.0,
+  "illuminants": {
+   "cool": {
+    "frames": 9,
+    "stops": {
+     "stop_+0": {
+      "mean_DN": {
+       "R": 86.4,
+       "G1": 124.5,
+       "G2": 124.6,
+       "B": 66.5
+      },
+      "clipped_pct": {
+       "R": 0.002,
+       "G1": 10.171,
+       "G2": 10.339,
+       "B": 0.001
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 38000,
+      "gain": 3.152157
+     },
+     "stop_+1": {
+      "mean_DN": {
+       "R": 158.2,
+       "G1": 178.9,
+       "G2": 178.9,
+       "B": 126.3
+      },
+      "clipped_pct": {
+       "R": 23.234,
+       "G1": 40.507,
+       "G2": 40.596,
+       "B": 13.617
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 76000,
+      "gain": 3.152157
+     },
+     "stop_-1": {
+      "mean_DN": {
+       "R": 43.7,
+       "G1": 63.6,
+       "G2": 63.7,
+       "B": 33.4
+      },
+      "clipped_pct": {
+       "R": 0.0,
+       "G1": 0.041,
+       "G2": 0.044,
+       "B": 0.0
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 19000,
+      "gain": 3.152157
+     }
+    }
+   },
+   "warm": {
+    "frames": 9,
+    "stops": {
+     "stop_+0": {
+      "mean_DN": {
+       "R": 114.1,
+       "G1": 126.7,
+       "G2": 126.8,
+       "B": 49.7
+      },
+      "clipped_pct": {
+       "R": 0.014,
+       "G1": 10.217,
+       "G2": 10.375,
+       "B": 0.0
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 41936,
+      "gain": 3.152157
+     },
+     "stop_+1": {
+      "mean_DN": {
+       "R": 180.1,
+       "G1": 182.2,
+       "G2": 182.2,
+       "B": 98.6
+      },
+      "clipped_pct": {
+       "R": 36.802,
+       "G1": 41.725,
+       "G2": 41.82,
+       "B": 0.008
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 83872,
+      "gain": 3.152157
+     },
+     "stop_-1": {
+      "mean_DN": {
+       "R": 57.8,
+       "G1": 64.8,
+       "G2": 64.8,
+       "B": 24.7
+      },
+      "clipped_pct": {
+       "R": 0.001,
+       "G1": 0.038,
+       "G2": 0.043,
+       "B": 0.0
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 20968,
+      "gain": 3.152157
+     }
+    }
+   }
+  }
+ },
+ "ae3": {
+  "format": "raw Bayer dump + JSON sidecar (OpenMV capture_raw)",
+  "size": "1280x800",
+  "stored": "8-bit",
+  "cfa": "BGGR",
+  "black": 0.0,
+  "white": 255.0,
+  "illuminants": {
+   "cool": {
+    "frames": 9,
+    "stops": {
+     "stop_+0": {
+      "mean_DN": {
+       "R": 94.2,
+       "G1": 116.9,
+       "G2": 117.0,
+       "B": 60.6
+      },
+      "clipped_pct": {
+       "R": 0.027,
+       "G1": 13.118,
+       "G2": 13.276,
+       "B": 0.005
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 33648,
+      "gain": 3.152157
+     },
+     "stop_+1": {
+      "mean_DN": {
+       "R": 158.4,
+       "G1": 166.6,
+       "G2": 166.7,
+       "B": 114.7
+      },
+      "clipped_pct": {
+       "R": 27.93,
+       "G1": 36.833,
+       "G2": 36.934,
+       "B": 16.327
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 67304,
+      "gain": 3.152157
+     },
+     "stop_-1": {
+      "mean_DN": {
+       "R": 46.7,
+       "G1": 59.9,
+       "G2": 60.0,
+       "B": 30.0
+      },
+      "clipped_pct": {
+       "R": 0.007,
+       "G1": 0.058,
+       "G2": 0.064,
+       "B": 0.0
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 16824,
+      "gain": 3.152157
+     }
+    }
+   },
+   "warm": {
+    "frames": 9,
+    "stops": {
+     "stop_+0": {
+      "mean_DN": {
+       "R": 124.1,
+       "G1": 119.4,
+       "G2": 119.5,
+       "B": 44.8
+      },
+      "clipped_pct": {
+       "R": 10.166,
+       "G1": 13.291,
+       "G2": 13.631,
+       "B": 0.003
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 36784,
+      "gain": 3.152157
+     },
+     "stop_+1": {
+      "mean_DN": {
+       "R": 180.0,
+       "G1": 170.4,
+       "G2": 170.6,
+       "B": 94.4
+      },
+      "clipped_pct": {
+       "R": 36.984,
+       "G1": 37.975,
+       "G2": 38.262,
+       "B": 5.286
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 73576,
+      "gain": 3.152157
+     },
+     "stop_-1": {
+      "mean_DN": {
+       "R": 63.1,
+       "G1": 61.4,
+       "G2": 61.5,
+       "B": 22.1
+      },
+      "clipped_pct": {
+       "R": 0.023,
+       "G1": 0.057,
+       "G2": 0.063,
+       "B": 0.0
+      },
+      "low_signal": {
+       "R": false,
+       "G1": false,
+       "G2": false,
+       "B": false
+      },
+      "exposure": 18392,
+      "gain": 3.152157
+     }
+    }
+   }
+  }
+ }
+}
