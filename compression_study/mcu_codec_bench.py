@@ -1,3 +1,4 @@
+# ruff: noqa: E501, E702  (archived desk-study script, 2026-10-01)
 """MCU codec desk study: which D2-class lossy plane encoder could run on the OpenMV N6 / AE3?
 
     python -m compression_study.mcu_codec_bench --data <primary>/data/s4_20260930 \
@@ -34,21 +35,26 @@ import argparse
 import csv
 import json
 import math
-import subprocess
-import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from compression_study import run_study as rs  # sets sys.path for src/ and .study-pylib
-
 import numpy as np  # noqa: E402
 
 from compression_study import rate, rois, sim  # noqa: E402
-from compression_study.common import (RunStats, inverse, merge, read_pnm, run, split,  # noqa: E402
-                                      srgb_eotf, srgb_oetf, tool, write_pgm)
+from compression_study import run_study as rs  # sets sys.path for src/ and .study-pylib
+from compression_study.common import (  # noqa: E402
+    RunStats,
+    inverse,
+    merge,
+    run,
+    split,
+    srgb_eotf,
+    srgb_oetf,
+    tool,
+)
 from compression_study.methods import plane_codecs as pc  # noqa: E402
 
 STUDY = rs.STUDY

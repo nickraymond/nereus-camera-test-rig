@@ -110,3 +110,34 @@ def test_rate_solver_hits_targets_on_monotone_codecs():
     sizes = [size_q(k) for k in sol.knobs]
     assert min(sizes) <= 40_000 * 1.05 and max(sizes) >= 40_000 * 0.95
     assert not rate.solve(size_q, 10 ** 9, 1, 100, +1, True).reachable
+
+
+@pytest.mark.skipif(not has_tool("cc"), reason="no C compiler")
+def test_wl53_round_trip_is_deterministic_and_bounded():
+    from compression_study.methods import plane_codecs as pc
+
+    rng = np.random.default_rng(3)
+    yy, xx = np.mgrid[0:37, 0:53]
+    plane = np.clip(2000 + 900 * np.sin(xx / 5.0) + rng.normal(0, 30, xx.shape), 0, 4095)
+    plane = plane.astype(np.uint16)
+    dec = pc.wl53_dec_factory(53, 37)
+    prev = None
+    for q in (0.5, 4.0, 40.0):
+        a, _ = pc.wl53_enc(plane, 4095, q)
+        b, _ = pc.wl53_enc(plane, 4095, q)
+        assert a == b and a[:2] == b"W\x01"  # same bytes every run; header magic + version
+        err = np.abs(dec(a).astype(int) - plane.astype(int))
+        assert err.max() <= max(2, 8 * q)  # coarser scale, larger (bounded) error
+        if prev is not None:
+            assert len(a) < prev  # bigger scale → fewer bytes
+        prev = len(a)
+
+
+def test_method_w_decodes_from_bytes_alone():
+    if not has_tool("cc"):
+        pytest.skip("no C compiler")
+    raw = _raw()
+    blob = rp.encode(raw, rp.RawSpec("W", "sqrt", 12), {k: 2.0 for k in ("R", "G1", "G2", "B")})
+    rec = rp.decode(blob)
+    assert rec.shape == raw.mosaic.shape
+    assert np.abs(rec - raw.mosaic).max() < 40

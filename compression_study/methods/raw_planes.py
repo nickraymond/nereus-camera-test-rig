@@ -12,6 +12,7 @@ code each plane with a grayscale codec, and invert on decode.
 | D-j    | sqrt   | 8      | jpegli | yes |
 | D2     | sqrt   | 12     | JPEG XL lossy | yes |
 | D-lin / D2-lin | linear | 8 / native | JPEG / JPEG XL | yes (OpenMV ablation: no curve) |
+| W      | sqrt   | 12     | wl53 (own 5/3 wavelet + Rice coder, wl53_core.h) | yes |
 
 Layouts: ``4pl`` (R, G1, G2, B separately), ``3pl`` (G = (G1 + G2 + 1) >> 1, duplicated on
 decode), ``tiled`` (the four planes as one 2×2-tiled image). ``knobs`` maps plane name →
@@ -28,7 +29,8 @@ from ..common import Header, Raw, forward, inverse, merge, pack, split, tile, un
 from . import plane_codecs as pc
 
 CODEC_OF = {"C": "packer", "C-jls": "jls", "C-png": "png", "C2": "jxl", "N": "packer",
-            "D": "jpeg", "D-j": "jpegli", "D2": "jxl", "D-lin": "jpeg", "D2-lin": "jxl"}
+            "D": "jpeg", "D-j": "jpegli", "D2": "jxl", "D-lin": "jpeg", "D2-lin": "jxl",
+            "W": "wl53"}
 CURVES = ("none", "sqrt", "linear")
 LAYOUTS = ("4pl", "3pl", "tiled")
 
@@ -113,6 +115,8 @@ def encode_plane(codes: np.ndarray, maxval: int, spec: RawSpec, knob=None,
         return pc.jpeg_enc(codes, maxval, int(knob), measure_rss)
     if c == "jpegli":
         return pc.jpegli_enc(codes, maxval, int(knob), measure_rss)
+    if c == "wl53":
+        return pc.wl53_enc(codes, maxval, float(knob), measure_rss)
     raise ValueError(f"unknown codec {c}")
 
 
@@ -140,9 +144,10 @@ def decode(blob: bytes) -> np.ndarray:
     layout, curve = LAYOUTS[h.flags & 3], CURVES[(h.flags >> 2) & 3]
     codec = CODEC_OF[h.method]
     pw, ph = h.w // 2, h.h // 2
-    if codec == "packer":
+    if codec in ("packer", "wl53") and layout != "tiled":
         names = {"4pl": ("R", "G1", "G2", "B"), "3pl": ("R", "G", "B")}[layout]
-        dec = pc.packer_dec_factory(pw, ph, h.b)
+        dec = (pc.packer_dec_factory(pw, ph, h.b) if codec == "packer"
+               else pc.wl53_dec_factory(pw, ph))
         planes = {k: dec(p) for k, p in zip(names, payloads)}
     else:
         dec = {"jls": pc.jls_dec, "png": pc.png_dec, "jxl": pc.jxl_dec, "jpeg": pc.jpeg_dec,

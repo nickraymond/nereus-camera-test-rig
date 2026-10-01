@@ -39,7 +39,7 @@ PROCESSED = ("M1", "M1-444", "M1j", "M1-fix", "M2", "M2h")
 CHART_LINES = [  # (key, label) — ≤ 8 lines, fixed order = fixed colour slot
     ("M1|", "M1 JPEG"), ("M1-fix|", "M1-fix JPEG"), ("M1j|", "M1j jpegli"),
     ("M2h|", "M2h HEIC"), ("D|D", "D sqrt+JPEG"), ("D2|D2/{m}", "D2 sqrt+JXL"),
-    ("D2|D2/{m}/red+2", "D2 red+2"), ("L|L", "L linear JXL")]
+    ("W|W", "W wl53 (own C)"), ("L|L", "L linear JXL")]
 SLOTS_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7",
                "#e34948"]
 SLOTS_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9",
@@ -55,7 +55,8 @@ def load_rows(work: Path) -> tuple[list[dict], dict]:
             continue
         d = json.loads(f.read_text())
         rows += d["rows"]
-        meta[d["meta"]["fsid"]] = d["meta"]
+        if not d["meta"].get("extra"):  # later-added methods keep the Phase 1 meta
+            meta[d["meta"]["fsid"]] = d["meta"]
     return rows, meta
 
 

@@ -169,14 +169,24 @@ def main(argv=None) -> int:
         m.window(label, t, t1, bytes=len(blob), bpp=len(blob) * 8 / raw.n_px, peak_rss=peak)
 
     h, w = lin_codes["R"].shape
+    steps = set(knobs.get("steps", ("C", "N", "D", "D2", "W", "C2")))
     pk = lambda b: (lambda s, d, p: [str(bin_), "enc", str(w), str(h), str(b)])  # noqa: E731
-    run_planes("C", rp.RawSpec("C"), lin_codes, raw.white, pk(raw.bits), "pk")
-    run_planes("N/b8", rp.RawSpec("N", "sqrt", 8), n8_codes, 255, pk(8), "pk")
-    for t_name, q in knobs.get("D", {}).items():
+    if "C" in steps:
+        run_planes("C", rp.RawSpec("C"), lin_codes, raw.white, pk(raw.bits), "pk")
+    if "N" in steps:
+        run_planes("N/b8", rp.RawSpec("N", "sqrt", 8), n8_codes, 255, pk(8), "pk")
+    if "W" in steps:  # wl53, the study's own wavelet codec, built here with the Pi's cc
+        from compression_study.methods.plane_codecs import wl53_build
+        wl = wl53_build()
+        for t_name, q in knobs.get("W", {}).items():
+            run_planes(f"W/{t_name}", rp.RawSpec("W", "sqrt", 12), d2_codes, 4095,
+                       lambda s, d, p, q=q: [wl, "enc", str(w), str(h), str(round(q * 16)), "1"],
+                       "pk")
+    for t_name, q in (knobs.get("D", {}) if "D" in steps else {}).items():
         run_planes(f"D/{t_name}", rp.RawSpec("D", "sqrt", 8), d_codes, 255,
                    lambda s, d, p, q=q: [tool("cjpeg"), "-grayscale", "-quality", str(int(q)),
                                          "-optimize", "-outfile", str(d), str(s)], "jpg")
-    for mode in (knobs.get("mode", "modular"), "vardct"):
+    for mode in ((knobs.get("mode", "modular"), "vardct") if "D2" in steps else ()):
         flag = {"modular": ["-m", "1"], "vardct": ["-m", "0"]}[mode]
         for t_name, dist in knobs.get("D2", {}).items():
             for effort in knobs.get("efforts", (7, 3)):
@@ -185,7 +195,7 @@ def main(argv=None) -> int:
                            lambda s, d, p, dist=dist, flag=flag, effort=effort:
                            [tool("cjxl"), str(s), str(d), "-d", f"{dist:.4f}", *flag,
                             "-e", str(effort), "--num_threads=0"], "jxl")
-    for e in (3, 7):
+    for e in ((3, 7) if "C2" in steps else ()):
         run_planes(f"C2/e{e}", rp.RawSpec("C2", effort=e), lin_codes, 1023,
                    lambda s, d, p, e=e: [tool("cjxl"), str(s), str(d), "-d", "0", "-e", str(e),
                                          "--num_threads=0"], "jxl")

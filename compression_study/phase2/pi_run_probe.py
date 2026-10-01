@@ -99,8 +99,9 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--probe", type=Path, default=PROBE)
     ap.add_argument("--tag", default="", help="suffix for the output files")
-    ap.add_argument("--put", type=Path, help="file copied to /flash for the probe (same mpremote "
-                    "session) and removed again before the reset, e.g. a native module .mpy")
+    ap.add_argument("--put", type=Path, nargs="*", default=[],
+                    help="files copied to /flash for the probe (same mpremote session) and "
+                    "removed again before the reset, e.g. native module .mpy files")
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
     port = PORTS[args.board].format(s=args.serial)
@@ -128,7 +129,7 @@ def main(argv=None) -> int:
     time.sleep(5)  # idle baseline
     lines = []
     t0 = time.time()
-    put = ["fs", "cp", str(args.put), f":/flash/{args.put.name}", "+"] if args.put else []
+    put = [a for p in args.put for a in ("fs", "cp", str(p), f":/flash/{p.name}", "+")]
     proc = subprocess.Popen([MPREMOTE, "connect", port, *put, "run", str(args.probe)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
@@ -152,7 +153,7 @@ def main(argv=None) -> int:
     # restore the rig service, then prove it answers
     if args.board == "ae3":
         time.sleep(AE3_SETTLE_S)
-    rm = ["fs", "rm", f":/flash/{args.put.name}", "+"] if args.put else []
+    rm = [a for p in args.put for a in ("fs", "rm", f":/flash/{p.name}", "+")]
     r = mp(port, *rm, "reset")
     step("reset_after", rc=r.returncode, err=r.stderr[-200:], removed=bool(rm))
     time.sleep(8)

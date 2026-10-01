@@ -1,8 +1,12 @@
-import sys, itertools, json
+# ruff: noqa: E501, E702  (archived desk-study script, 2026-10-01)
+import itertools
+import json
+import sys
 from pathlib import Path
+
 from compression_study import mcu_codec_bench as b
 from compression_study.common import run
-import numpy as np
+
 S=Path(sys.argv[1]); data=Path('/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/data/s4_20260930')
 raw, ctx = b.frameset(data, 'n6', 'cool', 'air')
 ms=b.methods(S); base=ms['wl53']

@@ -315,11 +315,16 @@ def context_for(reps: list[Raw], roi: dict, vmin: float):
     return metrics.Context(reps[0], reps, roi, nm, grey_wb(reps[0], roi)), nm
 
 
+EXTRA_SPECS = {"W": rp.RawSpec("W", "sqrt", 12)}  # added after Phase 1 (2026-10-01)
+
+
 def run_frameset(job: dict) -> dict:
     t0 = time.perf_counter()
     data, work = Path(job["data"]), Path(job["work"])
     cam, ill, stop, cond = job["cam"], job["ill"], job["stop"], job["cond"]
     fsid = f"{cam}_{ill}_s{stop:+d}_{cond}"
+    if job.get("only_methods"):
+        return extra_frameset(job, fsid)
     out = work / "rows" / f"{fsid}.json"
     if out.exists() and not job.get("force"):
         return {"fsid": fsid, "skipped": True}
@@ -422,6 +427,52 @@ def _json(o):
     raise TypeError(type(o))
 
 
+def extra_frameset(job: dict, fsid: str) -> dict:
+    """Rows for methods added later (``--only-methods``), in ``rows/<fsid>.<M>.json``, scored
+    against the same context as Phase 1; IMX708 primary sets also get the 50 kB field row."""
+    t0 = time.perf_counter()
+    data, work = Path(job["data"]), Path(job["work"])
+    cam, ill, stop, cond = job["cam"], job["ill"], job["stop"], job["cond"]
+    names = job["only_methods"]
+    out = work / "rows" / f"{fsid}.{'_'.join(names)}.json"
+    if out.exists() and not job.get("force"):
+        return {"fsid": fsid, "skipped": True}
+    roi = rois.load(STUDY / "config" / "card_rois.yaml")[f"{cam}_{ill}"]
+    vmin, dz = CAMERAS[cam][3], CAMERAS[cam][4]
+    air = [load(data, cam, ill, stop, i) for i in range(3)]
+    air_ctx, air_noise = context_for(air, roi, vmin)
+    if cond == "uw":
+        reps = [sim.thin(r, air_noise, seed=1000 + 100 * (stop + 2) + i, dead_zone=dz)
+                for i, r in enumerate(air)]
+        ctx, nm = context_for(reps, roi, 2.0 if dz == 0 else 3.0)
+    else:
+        reps, ctx, nm = air, air_ctx, air_noise
+    raw = reps[0]
+    fs = {"camera": cam, "illuminant": ill, "stop": stop, "condition": cond, "fsid": fsid,
+          "width": raw.shape[1], "height": raw.shape[0], "native_bits": raw.bits}
+    rows = []
+    for name in names:
+        rows += raw_rows(fs, raw, ctx, targets_for(cam, raw, job.get("quick")), EXTRA_SPECS[name],
+                         None)
+        if cam == "imx708" and stop == -1:
+            w, h = FIELD_CROP
+            cxy = np.mean([np.mean(p["quad"], axis=0) for p in roi["patches"].values()], axis=0) * 2
+            x0 = int(np.clip(cxy[0] - w / 2, 0, raw.shape[1] - w)) // 2 * 2
+            y0 = int(np.clip(cxy[1] - h / 2, 0, raw.shape[0] - h)) // 2 * 2
+            crop = [replace(r, mosaic=np.ascontiguousarray(r.mosaic[y0:y0 + h, x0:x0 + w]))
+                    for r in reps]
+            croi = shift_rois(roi, x0 // 2, y0 // 2)
+            cctx = metrics.Context(crop[0], crop, croi, noise.estimate(crop, croi, 2.0),
+                                   grey_wb(crop[0], croi))
+            cfs = {**fs, "fsid": fsid + "_field", "width": w, "height": h}
+            rows += raw_rows(cfs, crop[0], cctx, {"50kB": FIELD_BYTES}, EXTRA_SPECS[name], None)
+    meta = {"fsid": fsid, "seconds": time.perf_counter() - t0, "noise": nm.summary(),
+            "methods": names, "extra": True}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"meta": meta, "rows": rows}, default=_json))
+    return {"fsid": fsid, "rows": len(rows), "seconds": round(meta["seconds"], 1)}
+
+
 # ------------------------------------------------------------------ IMX708 field row
 
 def field_rows(fs, reps, roi, nm, air_ctx, d2_mode) -> list[dict]:
@@ -489,6 +540,8 @@ def main(argv=None) -> int:
     ap.add_argument("--only", default="", help="comma list of cameras")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--only-methods", default="",
+                    help="comma list of methods added later (W): only their rows, primary sets")
     args = ap.parse_args(argv)
     packer.build_c()
     used = [frame_path(args.data, c, i, s, r) for c in CAMERAS for i in ILLUMINANTS
@@ -498,6 +551,13 @@ def main(argv=None) -> int:
     base = {"data": str(args.data), "work": str(args.work), "quick": args.quick,
             "force": args.force}
     jobs = [{**base, **j} for j in jobs_for(args)]
+    if args.only_methods:
+        todo = [{**j, "only_methods": args.only_methods.split(",")} for j in jobs
+                if j["stop"] == -1]
+        with ProcessPoolExecutor(max_workers=args.jobs) as ex:
+            for r in ex.map(run_frameset, todo):
+                print("done", r, flush=True)
+        return 0
     # phase A: choose the D2 JPEG XL mode per camera on (cool, stop −1, air)
     choice = [j for j in jobs if j["ill"] == "cool" and j["stop"] == -1 and j["cond"] == "air"]
     with ProcessPoolExecutor(max_workers=args.jobs) as ex:

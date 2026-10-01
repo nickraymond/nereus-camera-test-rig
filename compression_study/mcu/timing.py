@@ -1,9 +1,18 @@
+# ruff: noqa: E501, E702  (archived desk-study script, 2026-10-01)
 """Encode time + peak RSS for one 640x400 plane (n6 cool G1, T2 knobs), NEON vs no-SIMD builds."""
-import sys, subprocess, time, re, json, tempfile, math
+import json
+import math
+import re
+import subprocess
+import sys
+import tempfile
+import time
 from pathlib import Path
+
 import numpy as np
 from compression_study import mcu_codec_bench as b
 from compression_study.common import split, srgb_eotf
+
 S = Path(sys.argv[1]); data = Path('/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/data/s4_20260930')
 res = json.loads((b.OUT).read_text())
 raw, ctx = b.frameset(data, 'n6', 'cool', 'air')

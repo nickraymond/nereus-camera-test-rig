@@ -144,7 +144,41 @@ def packer_dec_factory(w: int, h: int, b: int):
     return lambda data: packer.decode_plane(data, w, h, b)
 
 
+# ---------------------------------------------------------------- wl53 (own wavelet codec)
+
+WL53_SRC = Path(__file__).with_name("wl53.c")
+WL53_BIN = Path(__file__).resolve().parents[1] / "bin" / "wl53"
+
+
+def wl53_build() -> str:
+    """Compile methods/wl53.c (+ wl53_core.h) with ``cc`` unless the binary is current."""
+    srcs = (WL53_SRC, WL53_SRC.with_name("wl53_core.h"))
+    if WL53_BIN.is_file() and WL53_BIN.stat().st_mtime >= max(p.stat().st_mtime for p in srcs):
+        return str(WL53_BIN)
+    WL53_BIN.parent.mkdir(parents=True, exist_ok=True)
+    run(["cc", "-O2", "-std=c99", "-Wall", "-Wextra", "-o", str(WL53_BIN), str(WL53_SRC)],
+        timeout=TIMEOUT)
+    return str(WL53_BIN)
+
+
+def wl53_enc(codes: np.ndarray, maxval: int, q: float, measure_rss: bool = False):
+    """``q`` = quantizer scale (bigger → fewer bytes); sent as Q16 = round(q * 16)."""
+    if maxval > 4095:
+        raise ValueError("wl53 takes planes of <= 12 bits")
+    h, w = codes.shape
+    return run([wl53_build(), "enc", str(w), str(h), str(max(1, round(q * 16))), "1"],
+               stdin=codes.astype("<u2").tobytes(), timeout=TIMEOUT, measure_rss=measure_rss)
+
+
+def wl53_dec_factory(w: int, h: int):
+    def dec(data: bytes) -> np.ndarray:
+        out, _ = run([wl53_build(), "dec", str(w), str(h)], stdin=data, timeout=TIMEOUT)
+        return np.clip(np.frombuffer(out, "<i2").reshape(h, w), 0, None).astype(np.uint16)
+    return dec
+
+
 # knob direction: +1 = larger knob → more bytes; −1 = larger knob → fewer bytes
-KNOBS = {"jpeg": (+1, 1, 100), "jpegli": (+1, 1, 100), "jxl": (-1, 0.05, 25.0)}
+KNOBS = {"jpeg": (+1, 1, 100), "jpegli": (+1, 1, 100), "jxl": (-1, 0.05, 25.0),
+         "wl53": (-1, 0.5, 20000.0)}
 ENCODERS = {"jpeg": jpeg_enc, "jpegli": jpegli_enc, "jxl": jxl_enc}
 DECODERS = {"jpeg": jpeg_dec, "jpegli": jpegli_dec, "jxl": jxl_dec}
