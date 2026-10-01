@@ -56,6 +56,40 @@ M1-fix (fixed in-air white balance + colour matrix, like a real camera) on red-s
 
 Each board was reset and answered the rig handshake after every session: 0 `error -71`, 0 unexpected reboots (OQ-53 note). The final `scripts/test_openmv_raw.sh` captured and transferred on both boards. Its two brightness-plausibility asserts failed only because the room was dark at 03:00 (mean 4.3 DN at 24 dB).
 
+## Follow-up (Nick approved all three asks, 2026-10-01)
+
+**Truly raw OpenMV (OQ-54, resolved).** Turning off the on-chip denoise (`0x0882 = 0`) and zeroing the six lens-shading gains (0x0820–0x0825) gives raw 8-bit Bayer on both boards, restored by a reset:
+
+- Neighbour noise correlation: 0.27 → 0.04 on the N6, 0.42 → 0.005 on the AE3.
+- Noise and level go flat from centre to corner.
+- The denoise had been removing ~80–85 % of the noise variance, so truly raw frames will cost more bytes.
+
+**D2 on the IMX708 field crop, on the Pi Zero** (1600×900 at ~50 kB):
+
+| | time | memory | stress ΔE | block ΔE |
+|---|---|---|---|---|
+| deployed resized JPEG (Phase 1) | — | — | 0.50 | 1.04 |
+| **D2 modular e5** | **6.4 s** | **31 MB** | **0.11** | **0.38** |
+| D2 modular e7 (same image) | 8.3 s | 31 MB | 0.11 | 0.38 |
+| D2 VarDCT e3 (41 kB) | 1.2 s | 25 MB | 0.23 | 0.75 |
+
+**Lossless packer as compiled C on the MCUs.** `natmod/` builds `nrpack.mpy`, a 1.4 KB MicroPython native module loaded at run time with no firmware rebuild. It is built with the Mac's own clang (plus a small `mpy_ld` wrapper for one ARM relocation). On both boards it is bit-exact and byte-identical to `packer.c`. Live HD frame: **N6 155 ms, AE3 311 ms** (3× the viper port). Two gotchas found on the way:
+- Copy the frame before slow work: the camera keeps refilling its buffers.
+- A Bayer plane's row stride is 2·W.
+
+**Why the OpenMV boards can't run JPEG XL, and what C we'd write.** The firmware has no JPEG XL encoder. libjxl is C++ with threads, SIMD libraries and 100+ MB working sets. The desk study (`mcu/README.md`, scored with this study's metrics; board times estimated, not measured) compared:
+
+| encoder | form | vs D2 (libjxl) | memory | verdict |
+|---|---|---|---|---|
+| **hydrium** (BSD-2, patched) | plain C, ~20 KB code | close in air at 0.8 bpp; **best under water at 0.4 bpp** (1.2 vs D2 1.6); best block colour | ~2.2 MB, flat | N6: port as a native module |
+| **wl53** (our own 5/3 wavelet + Rice coder) | plain C, 2.4 KB encoder | close in air; **best under water at 0.8 bpp** (0.48–0.51 vs 0.34–0.66) | ~0.6 MB | AE3 (4 MB heap): first choice; the N6 backup we fully own |
+| libjxl-tiny (BSD-3) | C++; custom firmware | no better than hydrium | 24 B/px | not worth it |
+| JPEG-LS near-lossless, JPEG 2000, VarDCT e3 | — | worse | — | no |
+
+Feeding the **linear** plane (no sqrt curve) to the JPEG XL-style encoders fixes their under-water red: hydrium 3.2 → 1.2 at 0.4 bpp. That also removes the sqrt table from the board.
+
+**Next:** build wl53 as a native module and run it on both boards (time, heap, decode on the Mac), then hydrium for the N6. Both need a matching decoder in the backend.
+
 ## Recommendation
 
 | Option | Pros | Cons |
