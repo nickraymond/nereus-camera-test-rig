@@ -138,6 +138,38 @@ defaults). They lower noise and file size; all OpenMV results here use them.
 **Next candidate:** hydrium (JPEG XL in plain C) for the N6. The desk study rated it best under
 water at 0.4 bpp (1.19 vs W 2.1), exactly where W is weak. It needs ~2.2 MB, which the N6 has.
 
+## How big a crop fits 50 kB? (Nick, 2026-10-01)
+
+Setup:
+- **Frames and crops:** IMX708, cool and warm lamps, in air and underwater-sim. 16:9 crops centred on the card + chart, from today's 1600×900 field crop to the full 4608×2592 frame.
+- **Budget:** each crop compressed to 50 kB (±5 %) and rebuilt.
+- **Breakdown is judged on:**
+  - card found: all four AprilTags detected on the decoded raw;
+  - colour: mean stress ΔE00 on the patches;
+  - detail: SSIM of the AprilTag region at sensor resolution.
+- **Script:** `crop_sweep.py`. Slider page: https://claude.ai/artifact/WAP5wrS7vRmQ9Lhibs9bb6
+
+Results, worse of the two lamps (colour error / tag SSIM):
+
+| crop | MP (× today) | bits/px | wl53 air | wl53 water | JPEG XL air | JPEG XL water | HEIC air |
+|---|---|---|---|---|---|---|---|
+| 1600×900 | 1.4 (1×) | 0.28 | 0.15 / 0.95 | 0.26 / 0.95 | 0.14 / 0.97 | 0.17 / 0.98 | 0.53 / 0.99 |
+| 2000×1124 | 2.2 (1.6×) | 0.18 | 0.25 / 0.94 | 0.32 / 0.94 | 0.17 / 0.96 | 0.20 / 0.96 | 0.52 / 0.99 |
+| **2400×1350** | **3.2 (2.25×)** | 0.12 | **0.33 / 0.91** | **0.54 / 0.91** | 0.25 / 0.95 | 0.30 / 0.95 | 0.68 / 0.99 |
+| 2800×1576 | 4.4 (3×) | 0.09 | 0.50 / 0.88 | 0.87 / 0.90 | 0.37 / 0.93 | 0.42 / 0.93 | 0.68 / 0.99 |
+| 3200×1800 | 5.8 (4×) | 0.07 | 0.77 / 0.84 | 1.08 / 0.85 | 0.40 / 0.92 | 0.47 / 0.92 | 0.65 / 0.98 |
+| **3600×2024** | **7.3 (5×)** | 0.055 | 0.97 / 0.84 | 1.42 / 0.84 | **0.45 / 0.92** | **0.55 / 0.92** | 0.67 / 0.98 |
+| 4000×2250 | 9.0 (6.3×) | 0.044 | 1.43 / 0.84 | 1.90 / 0.84 | 0.50 / 0.91 | 0.70 / 0.91 | 1.09 / 0.98 |
+| 4608×2592 | 11.9 (8.3×) | 0.033 | 1.65 / 0.84 | 2.29 / 0.85 | 0.56* / 0.90 | 0.81 / 0.89 | 0.72 / 0.98 |
+
+\* JPEG XL can't get below 56 kB on the whole frame in air.
+
+- **Card detection never failed:** 4/4 tags at every size, with every method.
+- **wl53:** stays near today's quality up to **2400×1350 (2.25× the area)**. It breaks down from 3200 px under water and ~3600–4000 px in air: colour error ≥ 1 (noticeable), and tag detail plateaus at SSIM 0.84 (blur).
+- **JPEG XL (Pi only):** holds to **3600×2024 (5×)** at colour error ≤ 0.55.
+- **HEIC:** keeps the sharpest edges but has a 0.4–0.7 colour error at every size.
+- **Half-resolution (2×2-binned) wl53:** helped only at sizes already past breaking point.
+
 ## Recommendation
 
 | Option | Pros | Cons |

@@ -146,8 +146,9 @@ def decode(blob: bytes) -> np.ndarray:
     pw, ph = h.w // 2, h.h // 2
     if codec in ("packer", "wl53") and layout != "tiled":
         names = {"4pl": ("R", "G1", "G2", "B"), "3pl": ("R", "G", "B")}[layout]
-        dec = (pc.packer_dec_factory(pw, ph, h.b) if codec == "packer"
-               else pc.wl53_dec_factory(pw, ph))
+        cw, ch = (pw // 2, ph // 2) if h.flags & 16 else (pw, ph)  # binned planes are half size
+        dec = (pc.packer_dec_factory(cw, ch, h.b) if codec == "packer"
+               else pc.wl53_dec_factory(cw, ch))
         planes = {k: dec(p) for k, p in zip(names, payloads)}
     else:
         dec = {"jls": pc.jls_dec, "png": pc.png_dec, "jxl": pc.jxl_dec, "jpeg": pc.jpeg_dec,
