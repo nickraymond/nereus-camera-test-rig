@@ -4,7 +4,7 @@
 Run ON the rig Pi from the repo root, with the rig venv (needs the serial + color deps):
 
     .venv/bin/python scripts/capture_raw_openmv.py --board n6|ae3 [--serial S] \
-        [--card configs/cards/nereus_v1.yaml] [--target 0.8]
+        [--card configs/cards/nereus_v1.yaml] [--target 0.8] [--stops -1 0 1 --repeat 3]
 
 1. **Meter:** ``capture_raw`` with the autos (the board locks what they chose); find the card
    on that RAW and read its brightest white-patch channel (``color.raw_meter``).
@@ -16,6 +16,9 @@ Run ON the rig Pi from the repo root, with the rig venv (needs the serial + colo
    gain and the locked shot is taken again.
 4. **Verify:** read-back exposure within 5 % and gain within one sensor step (0.75 dB) of the
    request, the card found again, its brightest channel within 15 % of the target and unclipped.
+5. **Series (S4, optional):** ``--stops`` / ``--repeat`` take ``stop_<s>_r<n>.bayer`` at the
+   locked gain and the locked exposure x 2^stop, ``--repeat`` frames each; every one is checked
+   for its exposure / gain read-back (a white clipped at +1 stop is expected, not a failure).
 
 ``reset_board`` runs before every shot (required on the AE3: one camera session per boot on
 OpenMV v5; also gives both boards fresh 3A state). Stop Nick's workbench recipe first
@@ -72,6 +75,9 @@ def main() -> int:
                     help="brightest card channel as a fraction of full scale")
     ap.add_argument("--warmup-ms", type=int, default=2000, help="metering time on the board")
     ap.add_argument("--out", type=Path, default=ROOT / "results" / "raw_openmv")
+    ap.add_argument("--stops", type=float, nargs="+", default=[],
+                    help="after the locked shot: a series at locked exposure x 2^stop")
+    ap.add_argument("--repeat", type=int, default=1, help="frames per --stops entry")
     args = ap.parse_args()
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -113,6 +119,20 @@ def main() -> int:
                         "gain_db": round(MIN_GAIN_DB + deficit_db, 3)}
             side = shot(cam, out / "locked.bayer", settings)
         ref = card_reference(card_levels(read_openmv_bayer(out / "locked.bayer"), card))
+        series = []
+        for stop in args.stops:
+            for n in range(args.repeat):
+                name = f"stop_{stop:+g}_r{n}.bayer"
+                want = {**settings, "exposure_us": round(settings["exposure_us"] * 2 ** stop)}
+                got = shot(cam, out / name, want)
+                ok = (abs(got["exposure_us"] - want["exposure_us"])
+                      <= TOL_EXPOSURE * want["exposure_us"]
+                      and abs(got["gain_db"] - want["gain_db"]) <= TOL_GAIN_DB)
+                series.append({"file": name, "stop": stop, "requested_us": want["exposure_us"],
+                               "exposure_us": got["exposure_us"], "gain_db": got["gain_db"],
+                               "readback_ok": ok})
+                print(f"{'ok  ' if ok else 'FAIL'} {name}: {got['exposure_us']} us "
+                      f"(asked {want['exposure_us']}) {got['gain_db']:.2f} dB")
     except (RuntimeError, ValueError) as exc:
         summary["error"] = str(exc)
         (out / "capture_raw.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -128,9 +148,11 @@ def main() -> int:
         "card_on_target": abs(ref["level"] / args.target - 1) <= TOL_TARGET,
         "card_unclipped": not ref["clipped"],
     }
+    if series:
+        checks["series_readback"] = all(r["readback_ok"] for r in series)
     summary.update({"locked": {"file": "locked.bayer", "requested_us": want_us,
                                "exposure_us": side["exposure_us"], "gain_db": side["gain_db"],
-                               "reference": ref}, "checks": checks,
+                               "reference": ref}, "series": series, "checks": checks,
                     "passed": all(checks.values())})
     (out / "capture_raw.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(f"locked: {side['exposure_us']} us (asked {want_us}) {side['gain_db']:.2f} dB, card "

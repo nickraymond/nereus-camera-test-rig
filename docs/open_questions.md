@@ -278,7 +278,11 @@ Items for Nick are marked **(Nick)**.
   no real pre/post-2018 edition difference. Take the values from Datacolor's file, not from a
   third-party copy (and not from darktable's GPL source, §20 licensing). The SpyderCheckr has no
   AprilTags: place it at a fixed offset from the V1 card, or click its corners with the existing
-  tool. *Original:* *S2b and S4.* Enables
+  tool. **2026-09-30 (S4 session 1):** the chart on the rig is a **Pixel Perfect "24 Standard Color
+  Calibration Chart"** (logo on the chart, ColorChecker Classic layout but different colours), not a
+  SpyderCheckr: it has no published values, so it was used as a second set of surfaces measured through
+  the IMX708's DNG matrix. Absolute truth still needs the SpyderCheckr in frame + Datacolor's values (or
+  an instrument reading, OQ-40). *Original:* *S2b and S4.* Enables
   card-truth Option B (brief §5.3). More valuable than before: the V2 card is water-damaged,
   so a reshoot of it gives an unreliable daylight reference for its light patches. Not a
   blocker for the S2a gate (design values + the TG-7's embedded colour matrix).
@@ -569,6 +573,10 @@ Items for Nick are marked **(Nick)**.
   N6 → board or its power. Check with `scripts/hil_soak.py` + `journalctl -k | grep -c "usb 1-1"`
   per hour (which port is which: `lsusb -t`). Nick's bench rule already says shielded USB cables
   only on the camera boards (ADIN_SPI_OpenMV SPEC, 2026-08-25 N6 drops).
+  **2026-09-30 (S4 session 1, ~20 min of captures after the swap):** 0 spontaneous reboots, 0 USB
+  errors — every re-enumeration was a commanded `reset_board` (N6 21 of 21, AE3 20 of 20). Too short to
+  conclude. **Confound:** the swap also moved hub ports — N6 1-1.1 → 1-1.3, AE3 1-1.3 → 1-1.1 — so a
+  failure now tests cable *and* port. Next: overnight soak as is; if clean, swap only the ports.
 
 ---
 

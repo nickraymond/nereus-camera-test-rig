@@ -20,7 +20,8 @@ Card-metered (S3/S4; needs the rig venv for the card finder):
    With ``--card``, the probe is also a RAW: the card is found on it and stop 0 is scaled so the
    card's brightest channel lands on ``--target`` (scene metering left the V1 card's white at
    0.14 of full scale in the 2026-09-28 run-through); stop 0 is then checked on the card.
-3. **Capture** each stop with ``--raw`` (JPEG + DNG from one exposure) and ``--metadata``.
+3. **Capture** each stop with ``--raw`` (JPEG + DNG from one exposure) and ``--metadata``;
+   ``--repeat N`` takes N frames per stop.
 4. **Verify** every shot: JPEG + DNG exist, the DNG size fits the sensor mode (16-bit), and the
    read-back ExposureTime / AnalogueGain / ColourGains / LensPosition match what was asked.
 
@@ -96,6 +97,8 @@ def close(want, got, key: str) -> bool:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--stops", type=float, nargs="+", default=[-1.0, 0.0, 1.0])
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="frames per stop (S4 noise / repeatability); >1 names them stop_<s>_r<n>")
     ap.add_argument("--gain", type=float, default=1.0, help="locked analogue gain")
     ap.add_argument("--mode", default="4608:2592", help="sensor mode W:H (full res default)")
     ap.add_argument("--meter-ms", type=int, default=2000, help="metering shot settle time")
@@ -165,8 +168,9 @@ def main(argv=None) -> int:
         print(f"-- gain {args.gain:g} not available: the sensor applies {gain:g}; using it")
 
     shots, ok_all = [], True
-    for stop in args.stops:
-        name = f"stop_{stop:+g}"
+    series = [(stop, n) for stop in args.stops for n in range(args.repeat)]
+    for stop, rep in series:
+        name = f"stop_{stop:+g}" + (f"_r{rep}" if args.repeat > 1 else "")
         want = {"ExposureTime": round(exposure_us * 2 ** stop), "AnalogueGain": gain,
                 "ColourGains": [red, blue]}
         if lens is not None:
@@ -184,7 +188,8 @@ def main(argv=None) -> int:
             checks[f"readback_{key}"] = key in got and close(value, got[key], key)
         passed = all(checks.values())
         ok_all &= passed
-        shots.append({"name": name, "stop": stop, "requested": want, "dng_bytes": dng_bytes,
+        shots.append({"name": name, "stop": stop, "repeat": rep, "requested": want,
+                      "dng_bytes": dng_bytes,
                       "readback": {k: got.get(k) for k in (*want, "DigitalGain", "Lux",
                                                             "SensorTemperature")},
                       "checks": checks, "passed": passed})

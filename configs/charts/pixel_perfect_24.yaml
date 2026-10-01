@@ -1,0 +1,24 @@
+# Pixel Perfect "24 Standard Color Calibration Chart" — the 24-patch chart on the nereus002
+# bench (S4, 2026-09-30; identified from its printed logo, not a Datacolor SpyderCheckr).
+#
+# Layout: 4 x 6 patches on a black surround, in the X-Rite ColorChecker Classic order, but the
+# printed colours visibly differ from the ColorChecker (e.g. r1c1 reads purple-brown), so the
+# ColorChecker reference values do not apply. Pixel Perfect publishes no reference values:
+# this chart has NO absolute truth. It is a second, independent set of real surfaces, measured
+# through the S4 reference camera like the card (session config `reference`).
+# Labels are what the patches look like on the IMX708 RAW, for reading reports only.
+
+chart_id: pixel_perfect_24
+grid: {rows: 4, cols: 6}
+truth:
+  source: none_published            # measured per session, see configs/calibration/sessions/
+
+patches:                            # row by row, chart upright (logo bottom right)
+  - [{group: color, label: dark_brown}, {group: color, label: pink}, {group: color, label: sky_blue},
+     {group: color, label: dark_green}, {group: color, label: periwinkle}, {group: color, label: teal}]
+  - [{group: color, label: orange}, {group: color, label: blue}, {group: color, label: crimson},
+     {group: color, label: purple}, {group: color, label: yellow_green}, {group: color, label: orange_yellow}]
+  - [{group: color, label: navy}, {group: color, label: green}, {group: color, label: red},
+     {group: color, label: yellow}, {group: color, label: magenta}, {group: color, label: cyan}]
+  - [{group: grey, label: white}, {group: grey, label: grey_1}, {group: grey, label: grey_2},
+     {group: grey, label: grey_3}, {group: grey, label: grey_4}, {group: grey, label: black}]
