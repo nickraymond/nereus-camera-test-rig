@@ -123,8 +123,9 @@ def verify_probe(dirp: Path, board: str) -> dict:
             "payloads_complete": {k: v["complete"] for k, v in p["payloads"].items()}}
 
 
-def verify_pi(dirp: Path, data: Path) -> dict:
-    """Decode every Pi blob with the Phase 1 decoders and score it against the same frame."""
+def verify_pi(dirp: Path, data: Path, crop: str | None = None) -> dict:
+    """Decode every Pi blob with the Phase 1 decoders and score it against the same frame
+    (or the same mosaic crop, for the field-link run)."""
     from compression_study import metrics
     from compression_study import run_study as R
     from compression_study.methods import raw_planes as rp
@@ -133,6 +134,12 @@ def verify_pi(dirp: Path, data: Path) -> dict:
     bench = json.loads((dirp / "bench.json").read_text())
     roi = load(R.STUDY / "config" / "card_rois.yaml")["imx708_cool"]
     reps = [R.load(data, "imx708", "cool", -1, i) for i in range(3)]
+    if crop:
+        from dataclasses import replace
+        x, y, w, h = (int(v) for v in crop.split(","))
+        reps = [replace(r, mosaic=np.ascontiguousarray(r.mosaic[y:y + h, x:x + w]))
+                for r in reps]
+        roi = R.shift_rois(roi, x // 2, y // 2)
     ctx, _ = R.context_for(reps, roi, R.CAMERAS["imx708"][3])
     raw = reps[0]
     out = {}
@@ -144,7 +151,7 @@ def verify_pi(dirp: Path, data: Path) -> dict:
                        "bit_exact": bool(np.array_equal(rec, raw.mosaic.astype(np.float64))),
                        **{k: m[k] for k in ("red_err_noise", "stress_de_mean", "block_de_med",
                                             "bm_err_R_med")}}
-        if f.stem.startswith("N_"):  # must equal the Mac's own N reconstruction exactly
+        if f.stem.startswith("N_") and not crop:  # must equal the Mac's N reconstruction
             mac = rp.decode(rp.encode(raw, rp.RawSpec("N", "sqrt", 8)))
             out[f.stem]["equals_mac_N"] = bool(np.array_equal(rec, mac))
         print(f.stem, out[f.stem], flush=True)
@@ -154,7 +161,7 @@ def verify_pi(dirp: Path, data: Path) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", type=Path, required=True)
-    ap.add_argument("--boards", default="n6,ae3")
+    ap.add_argument("--boards", default="")
     ap.add_argument("--data", type=Path, help="S4 copy; enables the Pi bench check")
     args = ap.parse_args(argv)
     packer.build_c()
@@ -166,6 +173,11 @@ def main(argv=None) -> int:
     if args.data and (args.dir / "pi" / "bench.json").exists():
         pi = verify_pi(args.dir / "pi", args.data)
         (args.dir / "verify_pi.json").write_text(json.dumps(pi, indent=1, default=str))
+    field = args.dir / "pi_field" / "bench.json"
+    if args.data and field.exists():
+        crop = json.loads(field.read_text())["meta"]["crop"]
+        pf = verify_pi(args.dir / "pi_field", args.data, crop)
+        (args.dir / "verify_pi_field.json").write_text(json.dumps(pf, indent=1, default=str))
     for b, v in out.items():
         print(b, "chunk errors", v["chunk_errors"], "errors", v["errors"])
         print("  packer", v["packer_check"])

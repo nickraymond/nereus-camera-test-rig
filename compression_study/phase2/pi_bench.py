@@ -95,6 +95,7 @@ def main(argv=None) -> int:
     ap.add_argument("--capture", action="store_true")
     ap.add_argument("--repeat", type=int, default=3)
     ap.add_argument("--mem-limit-mb", type=int, default=250)
+    ap.add_argument("--crop", help="x,y,w,h of a mosaic crop (even), e.g. the field 1600x900")
     args = ap.parse_args(argv)
     global MEM_LIMIT
     MEM_LIMIT = args.mem_limit_mb * 2 ** 20
@@ -121,6 +122,9 @@ def main(argv=None) -> int:
     from nereus_camera_test_rig.color.raw_io import read_dng
     t = time.time()
     raw = from_rawframe(read_dng(args.dng), "imx708")
+    if args.crop:
+        x, y, w, h = (int(v) for v in args.crop.split(","))
+        raw.mosaic = np.ascontiguousarray(raw.mosaic[y:y + h, x:x + w])
     m.window("read_dng", t, time.time(), peak_rss_self=resource.getrusage(
         resource.RUSAGE_SELF).ru_maxrss * 1024)
     t = time.time()
@@ -175,7 +179,7 @@ def main(argv=None) -> int:
     for mode in (knobs.get("mode", "modular"), "vardct"):
         flag = {"modular": ["-m", "1"], "vardct": ["-m", "0"]}[mode]
         for t_name, dist in knobs.get("D2", {}).items():
-            for effort in (7, 3):
+            for effort in knobs.get("efforts", (7, 3)):
                 run_planes(f"D2/{mode}/e{effort}/{t_name}",
                            rp.RawSpec("D2", "sqrt", 12, mode=mode), d2_codes, 4095,
                            lambda s, d, p, dist=dist, flag=flag, effort=effort:
@@ -186,7 +190,7 @@ def main(argv=None) -> int:
                    lambda s, d, p, e=e: [tool("cjxl"), str(s), str(d), "-d", "0", "-e", str(e),
                                          "--num_threads=0"], "jxl")
     power.stop_flag = True
-    meta = {"dng": str(args.dng), "frame": list(raw.shape), "knobs": knobs,
+    meta = {"dng": str(args.dng), "frame": list(raw.shape), "crop": args.crop, "knobs": knobs,
             "mem_limit_mb": args.mem_limit_mb,
             "uname": os.uname()._asdict() if hasattr(os.uname(), "_asdict") else str(os.uname()),
             "tools": {t: subprocess.run([tool(t), "--version"], capture_output=True,

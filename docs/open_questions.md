@@ -581,7 +581,7 @@ Items for Nick are marked **(Nick)**.
   reset + handshake each): 0 `error -71`, 0 spontaneous reboots; every re-enumeration was the
   commanded reset. Still too short to conclude.
 
-- **[OPEN] OQ-54 — OpenMV "raw" Bayer is processed on the sensor: lens shading + denoise.**
+- **[RESOLVED 2026-10-01] OQ-54 — OpenMV "raw" Bayer is processed on the sensor: lens shading + denoise.**
   Found by the compression study's fact-check (2026-09-30) and read back on both boards
   (2026-10-01, `openmv/probes/compress_probe_v5.py`, register reads only): DENOISE_EN (PAG7936
   0x0882) = 3 and the lens-shading registers 0x0820–0x0833 populated (20 of 20 non-zero, identical on both boards) in
@@ -593,6 +593,16 @@ Items for Nick are marked **(Nick)**.
   **Needs Nick's OK:** a capture with DENOISE_EN = 0 and the LSC coefficients zeroed (sensor
   register writes, reverted by `reset_board`) to see whether truly raw data is reachable, and
   whether the PAG7936 can deliver 10 bits through any v5 path.
+  **Resolved (Nick approved the writes, 2026-10-01; `openmv/probes/raw_isp_probe_v5.py`, both
+  boards, dark room, restored by reset + handshake):** truly raw 8-bit Bayer IS reachable with
+  `DENOISE_EN` (0x0882) = 0 and the six LSC gains (0x0820–0x0825) = 0, committed with 0x00EB = 0x80.
+  N6: neighbour noise correlation 0.27 → 0.04 (AE3 0.42 → 0.005); temporal noise variance centre
+  0.79 → 4.6 DN² (the on-chip denoise removes ~80–85 % of it); with LSC gains zeroed the noise and
+  the mean go flat from centre to corner (N6 var 4.0–4.6 everywhere, was 0.8 → 2.7). Zero gain = LSC
+  off, as assumed. Consequences: truly raw frames cost more bytes (noise is incompressible) and
+  need vignetting handled downstream (a flat-field, S4); the denoise trades resolution for size.
+  Still open: 10-bit output (no v5 path found). Not in the rig service — a `raw_isp` capture
+  setting would be a separate, reviewed change.
 
 - **[OPEN] OQ-55 — The OpenMV USB console drops ~512-byte blocks under sustained output.**
   `mpremote run` stdout from the N6 lost data in 8 % of 1 KB lines (blocks of ~500 characters
