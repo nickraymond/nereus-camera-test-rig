@@ -20,8 +20,9 @@ void hyd_host_free(void *ptr);
 #define hyd_host_free free
 #endif
 
-/* bytes in use / high-water mark, incl. the 8-byte headers (reset by hyd_mem_reset_peak) */
-static size_t hyd_mem_cur, hyd_mem_hwm;
+/* bytes in use / high-water mark (reset by hyd_mem_reset_peak); not static because MicroPython's
+ * native-module linker (mpy_ld) only places global bss variables */
+size_t hyd_mem_cur, hyd_mem_hwm;
 
 #define HDR 8
 

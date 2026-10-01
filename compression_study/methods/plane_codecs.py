@@ -1,4 +1,4 @@
-"""Single-plane (grayscale) codecs for the raw methods C, C-ref, C2, N, D, D-j, D2.
+"""Single-plane (grayscale) codecs for the raw methods C, C-ref, C2, N, D, D-j, D2, W, H.
 
 Each codec is a pair ``enc(codes, maxval, knob) -> bytes`` / ``dec(bytes) -> codes`` on a
 2-D integer array whose values are ≤ ``maxval``. External tools run single-threaded on PNM
@@ -177,8 +177,74 @@ def wl53_dec_factory(w: int, h: int):
     return dec
 
 
+# ---------------------------------------------------------------- hydrium (JPEG XL in plain C)
+
+HYD_SRC = Path(__file__).with_name("hyd.c")
+HYD_BIN = Path(__file__).resolve().parents[1] / "bin" / "hyd"
+HYD_LF = 4  # LF step divisor (desk-study variant hyd-256-lf4-lin)
+
+
+def hyd_build() -> str:
+    """Compile methods/hyd.c + the vendored hydrium with ``cc`` unless the binary is current.
+    -ffp-contract=off: no fused multiply-add, so the floats (and bytes) match the board."""
+    here = HYD_SRC.parent
+    srcs = [HYD_SRC, here / "hyd_plane.h", *sorted((here / "hydrium").rglob("*.[ch]"))]
+    if HYD_BIN.is_file() and HYD_BIN.stat().st_mtime >= max(p.stat().st_mtime for p in srcs):
+        return str(HYD_BIN)
+    HYD_BIN.parent.mkdir(parents=True, exist_ok=True)
+    run(["cc", "-O2", "-std=c11", "-ffp-contract=off", "-w", f"-I{here / 'hydrium'}",
+         f"-I{here}", "-o", str(HYD_BIN), str(HYD_SRC),
+         *[str(p) for p in sorted((here / "hydrium").glob("*.c"))]], timeout=TIMEOUT)
+    return str(HYD_BIN)
+
+
+def hyd_params(k: float) -> tuple[int, int]:
+    """Continuous knob k = HF multiplier × globalScale / 32768 → (HF multiplier, globalScale);
+    bigger k → more bytes. The board probe uses the same mapping."""
+    hf = max(1, int(np.floor(k)))
+    gs = int(min(73728, max(1, int(32768 * k / hf + 0.5))))
+    return hf, gs
+
+
+def hyd_enc(codes: np.ndarray, nlut: int, black: int, white: int, hf: int, gs: int,
+            lf: int = HYD_LF, measure_rss: bool = False):
+    """One plane of integer sensor counts as linear light (code − black) / (white − black)."""
+    h, w = codes.shape
+    return run([hyd_build(), "enc", str(w), str(h), str(nlut), str(black), str(white), str(hf),
+                str(gs), str(lf)], stdin=codes.astype("<u2").tobytes(), timeout=TIMEOUT,
+               measure_rss=measure_rss)
+
+
+def read_pfm(path: Path) -> np.ndarray:
+    """float64 (H, W, C) from a PFM (rows bottom-up on disk)."""
+    data = Path(path).read_bytes()
+    lines, pos = [], 0
+    while len(lines) < 3:
+        end = data.index(b"\n", pos)
+        lines.append(data[pos:end].strip())
+        pos = end + 1
+    w, h = (int(x) for x in lines[1].split())
+    ch = 3 if lines[0] == b"PF" else 1
+    dt = "<f4" if float(lines[2]) < 0 else ">f4"
+    arr = np.frombuffer(data, dtype=dt, count=w * h * ch, offset=pos).reshape(h, w, ch)
+    return arr[::-1].astype(np.float64)
+
+
+def hyd_dec(data: bytes) -> np.ndarray:
+    """Linear light (≈ (code − black) / (white − black)): djxl's float output is sRGB-encoded
+    (hydrium tags the image sRGB); undo it, mirrored for the small negatives near black."""
+    with _tmp() as d:
+        src, dst = Path(d) / "in.jxl", Path(d) / "out.pfm"
+        src.write_bytes(data)
+        run([tool("djxl"), str(src), str(dst), "--num_threads=0"], timeout=TIMEOUT)
+        v = read_pfm(dst).mean(axis=2)
+    a = np.abs(v)
+    lin = np.where(a <= 0.04045, a / 12.92, np.power((a + 0.055) / 1.055, 2.4))
+    return np.sign(v) * lin
+
+
 # knob direction: +1 = larger knob → more bytes; −1 = larger knob → fewer bytes
 KNOBS = {"jpeg": (+1, 1, 100), "jpegli": (+1, 1, 100), "jxl": (-1, 0.05, 25.0),
-         "wl53": (-1, 0.5, 20000.0)}
+         "wl53": (-1, 0.5, 20000.0), "hyd": (+1, 0.05, 40.0)}
 ENCODERS = {"jpeg": jpeg_enc, "jpegli": jpegli_enc, "jxl": jxl_enc}
 DECODERS = {"jpeg": jpeg_dec, "jpegli": jpegli_dec, "jxl": jxl_dec}

@@ -99,6 +99,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--probe", type=Path, default=PROBE)
     ap.add_argument("--tag", default="", help="suffix for the output files")
+    ap.add_argument("--timeout", type=float, default=400, help="host timeout for the probe, s")
     ap.add_argument("--put", type=Path, nargs="*", default=[],
                     help="files copied to /flash for the probe (same mpremote session) and "
                     "removed again before the reset, e.g. native module .mpy files")
@@ -135,9 +136,9 @@ def main(argv=None) -> int:
     try:
         for line in proc.stdout:  # type: ignore[union-attr]
             lines.append((time.time(), line.rstrip("\n")))
-            if time.time() - t0 > 400:
+            if time.time() - t0 > args.timeout:
                 proc.kill()
-                lines.append((time.time(), "#E host timeout 400 s"))
+                lines.append((time.time(), f"#E host timeout {args.timeout:.0f} s"))
                 break
         proc.wait(timeout=30)
     except subprocess.TimeoutExpired:

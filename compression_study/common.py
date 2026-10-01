@@ -154,7 +154,7 @@ def inverse(codes: np.ndarray, curve: str, black: int, white: int, b: int,
 MAGIC = b"NR"
 METHOD_IDS = {name: i for i, name in enumerate((
     "M1", "M1-444", "M1j", "M1-fix", "M2", "M2h", "C", "C-jls", "C-png", "C2", "N",
-    "D", "D-j", "D2", "L", "D-lin", "D2-lin", "W"), start=1)}
+    "D", "D-j", "D2", "L", "D-lin", "D2-lin", "W", "H"), start=1)}
 METHOD_NAMES = {v: k for k, v in METHOD_IDS.items()}
 
 
