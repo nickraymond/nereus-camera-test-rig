@@ -14,12 +14,15 @@
 #include "memory.h"
 
 HYDRIUM_EXPORT HYDEncoder *hyd_encoder_new(void) {
-    HYDEncoder *ret = calloc(1, sizeof(HYDEncoder));
+    HYDEncoder *ret = hyd_mem_calloc(1, sizeof(HYDEncoder));
     if (!ret)
         return NULL;
 
     ret->last_preset = -1;
     ret->last_lfid = -1;
+    ret->study_hf_mult = 5;
+    ret->study_gs = 32768;
+    ret->study_lf_f = 1;
 
     return ret;
 }
@@ -39,6 +42,7 @@ HYDRIUM_EXPORT HYDStatusCode hyd_encoder_destroy(HYDEncoder *encoder) {
     hyd_freep(&encoder->input_lut16);
     hyd_freep(&encoder->bias_cbrtf_lut);
     hyd_freep(&encoder->icc_data);
+    hyd_freep(&encoder->grey_xyb_lut);
     if (encoder->hf_coeffs) {
         for (size_t i = 0; i < encoder->num_hf_coeff_bw; i++)
             hyd_freep(&encoder->hf_coeffs[i].buffer);
@@ -137,7 +141,11 @@ HYDRIUM_EXPORT HYDStatusCode hyd_provide_output_buffer(HYDEncoder *encoder, uint
         memcpy(encoder->out, encoder->writer.overflow, encoder->writer.overflow_pos);
         encoder->out_pos = encoder->writer.overflow_pos;
     }
-    return hyd_init_bit_writer(&encoder->writer, buffer, buffer_len, encoder->writer.cache, encoder->writer.cache_bits);
+    HYDStatusCode ret = hyd_init_bit_writer(&encoder->writer, buffer, buffer_len, encoder->writer.cache,
+        encoder->writer.cache_bits);
+    /* study patch: never realloc() the caller's buffer when it fills (report NEED_MORE_OUTPUT) */
+    encoder->writer.realloc_func = NULL;
+    return ret;
 }
 
 HYDRIUM_EXPORT HYDStatusCode hyd_release_output_buffer(HYDEncoder *encoder, size_t *written) {
@@ -192,6 +200,51 @@ HYDRIUM_EXPORT HYDStatusCode hyd_send_tile(HYDEncoder *encoder, const void *cons
     size_t lfid = encoder->one_frame ? tile_y * encoder->lfg_count_x + tile_x : 0;
 
     ret = hyd_populate_xyb_buffer(encoder, buffer, row_stride, pixel_stride, lfid, sample_fmt);
+    if (ret < HYD_ERROR_START)
+        return ret;
+
+    if (encoder->one_frame)
+        encoder->lfg_perm[encoder->tiles_sent] = lfid;
+
+    ret = hyd_encode_xyb_buffer(encoder, tile_x, tile_y);
+    if (ret < HYD_ERROR_START)
+        return ret;
+
+    if (encoder->one_frame)
+        encoder->tiles_sent++;
+
+    return HYD_OK;
+}
+
+HYDRIUM_EXPORT HYDStatusCode hyd_study_set_params(HYDEncoder *encoder, uint32_t hf_mult, uint32_t global_scale,
+        uint32_t lf_divisor) {
+    if (hf_mult < 1 || hf_mult > 16 || global_scale < 1 || global_scale > 73728 || lf_divisor < 1
+            || lf_divisor > 16) {
+        encoder->error = "study params out of range (hf_mult 1..16, global_scale 1..73728, lf 1..16)";
+        return HYD_API_ERROR;
+    }
+    encoder->study_hf_mult = hf_mult;
+    encoder->study_gs = global_scale;
+    encoder->study_lf_f = lf_divisor;
+    return HYD_OK;
+}
+
+HYDRIUM_EXPORT HYDStatusCode hyd_study_send_grey_tile(HYDEncoder *encoder, const void *buffer, int sample_bytes,
+    uint32_t tile_x, uint32_t tile_y, ptrdiff_t row_stride, ptrdiff_t pixel_stride, int is_last) {
+    HYDStatusCode ret;
+
+    if (!encoder->grey_xyb_lut || (sample_bytes != 1 && sample_bytes != 2)) {
+        encoder->error = "grey tile needs hyd_study_grey_lut and 1- or 2-byte samples";
+        return HYD_API_ERROR;
+    }
+
+    ret = hyd_send_tile_pre(encoder, tile_x, tile_y, is_last);
+    if (ret < HYD_ERROR_START)
+        return ret;
+
+    size_t lfid = encoder->one_frame ? tile_y * encoder->lfg_count_x + tile_x : 0;
+
+    ret = hyd_populate_xyb_grey(encoder, buffer, sample_bytes, row_stride, pixel_stride, lfid);
     if (ret < HYD_ERROR_START)
         return ret;
 
@@ -267,7 +320,7 @@ HYDRIUM_EXPORT HYDStatusCode hyd_set_suggested_icc_profile(HYDEncoder *encoder,
     /* three varints and two bytes */
     /* varint caps out at 10 bytes for ~0ul */
     size_t mangled_buffer_size = icc_size + 10 + 10 + 2 + 10;
-    uint8_t *mangled_icc = malloc(mangled_buffer_size);
+    uint8_t *mangled_icc = hyd_mem_malloc(mangled_buffer_size);
     if (!mangled_icc)
         return HYD_NOMEM;
     HYDBitWriter bws, *bw = &bws;

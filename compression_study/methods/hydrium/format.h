@@ -17,4 +17,8 @@ HYDStatusCode hyd_populate_xyb_buffer(HYDEncoder *encoder, const void *const buf
     ptrdiff_t row_stride, ptrdiff_t pixel_stride, size_t lf_group_id,
     HYDSampleFormat sample_fmt);
 
+/* study patch: one grey plane (R = G = B) through the encoder's grey XYB table */
+HYDStatusCode hyd_populate_xyb_grey(HYDEncoder *encoder, const void *buffer, int sample_bytes,
+    ptrdiff_t row_stride, ptrdiff_t pixel_stride, size_t lf_group_id);
+
 #endif /* HYD_FORMAT_H_ */

@@ -2,14 +2,25 @@
 #define HYDRIUM_MEMORY_H_
 
 #include <stddef.h>
-#include <stdlib.h>
+#include <stdint.h>
 
 #include "libhydrium/libhydrium.h"
+
+/*
+ * Study patch: every allocation goes through these four (memory.c). They keep an 8-byte size
+ * header so the current and peak bytes in use can be reported (hyd_mem_peak). With
+ * HYD_HOST_ALLOC defined (the OpenMV native module) the bytes come from hyd_host_realloc /
+ * hyd_host_free, supplied by the caller (MicroPython's heap); otherwise from libc.
+ */
+void *hyd_mem_malloc(size_t n);
+void *hyd_mem_calloc(size_t nmemb, size_t size);
+void *hyd_mem_realloc(void *ptr, size_t n);
+void hyd_mem_free(void *ptr);
 
 static inline void hyd_freep(void *ptrp) {
     void **ptrv = ptrp;
     if (ptrv && *ptrv) {
-        free(*ptrv);
+        hyd_mem_free(*ptrv);
         *ptrv = NULL;
     }
 }

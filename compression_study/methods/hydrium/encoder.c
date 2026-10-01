@@ -92,7 +92,15 @@ static const int32_t hf_quant_weights[3][64] = {
     },
 };
 
-static const uint16_t hf_mult = 5;
+/*
+ * Study patch: the HF multiplier (stock: a constant 5), the quantizer globalScale (stock: 32768;
+ * scales the LF and HF steps by 32768 / gs) and an LF step divisor F (LF step / F, rounded to
+ * nearest instead of truncated when F > 1) are per-encoder knobs (hyd_study_set_params), so the
+ * rate can be searched. The stream stays standard JPEG XL.
+ */
+static inline int32_t study_round(const float x) {
+    return (int32_t)(x >= 0.f ? x + 0.5f : x - 0.5f);
+}
 static const uint64_t zero64 = 0;
 static const void *const zerobuf = &zero64;
 static const U32Table size_header_u32 = {
@@ -297,7 +305,7 @@ static HYDStatusCode get_lehmer_sequence(HYDEncoder *encoder, size_t *toc_size, 
 
     size_t *lehmer;
     if (lehmer_init < *toc_size) {
-        lehmer = calloc(*toc_size, sizeof(size_t));
+        lehmer = hyd_mem_calloc(*toc_size, sizeof(size_t));
         if (!lehmer) {
             ret = HYD_NOMEM;
             goto end;
@@ -555,10 +563,10 @@ static HYDStatusCode write_lf_global(HYDEncoder *encoder) {
     // LF channel quantization all_default
     hyd_write_bool(bw, 1);
 
-    // quantizer globalScale = 32768
-    hyd_write_u32(bw, &global_scale_table, 32768);
-    // quantizer quantLF = 4
-    hyd_write_u32(bw, &quant_lf_table, 4);
+    // quantizer globalScale (stock 32768)
+    hyd_write_u32(bw, &global_scale_table, encoder->study_gs);
+    // quantizer quantLF (stock 4)
+    hyd_write_u32(bw, &quant_lf_table, 4 * encoder->study_lf_f);
     // HF Block Context all_default
     hyd_write_bool(bw, 0);
     // lf and qf thresholds
@@ -613,6 +621,8 @@ static HYDStatusCode write_lf_group(HYDEncoder *encoder, HYDLFGroup *lf_group) {
     if (ret < HYD_ERROR_START)
         return ret;
     const float shift[3] = {8192.f, 1024.f, 512.f};
+    const uint32_t lf_f = encoder->study_lf_f;
+    const float gsf = encoder->study_gs / 32768.f;
     for (int i = 0; i < 3; i++) {
         const int c = i < 2 ? 1 - i : i;
         for (size_t vy = 0; vy < lf_group->varblock_height; vy++) {
@@ -621,7 +631,8 @@ static HYDStatusCode write_lf_group(HYDEncoder *encoder, HYDLFGroup *lf_group) {
             for (size_t vx = 0; vx < lf_group->varblock_width; vx++) {
                 const size_t x = vx << 3;
                 XYBEntry *xyb = &encoder->xyb[row + x];
-                xyb->xyb[c].i = xyb->xyb[c].f * shift[c];
+                xyb->xyb[c].i = lf_f > 1 ? study_round(xyb->xyb[c].f * shift[c] * lf_f * gsf)
+                    : (int32_t)(xyb->xyb[c].f * shift[c] * gsf);
                 const int32_t w = x > 0 ? xyb[-8].xyb[c].i : y > 0 ? xyb[-(lf_group->stride << 3)].xyb[c].i : 0;
                 const int32_t n = y > 0 ? xyb[-(lf_group->stride << 3)].xyb[c].i : w;
                 const int32_t nw = x > 0 && y > 0 ? xyb[-((lf_group->stride + 1) << 3)].xyb[c].i : w;
@@ -660,7 +671,7 @@ static HYDStatusCode write_lf_group(HYDEncoder *encoder, HYDLFGroup *lf_group) {
     for (size_t i = 0; i < num_z_pre; i++)
         hyd_entropy_send_symbol(&stream, 0, 0);
     for (size_t i = 0; i < nb_blocks; i++)
-        hyd_entropy_send_symbol(&stream, 0, (hf_mult - 1) * 2);
+        hyd_entropy_send_symbol(&stream, 0, (encoder->study_hf_mult - 1) * 2);
     for (size_t i = 0; i < nb_blocks; i++)
         hyd_entropy_send_symbol(&stream, 0, 0);
     ret = hyd_prefix_finalize_stream(&stream, bw);
@@ -816,7 +827,7 @@ HYDStatusCode hyd_encode_xyb_buffer(HYDEncoder *encoder, uint32_t tile_x, uint32
     encoder->num_hf_coeff_bw = num_frame_groups = frame_groups_x * frame_groups_y;
 
     const size_t num_groups = ((lf_group->width + 255) >> 8) * ((lf_group->height + 255) >> 8);
-    non_zeroes = calloc(num_groups << 10, sizeof(*non_zeroes));
+    non_zeroes = hyd_mem_calloc(num_groups << 10, sizeof(*non_zeroes));
     if (!non_zeroes) {
         ret = HYD_NOMEM;
         goto end;
@@ -825,6 +836,8 @@ HYDStatusCode hyd_encode_xyb_buffer(HYDEncoder *encoder, uint32_t tile_x, uint32
     size_t non_zero_count = 0;
     size_t gindex = 0;
     const size_t lf_pad_w = lf_group->varblock_width << 3;
+    const uint32_t hf_mult = encoder->study_hf_mult;
+    const float gsf = encoder->study_gs / 32768.f;
     for (size_t gy = 0; gy < lf_group->tile_count_y; gy++) {
         if (gy << 5 >= lf_group->varblock_height)
             break;
@@ -847,7 +860,7 @@ HYDStatusCode hyd_encode_xyb_buffer(HYDEncoder *encoder, uint32_t tile_x, uint32
                             const size_t py = vy + natural_order[j].y;
                             const size_t px = vx + natural_order[j].x;
                             XYBEntry *xyb = &encoder->xyb[py * lf_pad_w + px];
-                            const int32_t q = (int32_t)(xyb->xyb[i].f * hf_quant_weights[i][j] * hf_mult);
+                            const int32_t q = (int32_t)(xyb->xyb[i].f * hf_quant_weights[i][j] * hf_mult * gsf);
                             if (hyd_abs(q) < 2) {
                                 xyb->xyb[i].i = 0;
                             } else {
@@ -896,7 +909,7 @@ HYDStatusCode hyd_encode_xyb_buffer(HYDEncoder *encoder, uint32_t tile_x, uint32
     HYDEntropyStream *hf_stream = &encoder->hf_stream;
     if (!encoder->tiles_sent) {
         const size_t num_syms = 1 << 12;
-        hf_cluster_map = malloc(cluster_map_size);
+        hf_cluster_map = hyd_mem_malloc(cluster_map_size);
         if (!hf_cluster_map) {
             ret = HYD_NOMEM;
             goto end;
@@ -957,7 +970,7 @@ HYDStatusCode hyd_encode_xyb_buffer(HYDEncoder *encoder, uint32_t tile_x, uint32
     if (ret < HYD_ERROR_START)
         goto end;
     if (!encoder->hf_stream_barrier)
-        encoder->hf_stream_barrier = calloc(num_frame_groups, sizeof(*encoder->hf_stream_barrier));
+        encoder->hf_stream_barrier = hyd_mem_calloc(num_frame_groups, sizeof(*encoder->hf_stream_barrier));
     if (!encoder->hf_stream_barrier) {
         ret = HYD_NOMEM;
         goto end;

@@ -313,4 +313,28 @@ HYDRIUM_EXPORT const char *hyd_error_message_get(HYDEncoder *encoder);
 HYDRIUM_EXPORT HYDStatusCode hyd_set_suggested_icc_profile(HYDEncoder *encoder,
     const uint8_t *icc_data, size_t icc_size);
 
+/*
+ * Study patches (compression study, not upstream API).
+ */
+
+/**
+ * @brief Rate knobs: HF multiplier (stock 5), quantizer globalScale (stock 32768; LF and HF steps
+ * scale by 32768 / global_scale), LF step divisor (stock 1; > 1 also rounds LF to nearest).
+ */
+HYDRIUM_EXPORT HYDStatusCode hyd_study_set_params(HYDEncoder *encoder, uint32_t hf_mult, uint32_t global_scale,
+    uint32_t lf_divisor);
+
+/**
+ * @brief Table for grey input: integer code i (0 <= i < size) is linear light
+ * (i - black) / (white - black), replicated to R = G = B. Set linear_light = 1 in the metadata.
+ */
+HYDRIUM_EXPORT HYDStatusCode hyd_study_grey_lut(HYDEncoder *encoder, uint32_t size, int32_t black, int32_t white);
+
+/**
+ * @brief Like hyd_send_tile for one grey plane of 1-byte or 2-byte (native-endian) codes;
+ * strides are in samples. Codes >= the table size are clamped to its last entry.
+ */
+HYDRIUM_EXPORT HYDStatusCode hyd_study_send_grey_tile(HYDEncoder *encoder, const void *buffer, int sample_bytes,
+    uint32_t tile_x, uint32_t tile_y, ptrdiff_t row_stride, ptrdiff_t pixel_stride, int is_last);
+
 #endif /* HYDRIUM_H_ */

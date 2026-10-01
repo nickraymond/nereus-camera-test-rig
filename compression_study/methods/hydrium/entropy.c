@@ -79,12 +79,12 @@ static HYDStatusCode write_ans_u8(HYDBitWriter *bw, uint8_t b) {
 
 void hyd_entropy_stream_destroy(HYDEntropyStream *stream) {
     for (size_t i = 0; i < stream->num_clusters; i++)
-        free(stream->frequencies[i]);
+        hyd_mem_free(stream->frequencies[i]);
     hyd_free_arraybuffer_p(stream->cluster_map_array, &stream->cluster_map);
-    free(stream->symbols);
+    hyd_mem_free(stream->symbols);
     for (size_t i = 0; i < stream->num_clusters; i++)
         hyd_freep(&stream->alias_table[i]);
-    free(stream->vlc_table[0]);
+    hyd_mem_free(stream->vlc_table[0]);
     memset(stream, 0, sizeof(*stream));
 }
 
@@ -264,6 +264,30 @@ static HYDStatusCode generate_alias_mapping(HYDEntropyStream *stream, size_t clu
     return HYD_OK;
 }
 
+/*
+ * Study patch: (f << 12) / total without a 64-bit division (Cortex-M has no instruction for it
+ * and the OpenMV native module links no libgcc). Exact: 32-bit when f << 12 fits, else long
+ * division (f <= total, so the quotient is <= 4096).
+ */
+static uint32_t scale_freq_12(uint64_t f, uint64_t total) {
+    if (f < (UINT64_C(1) << 20) && total <= UINT32_MAX)
+        return ((uint32_t)f << 12) / (uint32_t)total;
+    uint64_t num = f << 12, q = 0, bit = 1, d = total;
+    while (d < num && !(d >> 63)) {
+        d <<= 1;
+        bit <<= 1;
+    }
+    while (bit) {
+        if (num >= d) {
+            num -= d;
+            q |= bit;
+        }
+        d >>= 1;
+        bit >>= 1;
+    }
+    return (uint32_t)q;
+}
+
 static int calculate_ans_frequencies(uint32_t *frequencies, uint32_t alphabet_size) {
     size_t total = 0;
     for (size_t k = 0; k < alphabet_size; k++)
@@ -275,7 +299,7 @@ static int calculate_ans_frequencies(uint32_t *frequencies, uint32_t alphabet_si
     for (size_t k = 0; k < alphabet_size; k++) {
         if (!frequencies[k])
             continue;
-        frequencies[k] = (((uint64_t)frequencies[k] << 12) / total) & 0xFFFFu;
+        frequencies[k] = scale_freq_12(frequencies[k], total) & 0xFFFFu;
         if (!frequencies[k])
             frequencies[k] = 1;
         new_total += frequencies[k];
@@ -386,7 +410,7 @@ HYDStatusCode hyd_entropy_init_stream(HYDEntropyStream *stream, size_t init_symb
     }
     stream->num_dists = num_dists;
     stream->modular = modular;
-    stream->symbols = calloc(init_symbol_count, sizeof(*stream->symbols));
+    stream->symbols = hyd_mem_calloc(init_symbol_count, sizeof(*stream->symbols));
     if (!stream->symbols) {
         ret = HYD_NOMEM;
         goto fail;
@@ -592,7 +616,7 @@ static int32_t collect(FrequencyEntry *entry) {
 static HYDStatusCode build_huffman_tree(HYDEntropyStream *stream, const uint32_t *frequencies,
                                         uint32_t *lengths, uint32_t alphabet_size, int32_t max_depth) {
     HYDStatusCode ret = HYD_OK;
-    FrequencyEntry *tree = calloc((2 * alphabet_size - 1), sizeof(*tree));
+    FrequencyEntry *tree = hyd_mem_calloc((2 * alphabet_size - 1), sizeof(*tree));
     if (!tree) {
         ret = HYD_NOMEM;
         goto end;
@@ -657,7 +681,7 @@ static HYDStatusCode build_huffman_tree(HYDEntropyStream *stream, const uint32_t
     }
 
 end:
-    free(tree);
+    hyd_mem_free(tree);
     return ret;
 }
 
@@ -667,7 +691,7 @@ static HYDStatusCode build_prefix_table(HYDEntropyStream *stream, HYDVLCElement 
     uint32_t *counts = NULL;
     HYDVLCElement *pre_table = NULL;
     size_t csize = hyd_max(alphabet_size + 1, 16);
-    counts = calloc(csize, sizeof(uint32_t));
+    counts = hyd_mem_calloc(csize, sizeof(uint32_t));
     pre_table = hyd_malloc_array(alphabet_size, sizeof(HYDVLCElement));
     if (!counts || !pre_table) {
         ret = HYD_NOMEM;
@@ -822,7 +846,7 @@ HYDStatusCode hyd_prefix_write_stream_header(HYDEntropyStream *stream, HYDBitWri
     for (size_t i = 0; i < stream->num_clusters; i++)
         total_alphabet_size += stream->alphabet_sizes[i];
 
-    vlc_table = calloc(total_alphabet_size, sizeof(HYDVLCElement));
+    vlc_table = hyd_mem_calloc(total_alphabet_size, sizeof(HYDVLCElement));
     if (!vlc_table) {
         ret = HYD_NOMEM;
         goto fail;
@@ -926,13 +950,13 @@ HYDStatusCode hyd_prefix_write_stream_header(HYDEntropyStream *stream, HYDBitWri
             goto fail;
     }
 
-    free(lengths);
+    hyd_mem_free(lengths);
     stream->wrote_stream_header = 1;
     return bw->overflow_state;
 
 fail:
-    free(lengths);
-    free(vlc_table);
+    hyd_mem_free(lengths);
+    hyd_mem_free(vlc_table);
     /* stream->vlc_table[0] might == vlc_table */
     /* but zero it anyway so we don't double free below */
     stream->vlc_table[0] = NULL;
@@ -960,7 +984,7 @@ HYDStatusCode hyd_ans_prepare_frequencies(HYDEntropyStream *stream, size_t clust
             ret = HYD_INTERNAL_ERROR;
             goto fail;
         }
-        stream->alias_table[i] = calloc(stream->alphabet_sizes[i], sizeof(HYDAliasEntry));
+        stream->alias_table[i] = hyd_mem_calloc(stream->alphabet_sizes[i], sizeof(HYDAliasEntry));
         if (!stream->alias_table[i]) {
             ret = HYD_NOMEM;
             goto fail;
@@ -1035,7 +1059,7 @@ end:
 
 static HYDStatusCode append_state_flush(StateFlushChain **flushes, uint16_t diff, uint16_t value) {
     if ((*flushes)->pos == SF_CHAIN_CAPACITY) {
-        StateFlushChain *chain = malloc(sizeof(*chain));
+        StateFlushChain *chain = hyd_mem_malloc(sizeof(*chain));
         if (!chain)
             return HYD_NOMEM;
         chain->pos = 0;
@@ -1056,7 +1080,7 @@ static StateFlush *pop_state_flush(StateFlushChain **flushes) {
     StateFlushChain *prev_chain = (*flushes)->prev_chain;
     if (!prev_chain)
         return NULL;
-    free(*flushes);
+    hyd_mem_free(*flushes);
     *flushes = prev_chain;
     return pop_state_flush(flushes);
 }
@@ -1065,7 +1089,7 @@ HYDStatusCode hyd_ans_write_stream_symbols(HYDEntropyStream *stream, HYDBitWrite
         size_t symbol_start, size_t symbol_count)
 {
     HYDStatusCode ret = HYD_OK;
-    StateFlushChain *flushes = calloc(1, sizeof(*flushes));
+    StateFlushChain *flushes = hyd_mem_calloc(1, sizeof(*flushes));
     if (!flushes) {
         ret = HYD_NOMEM;
         goto end;
@@ -1151,10 +1175,10 @@ HYDStatusCode hyd_ans_write_stream_symbols(HYDEntropyStream *stream, HYDBitWrite
 end:
     while (flushes && flushes->prev_chain) {
         StateFlushChain *prev = flushes->prev_chain;
-        free(flushes);
+        hyd_mem_free(flushes);
         flushes = prev;
     }
-    free(flushes);
+    hyd_mem_free(flushes);
     return ret;
 }
 

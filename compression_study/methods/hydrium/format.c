@@ -139,6 +139,80 @@ static inline HYDStatusCode process_lut_float(HYDEncoder *encoder, const float *
     return HYD_OK;
 }
 
+/*
+ * Study patch: a grey plane of integer sensor codes, as linear light. The table maps each code
+ * i < size to XYB once: lin = (i - black) / (white - black), floored at -0.0037 (the cube-root
+ * approximation in bias_func needs x > -0.00379), then the float path's rgb_to_xyb_f32 with
+ * R = G = B = lin. Per pixel this is a table lookup, so the board does no cube roots, and the
+ * values are exactly the float path's (same IEEE single-precision operations).
+ */
+HYDRIUM_EXPORT HYDStatusCode hyd_study_grey_lut(HYDEncoder *encoder, uint32_t size, int32_t black, int32_t white) {
+    if (size < 2 || size > 65536 || white <= black) {
+        encoder->error = "grey table: need 2 <= size <= 65536 and white > black";
+        return HYD_API_ERROR;
+    }
+    hyd_freep(&encoder->grey_xyb_lut);
+    encoder->grey_xyb_lut = hyd_malloc_array(size, 3 * sizeof(float));
+    if (!encoder->grey_xyb_lut)
+        return HYD_NOMEM;
+    encoder->grey_lut_size = size;
+    const float scale = 1.0f / (float)(white - black);
+    for (uint32_t i = 0; i < size; i++) {
+        float lin = (float)((int32_t)i - black) * scale;
+        if (lin < -0.0037f)
+            lin = -0.0037f;
+        const HYD_vec3_f32 xyb = rgb_to_xyb_f32((HYD_vec3_f32) { .v0 = lin, .v1 = lin, .v2 = lin });
+        encoder->grey_xyb_lut[3 * i] = xyb.v0;
+        encoder->grey_xyb_lut[3 * i + 1] = xyb.v1;
+        encoder->grey_xyb_lut[3 * i + 2] = xyb.v2;
+    }
+    return HYD_OK;
+}
+
+static void zero_residue(HYDEncoder *encoder, const HYDLFGroup *lfg) {
+    const size_t residue_x = 8 - (lfg->width & 0x7u);
+    if (residue_x != 8) {
+        for (size_t y = 0; y < lfg->height; y++) {
+            const size_t row = y * lfg->stride;
+            memset(encoder->xyb + row + lfg->width, 0, residue_x * sizeof(XYBEntry));
+        }
+    }
+    const size_t residue_y = 8 - (lfg->height & 0x7u);
+    if (residue_y != 8)
+        memset(encoder->xyb + lfg->height * lfg->stride, 0, residue_y * lfg->stride * sizeof(XYBEntry));
+}
+
+HYDStatusCode hyd_populate_xyb_grey(HYDEncoder *encoder, const void *buffer, int sample_bytes,
+        ptrdiff_t row_stride, ptrdiff_t pixel_stride, size_t lf_group_id) {
+    const HYDLFGroup *lfg = &encoder->lfg[lf_group_id];
+    const float *lut = encoder->grey_xyb_lut;
+    const uint32_t top = encoder->grey_lut_size - 1;
+    for (size_t y = 0; y < lfg->height; y++) {
+        XYBEntry *entry = &encoder->xyb[y * lfg->stride];
+        if (sample_bytes == 1) {
+            const uint8_t *src = (const uint8_t *)buffer + y * row_stride;
+            for (size_t x = 0; x < lfg->width; x++) {
+                uint32_t v = src[x * pixel_stride];
+                const float *t = lut + 3 * (v > top ? top : v);
+                entry[x].xyb[0].f = t[0];
+                entry[x].xyb[1].f = t[1];
+                entry[x].xyb[2].f = t[2];
+            }
+        } else {
+            const uint16_t *src = (const uint16_t *)buffer + y * row_stride;
+            for (size_t x = 0; x < lfg->width; x++) {
+                uint32_t v = src[x * pixel_stride];
+                const float *t = lut + 3 * (v > top ? top : v);
+                entry[x].xyb[0].f = t[0];
+                entry[x].xyb[1].f = t[1];
+                entry[x].xyb[2].f = t[2];
+            }
+        }
+    }
+    zero_residue(encoder, lfg);
+    return HYD_OK;
+}
+
 HYDStatusCode hyd_populate_xyb_buffer(HYDEncoder *encoder, const void *const buffer[3],
         ptrdiff_t row_stride, ptrdiff_t pixel_stride, size_t lf_group_id,
         HYDSampleFormat sample_fmt) {

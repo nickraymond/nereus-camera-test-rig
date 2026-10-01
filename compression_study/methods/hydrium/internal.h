@@ -83,6 +83,13 @@ struct HYDEncoder {
 
     int32_t last_preset;
     int32_t last_lfid;
+
+    /* study patch: rate knobs (hyd_study_set_params) and the grey-plane XYB table */
+    uint32_t study_hf_mult;
+    uint32_t study_gs;
+    uint32_t study_lf_f;
+    float *grey_xyb_lut;
+    uint32_t grey_lut_size;
 };
 
 HYDStatusCode hyd_populate_lf_group(HYDEncoder *encoder, HYDLFGroup **lf_group, uint32_t tile_x, uint32_t tile_y);
