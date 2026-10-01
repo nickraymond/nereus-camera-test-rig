@@ -1,0 +1,17 @@
+{
+ "python": "3.13.5",
+ "platform": "macOS-14.6.1-arm64-arm-64bit-Mach-O",
+ "cjxl": "cjxl v0.11.1 0.11.1 [NEON]",
+ "cjpeg": "libjpeg-turbo version 3.1.2 (build 20250827)",
+ "ffmpeg": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
+ "cjpegli": "jpegli from libjxl v0.11.1 source (built 2026-09-30, .study-pylib/bin)",
+ "numpy": "2.5.1",
+ "cv2": "5.0.0",
+ "imagecodecs": "2026.8.16",
+ "charls": "?",
+ "pillow_heif": "1.4.0",
+ "libheif": "1.23.0",
+ "tifffile": "2026.9.20",
+ "yaml": "6.0.3",
+ "x264": "libx264 via ffmpeg (GPL build)"
+}
