@@ -504,7 +504,9 @@ def main(argv=None) -> int:
         modes = dict(zip([j["cam"] for j in choice],
                          ex.map(choose_mode, choice, [args] * len(choice))))
     print("D2 mode per camera:", modes, flush=True)
-    (args.work / "d2_modes.json").write_text(json.dumps(modes, indent=1))
+    mpath = args.work / "d2_modes.json"
+    merged = json.loads(mpath.read_text()) if mpath.exists() else {}
+    mpath.write_text(json.dumps({**merged, **modes}, indent=1))  # --only must not drop others
     todo = [{**j, "d2_mode": modes.get(j["cam"], "vardct"),
              "mode_choice": j in choice} for j in jobs]
     with ProcessPoolExecutor(max_workers=args.jobs) as ex:

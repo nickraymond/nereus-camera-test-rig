@@ -123,10 +123,39 @@ def verify_probe(dirp: Path, board: str) -> dict:
             "payloads_complete": {k: v["complete"] for k, v in p["payloads"].items()}}
 
 
+def verify_pi(dirp: Path, data: Path) -> dict:
+    """Decode every Pi blob with the Phase 1 decoders and score it against the same frame."""
+    from compression_study import metrics
+    from compression_study import run_study as R
+    from compression_study.methods import raw_planes as rp
+    from compression_study.rois import load
+
+    bench = json.loads((dirp / "bench.json").read_text())
+    roi = load(R.STUDY / "config" / "card_rois.yaml")["imx708_cool"]
+    reps = [R.load(data, "imx708", "cool", -1, i) for i in range(3)]
+    ctx, _ = R.context_for(reps, roi, R.CAMERAS["imx708"][3])
+    raw = reps[0]
+    out = {}
+    for f in sorted(dirp.glob("*.bin")):
+        blob = f.read_bytes()
+        rec = rp.decode(blob)
+        m = metrics.evaluate(ctx, rec, with_ssim=False)
+        out[f.stem] = {"bytes": len(blob), "bpp": len(blob) * 8 / raw.n_px,
+                       "bit_exact": bool(np.array_equal(rec, raw.mosaic.astype(np.float64))),
+                       **{k: m[k] for k in ("red_err_noise", "stress_de_mean", "block_de_med",
+                                            "bm_err_R_med")}}
+        if f.stem.startswith("N_"):  # must equal the Mac's own N reconstruction exactly
+            mac = rp.decode(rp.encode(raw, rp.RawSpec("N", "sqrt", 8)))
+            out[f.stem]["equals_mac_N"] = bool(np.array_equal(rec, mac))
+        print(f.stem, out[f.stem], flush=True)
+    return {"steps": bench["steps"], "meta": bench["meta"], "decoded": out}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", type=Path, required=True)
     ap.add_argument("--boards", default="n6,ae3")
+    ap.add_argument("--data", type=Path, help="S4 copy; enables the Pi bench check")
     args = ap.parse_args(argv)
     packer.build_c()
     out = {}
@@ -134,6 +163,9 @@ def main(argv=None) -> int:
         if (args.dir / f"{b}_probe.jsonl").exists():
             out[b] = verify_probe(args.dir, b)
     (args.dir / "verify_openmv.json").write_text(json.dumps(out, indent=1, default=str))
+    if args.data and (args.dir / "pi" / "bench.json").exists():
+        pi = verify_pi(args.dir / "pi", args.data)
+        (args.dir / "verify_pi.json").write_text(json.dumps(pi, indent=1, default=str))
     for b, v in out.items():
         print(b, "chunk errors", v["chunk_errors"], "errors", v["errors"])
         print("  packer", v["packer_check"])

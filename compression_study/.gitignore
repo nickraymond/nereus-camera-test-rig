@@ -5,4 +5,6 @@
 /results/*
 !/results/results.csv
 !/results/versions.json
+!/results/gate.json
+!/results/inventory.json
 /bin/

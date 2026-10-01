@@ -36,13 +36,23 @@ from compression_study.methods import packer  # noqa: E402
 from compression_study.methods import raw_planes as rp  # noqa: E402
 from compression_study.phase2.pi_run_probe import PowerSampler  # noqa: E402
 
+MEM_LIMIT = 250 * 2 ** 20  # address-space cap per encoder (cgroup memory is not delegated)
 
-def child(cmd: list[str], stdin: bytes | None = None, timeout: float = 600) -> dict:
-    """Run one encoder; poll its peak RSS; it is first in line for the OOM killer."""
+
+def _limits():
+    Path("/proc/self/oom_score_adj").write_text("1000")
+    resource.setrlimit(resource.RLIMIT_AS, (MEM_LIMIT, MEM_LIMIT))
+
+
+def child(cmd: list[str], stdin: bytes | None = None, timeout: float = 900,
+          capped: bool = True) -> dict:
+    """Run one encoder: first in line for the OOM killer, and hard-capped at ``MEM_LIMIT`` of
+    address space (an allocation past it fails in the encoder instead of swapping the Zero);
+    peak RSS polled from /proc."""
     t0 = time.perf_counter()
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE if stdin is not None else None,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         preexec_fn=lambda: Path("/proc/self/oom_score_adj").write_text("1000"))
+                         preexec_fn=_limits if capped else None)
     hwm = 0
     out_box: dict = {}
 
@@ -84,7 +94,10 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--capture", action="store_true")
     ap.add_argument("--repeat", type=int, default=3)
+    ap.add_argument("--mem-limit-mb", type=int, default=250)
     args = ap.parse_args(argv)
+    global MEM_LIMIT
+    MEM_LIMIT = args.mem_limit_mb * 2 ** 20
     args.out.mkdir(parents=True, exist_ok=True)
     knobs = json.loads(args.knobs.read_text())
     power = PowerSampler()
@@ -100,7 +113,7 @@ def main(argv=None) -> int:
             t = time.time()
             # bare -o name with cwd: rpicam-still silently truncates long -o paths (S3)
             r = child(["sh", "-c", f"cd {d} && rpicam-still -n --immediate --raw -o cap.jpg"],
-                      timeout=120)
+                      timeout=120, capped=False)  # the camera stack maps large buffers
             m.window("capture_rpicam_raw", t, time.time(), rc=r["rc"],
                      dng_bytes=(Path(d) / "cap.dng").stat().st_size
                      if (Path(d) / "cap.dng").exists() else None)
@@ -174,6 +187,7 @@ def main(argv=None) -> int:
                                          "--num_threads=0"], "jxl")
     power.stop_flag = True
     meta = {"dng": str(args.dng), "frame": list(raw.shape), "knobs": knobs,
+            "mem_limit_mb": args.mem_limit_mb,
             "uname": os.uname()._asdict() if hasattr(os.uname(), "_asdict") else str(os.uname()),
             "tools": {t: subprocess.run([tool(t), "--version"], capture_output=True,
                                         text=True).stdout.splitlines()[:1]
