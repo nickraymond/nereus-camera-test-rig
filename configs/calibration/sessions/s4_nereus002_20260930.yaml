@@ -1,0 +1,42 @@
+# S4 in-air colour calibration session on nereus002 (SPEC §4 Phase 8 S4), 2026-09-30 02:42-03:02 UTC.
+#
+# Scene: V1 card + Pixel Perfect 24-patch chart taped flat below it, ~0.5 m from the rig; lit
+# only by Nick's two LED lamps (blinds closed, room lights off, after dusk), lamps straight on
+# and slightly high. Glare checked on a 3-camera frame: none on any patch.
+# Captures (results/raw_imx708, results/raw_openmv on the rig; copied to one folder per
+# illuminant x camera, the `--data` root): card-metered locked RAW, stops -1/0/+1 x 3 repeats
+#   IMX708: scripts/capture_raw_imx708.py --card configs/cards/nereus_v1.yaml --target 0.8 --stops -1 0 1 --repeat 3
+#   N6/AE3: scripts/capture_raw_openmv.py --board n6|ae3 --target 0.85 --stops -1 0 1 --repeat 3
+# Darks (lenses covered): scripts/capture_dark.py, results/dark/ — IMX708 0.04-0.07 DN above
+#   black 64, std 0.23 DN at 0.1-0.4 s; OpenMV all zeros (black clipped on chip, OQ-21).
+
+session: s4_nereus002_20260930
+card: configs/cards/nereus_v1.yaml
+chart:
+  config: configs/charts/pixel_perfect_24.yaml
+  region: [600, 760, 1420, 1360]     # search box in the card's canonical px (chart below the card)
+wb_anchor: gray_mid                  # every frame is white-balanced + exposure-matched on it
+
+# Truth. No instrument reading and no chart with published values (the Pixel Perfect has none,
+# OQ-27): card + chart are read through the IMX708's own DNG ColorMatrix1 (the libcamera tuning's
+# CCM at the locked AWB — tuned by Raspberry Pi, not by us) under the cool lamps, Bradford-adapted
+# to D65, median over all its frames. PROVISIONAL, and circular for the IMX708 itself.
+reference: {camera: imx708, illuminant: cool}
+
+# Held out from every fit: repeat r2 of each stop (3 of 9 frames).
+holdout_repeats: [2]
+
+illuminants:
+  cool: {cct_k: null, note: "LED lamps, cool setting, full brightness (CCT not read off the lamps)"}
+  warm: {cct_k: 3200, note: "LED lamps at 3200 K, full brightness (their lowest at full brightness, Nick)"}
+
+cameras:
+  imx708:
+    camera_id: imx708_nereus002
+    captures: {cool: cool_imx708, warm: warm_imx708}
+  openmv_n6:
+    camera_id: openmv_n6_020023000450433547373200
+    captures: {cool: cool_n6, warm: warm_n6}
+  openmv_ae3:
+    camera_id: openmv_ae3_0829c14000000000
+    captures: {cool: cool_ae3, warm: warm_ae3}
