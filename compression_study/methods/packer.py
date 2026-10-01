@@ -43,6 +43,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 C_SOURCE = HERE / "packer.c"
+C_SOURCES = (C_SOURCE, HERE / "packer_core.h")  # the CLI and the shared codec core
 C_BINARY = HERE.parent / "bin" / "packer"  # git-ignored (compression_study/.gitignore)
 TIMEOUT_S = 300.0
 STATE_BYTES = 32  # coder state on the MCU, see static_memory_bytes()
@@ -123,7 +124,7 @@ def decode_plane(data: bytes, w: int, h: int, b: int, impl: str = "auto") -> np.
 def build_c(out_dir: Optional[Path] = None) -> Path:
     """Compile ``packer.c`` (``cc -O2 -std=c99``) unless the binary is already newer."""
     binary = Path(out_dir) / "packer" if out_dir is not None else C_BINARY
-    if binary.is_file() and binary.stat().st_mtime >= C_SOURCE.stat().st_mtime:
+    if binary.is_file() and binary.stat().st_mtime >= _newest_source():
         return binary
     cc = shutil.which("cc")
     if not cc:
@@ -138,8 +139,12 @@ def build_c(out_dir: Optional[Path] = None) -> Path:
 
 
 def c_available() -> bool:
-    """True when the compiled binary exists and is not older than ``packer.c``."""
-    return C_BINARY.is_file() and C_BINARY.stat().st_mtime >= C_SOURCE.stat().st_mtime
+    """True when the compiled binary exists and is not older than its sources."""
+    return C_BINARY.is_file() and C_BINARY.stat().st_mtime >= _newest_source()
+
+
+def _newest_source() -> float:
+    return max(p.stat().st_mtime for p in C_SOURCES)
 
 
 def _choose(impl: str) -> str:

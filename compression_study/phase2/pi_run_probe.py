@@ -97,11 +97,16 @@ def main(argv=None) -> int:
     ap.add_argument("--board", choices=("n6", "ae3"), required=True)
     ap.add_argument("--serial", required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--probe", type=Path, default=PROBE)
+    ap.add_argument("--tag", default="", help="suffix for the output files")
+    ap.add_argument("--put", type=Path, help="file copied to /flash for the probe (same mpremote "
+                    "session) and removed again before the reset, e.g. a native module .mpy")
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
     port = PORTS[args.board].format(s=args.serial)
     status = {"board": args.board, "serial": args.serial, "port": port, "steps": []}
-    status_path = args.out / f"{args.board}_status.json"
+    stem = args.board + (f"_{args.tag}" if args.tag else "")
+    status_path = args.out / f"{stem}_status.json"
 
     def step(name, **kw):
         status["steps"].append({"t": time.time(), "step": name, **kw})
@@ -123,7 +128,8 @@ def main(argv=None) -> int:
     time.sleep(5)  # idle baseline
     lines = []
     t0 = time.time()
-    proc = subprocess.Popen([MPREMOTE, "connect", port, "run", str(PROBE)],
+    put = ["fs", "cp", str(args.put), f":/flash/{args.put.name}", "+"] if args.put else []
+    proc = subprocess.Popen([MPREMOTE, "connect", port, *put, "run", str(args.probe)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         for line in proc.stdout:  # type: ignore[union-attr]
@@ -139,15 +145,16 @@ def main(argv=None) -> int:
     power.stop_flag = True
     power.join(timeout=5)
     step("probe_done", rc=proc.returncode, lines=len(lines), seconds=round(time.time() - t0, 1))
-    with (args.out / f"{args.board}_probe.jsonl").open("w") as fh:
+    with (args.out / f"{stem}_probe.jsonl").open("w") as fh:
         for t, line in lines:
             fh.write(json.dumps({"t": t, "line": line}) + "\n")
-    (args.out / f"{args.board}_power.json").write_text(json.dumps(power.samples))
+    (args.out / f"{stem}_power.json").write_text(json.dumps(power.samples))
     # restore the rig service, then prove it answers
     if args.board == "ae3":
         time.sleep(AE3_SETTLE_S)
-    r = mp(port, "reset")
-    step("reset_after", rc=r.returncode, err=r.stderr[-200:])
+    rm = ["fs", "rm", f":/flash/{args.put.name}", "+"] if args.put else []
+    r = mp(port, *rm, "reset")
+    step("reset_after", rc=r.returncode, err=r.stderr[-200:], removed=bool(rm))
     time.sleep(8)
     try:
         info = handshake(args.serial, args.board)
