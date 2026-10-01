@@ -64,8 +64,30 @@ def render(raw: Raw, wb, matrix: Optional[np.ndarray] = None) -> np.ndarray:
     rgb = demosaic_bilinear(lin, raw.cfa).astype(np.float64)
     rgb *= np.asarray(wb, dtype=np.float64)
     if matrix is not None:
-        rgb = rgb @ np.asarray(matrix, dtype=np.float64).T
+        rgb = apply3(rgb, matrix)
     return np.floor(srgb_oetf(rgb) * 255 + 0.5).astype(np.uint8)
+
+
+def clip_fractions(raw: Raw, wb, matrix: Optional[np.ndarray] = None) -> dict[str, float]:
+    """Fraction of pixels the ISP clips before 8-bit coding: below 0 (the colour matrix
+    pushing weak red negative — the TG-7 failure) and above 1, per channel."""
+    lin = (raw.mosaic.astype(np.float32) - raw.black) / np.float32(raw.white - raw.black)
+    rgb = demosaic_bilinear(lin, raw.cfa).astype(np.float64) * np.asarray(wb, dtype=np.float64)
+    if matrix is not None:
+        rgb = apply3(rgb, matrix)
+    out = {}
+    for i, ch in enumerate("RGB"):
+        out[f"isp_clip0_{ch}"] = float(np.mean(rgb[..., i] < 0))
+        out[f"isp_clip1_{ch}"] = float(np.mean(rgb[..., i] > 1))
+    return out
+
+
+def apply3(img: np.ndarray, matrix) -> np.ndarray:
+    """img (..., 3) @ matrix.T on a contiguous (N, 3) copy. numpy 2.5.1 segfaults in matmul on
+    the strided array ``demosaic_bilinear`` returns (reproduced 2026-09-30)."""
+    flat = np.ascontiguousarray(img, dtype=np.float64).reshape(-1, 3)
+    m = np.ascontiguousarray(np.asarray(matrix, dtype=np.float64).T)
+    return (flat @ m).reshape(img.shape)
 
 
 def unrender(rgb8: np.ndarray, cfa: str, black: int, white: int, wb,
@@ -73,7 +95,7 @@ def unrender(rgb8: np.ndarray, cfa: str, black: int, white: int, wb,
     """Inverse of ``render`` sampled back onto the Bayer grid (float64 sensor counts)."""
     lin = srgb_eotf(rgb8.astype(np.float64) / 255)
     if matrix is not None:
-        lin = lin @ np.linalg.inv(np.asarray(matrix, dtype=np.float64)).T
+        lin = apply3(lin, np.linalg.inv(np.asarray(matrix, dtype=np.float64)))
     lin /= np.asarray(wb, dtype=np.float64)
     planes = {k: lin[..., c] for k, c in CHAN.items()}
     sites = {k: v for k, v in split_rgb(planes, cfa).items()}
@@ -171,16 +193,18 @@ CODECS = {
 }
 # knob: (direction, lo, hi, integer?) — direction +1: bigger knob → more bytes
 KNOBS = {"M1": (+1, 1, 100, True), "M1-444": (+1, 1, 100, True), "M1j": (+1, 1, 100, True),
-         "M1-fix": (+1, 1, 100, True), "M2": (-1, 0.0, 51.0, False),
+         "M1-fix": (+1, 1, 100, True), "M2": (-1, 1.0, 51.0, False),
          "M2h": (+1, 0, 100, True)}
 
 
 def encode_image(rgb8: np.ndarray, raw: Raw, method: str, knob, wb_q: list[int],
-                 m_q: Optional[list[int]] = None, measure_rss: bool = False):
-    """(bytes, RunStats) for an already-rendered image (renders are cached by the caller)."""
+                 m_q: Optional[list[int]] = None, measure_rss: bool = False,
+                 resized: bool = False):
+    """(bytes, RunStats) for an already-rendered image (renders are cached by the caller).
+    ``resized``: the image was downscaled (IMX708 field row); decode scales it back up."""
     data, st = CODECS[method][0](rgb8, knob, measure_rss)
-    h = Header(method, raw.shape[1], raw.shape[0], raw.cfa, raw.black, raw.white, 8, 0, 0,
-               params=list(wb_q) + list(m_q or []))
+    h = Header(method, raw.shape[1], raw.shape[0], raw.cfa, raw.black, raw.white, 8, 0,
+               int(resized), params=list(wb_q) + list(m_q or []))
     return pack(h, [data]), st
 
 
@@ -194,7 +218,14 @@ def quantized(wb, matrix=None) -> tuple[list[int], Optional[list[int]], np.ndarr
 
 def decode(blob: bytes) -> np.ndarray:
     h, (data,) = unpack(blob)
-    rgb8 = CODECS[h.method][1](data, h.w, h.h)
+    if h.flags & 1:  # field row: decoded at the sent size, scaled back to the sensor crop
+        if h.method not in ("M1", "M1-444", "M1-fix"):
+            raise ValueError(f"resized {h.method} not supported")
+        small = CODECS[h.method][1](data, 0, 0)  # JPEG decoders read the size from the stream
+        rgb8 = cv2.resize(small.astype(np.float32), (h.w, h.h), interpolation=cv2.INTER_LINEAR)
+        rgb8 = np.clip(rgb8, 0, 255)
+    else:
+        rgb8 = CODECS[h.method][1](data, h.w, h.h)
     wb = np.asarray(h.params[:3], float) / Q
     m = np.asarray(h.params[3:12], float).reshape(3, 3) / Q if len(h.params) >= 12 else None
     return unrender(rgb8, h.cfa, h.black, h.white, wb, m)

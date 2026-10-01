@@ -43,6 +43,7 @@ class RawSpec:
     effort: int = 7
     pedestal: int = 0
     variant: str = "eq"  # label only (eq / red+1.5 / red+2 / 3pl / tiled)
+    binned: bool = False  # 2×2 block-mean each plane before coding (IMX708 field row)
 
     @property
     def codec(self) -> str:
@@ -60,6 +61,8 @@ class RawSpec:
             parts.append(f"ped{self.pedestal}")
         if self.variant != "eq":
             parts.append(self.variant)
+        if self.binned:
+            parts.append("bin2")
         return "/".join(parts)
 
 
@@ -71,6 +74,8 @@ def code_planes(raw: Raw, spec: RawSpec) -> tuple[dict[str, np.ndarray], int]:
     """{plane: integer codes} as transmitted, and maxval."""
     b = bits_for(spec, raw)
     planes = split(raw.mosaic, raw.cfa)
+    if spec.binned:
+        planes = {k: np.floor(_bin2(v) + 0.5).astype(np.uint16) for k, v in planes.items()}
     if spec.layout == "3pl":
         g = (planes["G1"].astype(np.uint32) + planes["G2"] + 1) >> 1
         planes = {"R": planes["R"], "G": g.astype(np.uint16), "B": planes["B"]}
@@ -84,6 +89,11 @@ def code_planes(raw: Raw, spec: RawSpec) -> tuple[dict[str, np.ndarray], int]:
     if spec.layout == "tiled":
         codes = {"T": tile(codes)}
     return codes, maxval
+
+
+def _bin2(p: np.ndarray) -> np.ndarray:
+    h, w = p.shape[0] // 2 * 2, p.shape[1] // 2 * 2
+    return p[:h, :w].astype(np.float64).reshape(h // 2, 2, w // 2, 2).mean(axis=(1, 3))
 
 
 def encode_plane(codes: np.ndarray, maxval: int, spec: RawSpec, knob=None,
@@ -107,7 +117,7 @@ def encode_plane(codes: np.ndarray, maxval: int, spec: RawSpec, knob=None,
 
 
 def header_for(raw: Raw, spec: RawSpec) -> Header:
-    flags = LAYOUTS.index(spec.layout) | (CURVES.index(spec.curve) << 2)
+    flags = LAYOUTS.index(spec.layout) | (CURVES.index(spec.curve) << 2) | (16 * spec.binned)
     return Header(spec.method, raw.shape[1], raw.shape[0], raw.cfa, raw.black, raw.white,
                   bits_for(spec, raw), spec.pedestal, flags)
 
@@ -142,6 +152,10 @@ def decode(blob: bytes) -> np.ndarray:
         else:
             names = {"4pl": ("R", "G1", "G2", "B"), "3pl": ("R", "G", "B")}[layout]
             planes = {k: dec(p) for k, p in zip(names, payloads)}
+    if h.flags & 16:  # binned: back to plane size by bilinear interpolation
+        import cv2
+        planes = {k: cv2.resize(v.astype(np.float32), (pw, ph), interpolation=cv2.INTER_LINEAR)
+                  for k, v in planes.items()}
     if "G" in planes:
         planes = {"R": planes["R"], "G1": planes["G"], "G2": planes["G"], "B": planes["B"]}
     if curve == "none":
