@@ -90,6 +90,54 @@ Feeding the **linear** plane (no sqrt curve) to the JPEG XL-style encoders fixes
 
 **Next:** build wl53 as a native module and run it on both boards (time, heap, decode on the Mac), then hydrium for the N6. Both need a matching decoder in the backend.
 
+## wl53 benchmark on all three devices (Nick: "test your suggestion first", 2026-10-01)
+
+Scope: how much each packing method compresses and at what device cost. No backend work. The
+only decoder is the Mac test tool that checks the devices' output.
+
+wl53 v1 (`methods/wl53_core.h`) is the desk-study codec ported to integer-only arithmetic, so
+the Mac, the Pi and the M55 write identical bytes: 5/3 wavelet, fixed-point dead-zone steps, and
+an adaptive Rice coder with run mode. Input is sqrt-12 planes; it is added to the study as
+method **W**.
+
+- **Board module:** `natmod/nrwl53.mpy`, 3.2 KB.
+- **Pi:** `methods/wl53.c`, compiled natively with gcc.
+
+| device | frame | time | memory | output checked |
+|---|---|---|---|---|
+| OpenMV N6 (native module) | live HD, 4 planes | 1.5–1.8 s per frame (0.38–0.44 s/plane); on-board rate search to 0.4 bpp 9.3 s (6 steps) | ~0.5 MB heap + frame copy | 4/4 planes byte-identical to the Mac encoder |
+| OpenMV AE3 (native module) | live HD | 0.45–0.93 s per frame; rate search 3.5 s | ~0.5 MB of its 3 MB free | 4/4 byte-identical (one rerun after a console drop) |
+| Pi Zero 2 W (C, gcc) | IMX708 12 MP | 3.4–4.0 s, 13 MB | — | byte-identical (0.4, 0.8 bpp, 50 kB) |
+| Pi Zero 2 W | 1600×900 field crop, 50 kB | **0.36 s, 2.7 MB** (D2: 6.4 s, 31 MB) | — | byte-identical |
+
+The AE3 runs this code about 2× faster than the N6, probably because of where the N6's heap
+lives in memory. The column passes of the wavelet also read memory with a large stride, so
+there is room to speed it up.
+
+**Quality** (stress ΔE00, S4 frames, same protocol as Phase 1):
+
+| | W | D2 (libjxl) | today's JPEG (M1) | best processed |
+|---|---|---|---|---|
+| IMX708, 0.4 bpp, air / underwater-sim | 0.05–0.08 / 0.08–0.09 | 0.04–0.08 / 0.10 | 0.56–0.78 / 0.47–0.52 | 0.08–0.12 / 0.13–0.18 |
+| IMX708 field crop, 50 kB (cool, air) | **0.10** | 0.11 | 0.50 | — |
+| N6, 0.4 / 0.8 bpp, air | 0.31–0.67 / 0.13–0.23 | 0.26–0.44 / 0.11–0.21 | 0.88–1.57 / 0.49–0.88 | 0.28–0.51 / 0.14–0.26 |
+| N6, underwater-sim | **1.9–2.3** / 0.52–0.59 | 1.4–1.7 / 0.24–0.44 | 1.6–2.6 / 1.2–1.8 | 1.1–1.7 / 0.86–0.99 |
+| AE3, air | 0.37–0.63 / 0.18–0.28 | 0.37–0.61 / 0.17–0.26 | 0.83–1.27 / 0.57–0.84 | 0.46–0.62 / 0.27–0.32 |
+| AE3, underwater-sim | **1.3–2.6** / 0.36–0.50 | 1.2–1.7 / 0.57–0.76 | 1.8–2.1 / 1.1–1.6 | 1.0–1.5 / 0.60–1.07 |
+
+Reading:
+- W keeps most of D2's colour advantage over today's JPEG, and passes the §8 rule (≥ 30 % lower
+  stress ΔE) on every frame set at 0.8 bpp.
+- Its weak spot is **red-starved 8-bit OpenMV at 0.4 bpp**, where it is no better than today's JPEG.
+- Whole-frame block colour is about the best JPEG's (jpegli); D2 halves it.
+- On the IMX708 crop, W matches D2 at 1/18 of the Pi time and 1/11 of the memory.
+
+**Sensor setting (Nick, 2026-10-01): keep the on-chip denoise and lens shading on** (the
+defaults). They lower noise and file size; all OpenMV results here use them.
+
+**Next candidate:** hydrium (JPEG XL in plain C) for the N6. The desk study rated it best under
+water at 0.4 bpp (1.19 vs W 2.1), exactly where W is weak. It needs ~2.2 MB, which the N6 has.
+
 ## Recommendation
 
 | Option | Pros | Cons |

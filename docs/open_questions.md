@@ -601,8 +601,9 @@ Items for Nick are marked **(Nick)**.
   the mean go flat from centre to corner (N6 var 4.0–4.6 everywhere, was 0.8 → 2.7). Zero gain = LSC
   off, as assumed. Consequences: truly raw frames cost more bytes (noise is incompressible) and
   need vignetting handled downstream (a flat-field, S4); the denoise trades resolution for size.
-  Still open: 10-bit output (no v5 path found). Not in the rig service — a `raw_isp` capture
-  setting would be a separate, reviewed change.
+  Still open: 10-bit output (no v5 path found). **Decision (Nick, 2026-10-01): keep denoise and
+  lens shading ON** — they improve image quality and reduce file size; nothing in the rig changes
+  (they are the sensor defaults).
 
 - **[OPEN] OQ-55 — The OpenMV USB console drops ~512-byte blocks under sustained output.**
   `mpremote run` stdout from the N6 lost data in 8 % of 1 KB lines (blocks of ~500 characters
