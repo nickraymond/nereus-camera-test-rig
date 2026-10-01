@@ -204,5 +204,6 @@ def evaluate(ctx: Context, recon: np.ndarray, *, with_ssim: bool = True) -> dict
     if with_ssim:
         luma = ctx._luma(recon)
         out["ssim_full"] = ssim(ctx.ref_luma, luma)
-        out["ssim_tex"] = ssim(ctx.ref_luma[ctx.tex], luma[ctx.tex])
+        a, b = ctx.ref_luma[ctx.tex], luma[ctx.tex]
+        out["ssim_tex"] = ssim(a, b) if min(a.shape) >= 11 else float("nan")  # off-crop
     return out

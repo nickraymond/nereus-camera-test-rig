@@ -385,7 +385,13 @@ def run_frameset(job: dict) -> dict:
                     rows += raw_rows(fs, raw, ctx, {k: targets[k] for k in ("T1", "T2")}, s,
                                      None)
         if cam == "imx708":
-            rows += field_rows(fs, reps, roi, nm, air_ctx, d2_mode)
+            _save_partial(out, rows)
+            try:
+                rows += field_rows(fs, reps, roi, nm, air_ctx, d2_mode)
+            except Exception as exc:  # noqa: BLE001 — the field row must not cost the frame set
+                rows.append({**fs, "fsid": fs["fsid"] + "_field", "method": "field",
+                             "variant": "", "family": "processed", "target": "50kB",
+                             "note": f"ERROR {type(exc).__name__}: {exc}"[:300]})
     if crops is not None:
         cdir = work / "crops" / fsid
         cdir.mkdir(parents=True, exist_ok=True)
@@ -398,6 +404,12 @@ def run_frameset(job: dict) -> dict:
             "ccm": ctx.ccm.tolist(), "d2_mode": d2_mode, "n_rows": len(rows)}
     out.write_text(json.dumps({"meta": meta, "rows": rows}, default=_json))
     return {"fsid": fsid, "rows": len(rows), "seconds": round(meta["seconds"], 1)}
+
+
+def _save_partial(out: Path, rows: list) -> None:
+    """Rows so far, so a crash in a late step keeps the expensive part (rerun with --force)."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.with_suffix(".partial.json").write_text(json.dumps({"rows": rows}, default=_json))
 
 
 def _json(o):
