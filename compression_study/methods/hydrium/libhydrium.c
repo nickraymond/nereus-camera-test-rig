@@ -218,9 +218,9 @@ HYDRIUM_EXPORT HYDStatusCode hyd_send_tile(HYDEncoder *encoder, const void *cons
 
 HYDRIUM_EXPORT HYDStatusCode hyd_study_set_params(HYDEncoder *encoder, uint32_t hf_mult, uint32_t global_scale,
         uint32_t lf_divisor) {
-    if (hf_mult < 1 || hf_mult > 16 || global_scale < 1 || global_scale > 73728 || lf_divisor < 1
+    if (hf_mult < 1 || hf_mult > 256 || global_scale < 1 || global_scale > 73728 || lf_divisor < 1
             || lf_divisor > 16) {
-        encoder->error = "study params out of range (hf_mult 1..16, global_scale 1..73728, lf 1..16)";
+        encoder->error = "study params out of range (hf_mult 1..256, global_scale 1..73728, lf 1..16)";
         return HYD_API_ERROR;
     }
     encoder->study_hf_mult = hf_mult;

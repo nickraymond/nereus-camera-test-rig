@@ -613,20 +613,20 @@ static int32_t collect(FrequencyEntry *entry) {
     return entry->max_depth = hyd_max3(self, left, right);
 }
 
+/*
+ * Study patch: the tree holds the n used symbols only (stock: all alphabet_size symbols, 2 *
+ * alphabet_size - 1 entries — ~1 MB for the LF stream's 16K-symbol LZ77 alphabet, which did not
+ * fit the AE3). Same algorithm on the compacted array; leaves keep their original token for the
+ * tie-breaks, and unused symbols get length 0 as before.
+ */
 static HYDStatusCode build_huffman_tree(HYDEntropyStream *stream, const uint32_t *frequencies,
                                         uint32_t *lengths, uint32_t alphabet_size, int32_t max_depth) {
     HYDStatusCode ret = HYD_OK;
-    FrequencyEntry *tree = hyd_mem_calloc((2 * alphabet_size - 1), sizeof(*tree));
-    if (!tree) {
-        ret = HYD_NOMEM;
-        goto end;
-    }
+    FrequencyEntry *tree = NULL;
 
     uint32_t nz = 0;
     for (uint32_t token = 0; token < alphabet_size; token++) {
-        tree[token].frequency = frequencies[token];
-        tree[token].token = 1 + token;
-        tree[token].left_child = tree[token].right_child = NULL;
+        lengths[token] = 0;
         if (frequencies[token])
             nz++;
     }
@@ -635,15 +635,29 @@ static HYDStatusCode build_huffman_tree(HYDEntropyStream *stream, const uint32_t
         ret = HYD_INTERNAL_ERROR;
         goto end;
     }
+    const uint32_t n = nz;
+    tree = hyd_mem_calloc((2 * n - 1), sizeof(*tree));
+    if (!tree) {
+        ret = HYD_NOMEM;
+        goto end;
+    }
+    for (uint32_t token = 0, i = 0; token < alphabet_size; token++) {
+        if (!frequencies[token])
+            continue;
+        tree[i].frequency = frequencies[token];
+        tree[i].token = 1 + token;
+        tree[i].left_child = tree[i].right_child = NULL;
+        i++;
+    }
 
     if (max_depth < 0)
         max_depth = hyd_cllog2(alphabet_size + 1);
 
-    for (uint32_t k = 0; k < alphabet_size - 1; k++, nz--) {
+    for (uint32_t k = 0; k < n - 1; k++, nz--) {
         int32_t smallest = -1;
         int32_t second = -1;
         int32_t target = max_depth - hyd_cllog2(nz) + 1;
-        for (uint32_t j = 2 * k; j < alphabet_size + k; j++) {
+        for (uint32_t j = 2 * k; j < n + k; j++) {
             if (!tree[j].frequency)
                 continue;
             if (tree[j].max_depth >= target)
@@ -668,14 +682,14 @@ static HYDStatusCode build_huffman_tree(HYDEntropyStream *stream, const uint32_t
         smallest = 2 * k;
         hyd_swap(FrequencyEntry, tree[second], tree[2 * k + 1]);
         second = smallest + 1;
-        FrequencyEntry *entry = &tree[alphabet_size + k];
+        FrequencyEntry *entry = &tree[n + k];
         entry->frequency = tree[smallest].frequency + tree[second].frequency;
         entry->left_child = &tree[smallest];
         entry->right_child = &tree[second];
         collect(entry);
     }
 
-    for (uint32_t j = 0; j < 2 * alphabet_size - 1; j++) {
+    for (uint32_t j = 0; j < 2 * n - 1; j++) {
         if (tree[j].token)
             lengths[tree[j].token - 1] = tree[j].depth;
     }

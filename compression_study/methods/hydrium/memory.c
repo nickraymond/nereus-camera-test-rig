@@ -20,8 +20,37 @@ void hyd_host_free(void *ptr);
 #define hyd_host_free free
 #endif
 
-/* bytes in use / high-water mark (reset by hyd_mem_reset_peak); not static because MicroPython's
- * native-module linker (mpy_ld) only places global bss variables */
+#if defined(HYD_HOST_ALLOC) && !defined(HYD_MEM_STATS)
+/*
+ * MicroPython heap, no size header: its GC only counts a pointer to the exact start of a block
+ * as a reference, so a pointer to block + 8 would let a collection free live buffers (found on
+ * the AE3, where the heap is tight enough for collections to run mid-encode). No peak count.
+ */
+void *hyd_mem_realloc(void *ptr, size_t n) {
+    if (!n) {
+        hyd_mem_free(ptr);
+        return NULL;
+    }
+    return hyd_host_realloc(ptr, n);
+}
+
+void hyd_mem_free(void *ptr) {
+    if (ptr)
+        hyd_host_free(ptr);
+}
+
+size_t hyd_mem_peak(void) {
+    return 0;
+}
+
+void hyd_mem_reset_peak(void) {
+}
+#else
+/*
+ * With an 8-byte size header, for the current / peak bytes in use (hyd_mem_peak): libc (the CLI),
+ * or the MicroPython heap with HYD_MEM_STATS — then only with the GC disabled (see above).
+ * Global, not static: MicroPython's native-module linker (mpy_ld) only places global bss.
+ */
 size_t hyd_mem_cur, hyd_mem_hwm;
 
 #define HDR 8
@@ -47,20 +76,6 @@ void *hyd_mem_realloc(void *ptr, size_t n) {
     return p + HDR;
 }
 
-void *hyd_mem_malloc(size_t n) {
-    return hyd_mem_realloc(NULL, n ? n : 1);
-}
-
-void *hyd_mem_calloc(size_t nmemb, size_t size) {
-    size_t total = nmemb * size;
-    if (size && total / size != nmemb)
-        return NULL;
-    void *p = hyd_mem_malloc(total);
-    if (p)
-        memset(p, 0, total);
-    return p;
-}
-
 void hyd_mem_free(void *ptr) {
     if (!ptr)
         return;
@@ -77,6 +92,21 @@ size_t hyd_mem_peak(void) {
 
 void hyd_mem_reset_peak(void) {
     hyd_mem_hwm = hyd_mem_cur;
+}
+#endif
+
+void *hyd_mem_malloc(size_t n) {
+    return hyd_mem_realloc(NULL, n ? n : 1);
+}
+
+void *hyd_mem_calloc(size_t nmemb, size_t size) {
+    size_t total = nmemb * size;
+    if (size && total / size != nmemb)
+        return NULL;
+    void *p = hyd_mem_malloc(total);
+    if (p)
+        memset(p, 0, total);
+    return p;
 }
 
 #define total_size_check(n, s, retv) \

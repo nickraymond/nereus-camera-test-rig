@@ -9,7 +9,9 @@
  * Plane sample (y, x) = frame[offset + y*stride + 2*x] (plane stride = 2 * frame width).
  * Linear light = (v - black) / (white - black). hf / gs / lf = HF multiplier, globalScale, LF
  * divisor. ``out`` is a writable buffer; returns the stream length and hydrium's peak heap
- * bytes. All of hydrium's memory comes from the MicroPython heap (m_realloc / m_free) and is
+ * bytes (0 unless built with HYD_MEM_STATS: nrhydm.mpy), or (0, where) on failure (hydrium
+ * status, step and tile: hyd_plane.h). nrhydm keeps a size header in front of each block,
+ * which MicroPython's GC does not see as a reference: call it only with gc.disable(). All of hydrium's memory comes from the MicroPython heap (m_realloc / m_free) and is
  * freed before returning; an allocation failure raises MemoryError (the GC reclaims the rest).
  * Uses single-precision floats (the M55 FPU); built with -ffp-contract=off like the CLI.
  */
@@ -47,11 +49,16 @@ static mp_obj_t encode(size_t n_args, const mp_obj_t *args) {
     }
     hyd_mem_reset_peak();
     const char *err;
+    int32_t where;
     size_t n = hyd_plane_encode((const uint8_t *)src.buf + offset, 1, stride, 2, (uint32_t)w,
                                 (uint32_t)h, 256, (int32_t)black, (int32_t)white, (uint32_t)hf,
-                                (uint32_t)gs, (uint32_t)lf, (uint8_t *)dst.buf, dst.len, &err);
+                                (uint32_t)gs, (uint32_t)lf, (uint8_t *)dst.buf, dst.len, &err,
+                                &where);
     if (!n) {
-        mp_raise_ValueError(err);
+        /* (0, where): status code * 1000 - step * 100 - tile (see hyd_plane.h); the message is
+         * one of a few fixed strings, so the caller decodes ``where`` */
+        mp_obj_t res[2] = {mp_obj_new_int(0), mp_obj_new_int(where)};
+        return mp_obj_new_tuple(2, res);
     }
     mp_obj_t res[2] = {mp_obj_new_int((mp_int_t)n), mp_obj_new_int((mp_int_t)hyd_mem_peak())};
     return mp_obj_new_tuple(2, res);

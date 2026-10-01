@@ -43,12 +43,17 @@ $CC_ARM -std=c99 -Wall -Werror -Wno-typedef-redefinition -Wno-unused-function -D
   -DMP_CONFIGFILE="<$B/hyd_mod.config.h>" -I"$HERE" -I"$MPY_DIR" -I"$HYD" \
   -c "$HERE/hyd_mod.c" -o "$B/hyd_mod.o"
 $CC_ARM -std=c99 -fno-builtin -Wall -Werror -c "$HERE/mini_libc.c" -o "$B/mini_libc.o"
-OBJS="$B/hyd_mod.o $B/mini_libc.o"
-for f in bitwriter encoder entropy format libhydrium memory; do
-  $CC_ARM -std=c11 -DHYD_HOST_ALLOC -I"$HYD" -w -c "$HYD/$f.c" -o "$B/hyd_$f.o"
-  OBJS="$OBJS $B/hyd_$f.o"
+# nrhyd = no allocation header (GC-safe); nrhydm = + peak-heap count (HYD_MEM_STATS: a size
+# header in front of each block, so use it only with the GC disabled). Same bytes out.
+for v in nrhyd: nrhydm:-DHYD_MEM_STATS; do
+  MOD=${v%%:*}; DEF=${v#*:}
+  OBJS="$B/hyd_mod.o $B/mini_libc.o"
+  for f in bitwriter encoder entropy format libhydrium memory; do
+    $CC_ARM -std=c11 -DHYD_HOST_ALLOC $DEF -I"$HYD" -w -c "$HYD/$f.c" -o "$B/${MOD}_$f.o"
+    OBJS="$OBJS $B/${MOD}_$f.o"
+  done
+  # shellcheck disable=SC2086
+  MPY_DIR="$MPY_DIR" "$PY" "$HERE/mpy_ld_clang.py" --arch armv7emdp --qstrs "$B/hyd_mod.config.h" \
+    -o "$HERE/$MOD.mpy" $OBJS
+  ls -l "$HERE/$MOD.mpy"
 done
-# shellcheck disable=SC2086
-MPY_DIR="$MPY_DIR" "$PY" "$HERE/mpy_ld_clang.py" --arch armv7emdp --qstrs "$B/hyd_mod.config.h" \
-  -o "$HERE/nrhyd.mpy" $OBJS
-ls -l "$HERE/nrhyd.mpy"

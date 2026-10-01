@@ -23,15 +23,19 @@
 
 /*
  * Samples: sample_bytes 1 (uint8) or 2 (uint16, native endian); strides in samples. Returns the
- * stream length, or 0 with *err set (bad arguments, out of memory, output buffer too small).
+ * stream length, or 0 with *err set (bad arguments, out of memory, output buffer too small) and
+ * *where = hydrium status code * 1000 - step * 100 - tile index (step: 1 setup, 2 send tile,
+ * 3 flush, 4 output buffer).
  */
 static size_t hyd_plane_encode(const void *src, int sample_bytes, ptrdiff_t row_stride,
                                ptrdiff_t pixel_stride, uint32_t w, uint32_t h, uint32_t nlut,
                                int32_t black, int32_t white, uint32_t hf_mult,
                                uint32_t global_scale, uint32_t lf_divisor, uint8_t *out,
-                               size_t cap, const char **err) {
+                               size_t cap, const char **err, int32_t *where) {
     size_t total = 0;
+    int step = 1, tile = 0;
     *err = NULL;
+    *where = 0;
     if (cap < 64) {
         *err = "output buffer too small";
         return 0;
@@ -60,10 +64,13 @@ static size_t hyd_plane_encode(const void *src, int sample_bytes, ptrdiff_t row_
             const uint8_t *p = (const uint8_t *)src
                 + ((size_t)ty * HYD_PLANE_TILE * row_stride
                    + (size_t)tx * HYD_PLANE_TILE * pixel_stride) * sample_bytes;
+            tile = (int)(ty * tw + tx);
+            step = 2;
             r = hyd_study_send_grey_tile(e, p, sample_bytes, tx, ty, row_stride, pixel_stride,
                                          ty == th - 1 && tx == tw - 1);
             if (r < HYD_ERROR_START)
                 break;
+            step = 3;
             r = hyd_flush(e);
             size_t wr = 0;
             HYDStatusCode rel = hyd_release_output_buffer(e, &wr);
@@ -72,10 +79,13 @@ static size_t hyd_plane_encode(const void *src, int sample_bytes, ptrdiff_t row_
                 r = HYD_NEED_MORE_OUTPUT;
                 break;
             }
+            step = 4;
             if (r >= HYD_ERROR_START)
                 r = hyd_provide_output_buffer(e, out + total, cap - total);
         }
     }
+    if (r == HYD_NEED_MORE_OUTPUT || r < HYD_ERROR_START)
+        *where = (int32_t)r * 1000 - step * 100 - (tile < 99 ? tile : 99);
     if (r == HYD_NEED_MORE_OUTPUT) {
         *err = "output buffer too small";
     } else if (r < HYD_ERROR_START) {

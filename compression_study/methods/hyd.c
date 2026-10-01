@@ -38,11 +38,12 @@ int main(int argc, char **argv) {
     }
     for (size_t i = 0; i < npx; i++) img[i] = (uint16_t)(raw[2 * i] | (raw[2 * i + 1] << 8));
     const char *err;
+    int32_t where;
     size_t n = hyd_plane_encode(img, 2, W, 1, (uint32_t)W, (uint32_t)H, (uint32_t)nlut,
                                 (int32_t)black, (int32_t)white, (uint32_t)hf, (uint32_t)gs,
-                                (uint32_t)lf, out, cap, &err);
+                                (uint32_t)lf, out, cap, &err, &where);
     if (!n) {
-        fprintf(stderr, "hyd: %s\n", err);
+        fprintf(stderr, "hyd: %s (%d)\n", err, (int)where);
         return 2;
     }
     fwrite(out, 1, n, stdout);

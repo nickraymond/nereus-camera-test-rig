@@ -7,10 +7,10 @@
 #include "libhydrium/libhydrium.h"
 
 /*
- * Study patch: every allocation goes through these four (memory.c). They keep an 8-byte size
- * header so the current and peak bytes in use can be reported (hyd_mem_peak). With
- * HYD_HOST_ALLOC defined (the OpenMV native module) the bytes come from hyd_host_realloc /
- * hyd_host_free, supplied by the caller (MicroPython's heap); otherwise from libc.
+ * Study patch: every allocation goes through these four (memory.c). With HYD_HOST_ALLOC defined
+ * (the OpenMV native module) the bytes come from hyd_host_realloc / hyd_host_free, supplied by
+ * the caller (MicroPython's heap); otherwise from libc. Peak bytes in use (hyd_mem_peak) are
+ * counted with libc, and with HYD_HOST_ALLOC only if HYD_MEM_STATS is also defined.
  */
 void *hyd_mem_malloc(size_t n);
 void *hyd_mem_calloc(size_t nmemb, size_t size);

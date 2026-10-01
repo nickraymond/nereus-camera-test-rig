@@ -2,14 +2,16 @@
 hydrium bench, 2026-10-01). Sensor defaults (denoise + lens shading ON — Nick's call): nothing
 is written to the sensor.
 
-Needs ``/flash/nrhyd.mpy``, ``/flash/nrwl53.mpy`` and ``/flash/nrpack.mpy`` (copied by the
-runner, removed after).
+Needs ``/flash/nrhyd.mpy``, ``/flash/nrhydm.mpy``, ``/flash/nrwl53.mpy`` and
+``/flash/nrpack.mpy`` (copied by the runner, removed after).
 1. Capture, copy the frame (the camera keeps refilling its buffers).
 2. Lossless reference: the 4 planes through ``nrpack`` — the host rebuilds the exact planes
    from these and re-encodes them with its own encoders to check byte-identity.
 3. For each codec: fixed knobs (timing, heap), then an on-board rate search (bisection on the
    log knob) for a frame total of 0.4 bpp (51,200 B) and 0.8 bpp (102,400 B); the final
    streams are sent back.
+4. hydrium's peak heap at the two final knobs, with ``nrhydm`` (same code + a size header per
+   block, which the GC cannot trace — so with the GC disabled; same bytes as ``nrhyd``).
 Output: ``#R`` results, ``#B`` CRC-checked payload lines sent 3× (console drops, OQ-55).
 """
 import binascii
@@ -48,7 +50,8 @@ def emit(name, data):
         for _ in range(COPIES):
             print(line)
         time.sleep_ms(PACE_MS)
-    print("#B", name, "end", len(data), sha(data))
+    for _ in range(COPIES):
+        print("#B", name, "end", len(data), sha(data))
 
 
 def sqrt12_lut():
@@ -71,7 +74,6 @@ def hyd_params(k):
 class Codec:
     def __init__(self, name, mod, frame, W, lut=None):
         self.name, self.mod, self.frame, self.W, self.lut = name, mod, frame, W, lut
-        self.peak = 0
 
     def label(self, k):
         if self.name == "H":
@@ -82,9 +84,11 @@ class Codec:
         off = dy * self.W + dx
         if self.name == "H":
             hf, gs = hyd_params(k)
-            n, peak = self.mod.encode(self.frame, 2 * self.W, off, pw, ph, 0, 255, hf, gs, LF,
+            n, where = self.mod.encode(self.frame, 2 * self.W, off, pw, ph, 0, 255, hf, gs, LF,
                                       out)
-            self.peak = max(self.peak, peak)
+            if not n:
+                raise ValueError("nrhyd failed: where=%d hf=%d gs=%d plane=%d,%d free=%d" % (
+                    where, hf, gs, dy, dx, gc.mem_free()))
             return n
         return self.mod.encode(self.frame, 2 * self.W, off, pw, ph, self.lut, int(k * 16), out)
 
@@ -159,22 +163,36 @@ def main():
     codecs = (("H", Codec("H", nrhyd, frame, W), (0.3, 1.0, 3.0), (0.05, 40.0, +1)),
               ("W", Codec("W", nrwl53, frame, W, sqrt12_lut()), (8.0, 20.0, 60.0),
                (0.5, 4000.0, -1)))
+    finals = []
     for tag, codec, fixed_k, (lo, hi, d) in codecs:
         for k in fixed_k:
             gc.collect()
             free0 = gc.mem_free()
             sizes, us = encode_frame(codec, pw, ph, k, out)
             log("fixed_" + tag, {"knob": codec.label(k), "bytes": sizes, "us": us,
-                                 "heap_free_before": free0, "hyd_peak_heap": codec.peak})
+                                 "heap_free_before": free0})
         log("heap_" + tag, {"heap_free_before": heap0, "heap_free_with_buffers": heap1})
         for tname, target in TARGETS:
             k, steps, search_ms = rate_search(codec, pw, ph, out, target, lo, hi, d)
             lab = codec.label(k)
+            if tag == "H":
+                finals.append((tname, lab))
             sizes, us = encode_frame(codec, pw, ph, k, out, "%s_%s_%s" % (tag, tname, lab))
             log("rate_" + tag, {"target_name": tname, "knob": lab, "steps": steps,
                                 "search_ms": search_ms})
-            log("final_" + tag, {"target_name": tname, "knob": lab, "bytes": sizes, "us": us,
-                                 "hyd_peak_heap": codec.peak})
+            log("final_" + tag, {"target_name": tname, "knob": lab, "bytes": sizes, "us": us})
+    import nrhydm
+    for tname, lab in finals:
+        hf, gs = (int(x) for x in lab.split("_"))
+        gc.collect()
+        gc.disable()
+        try:
+            free0 = gc.mem_free()
+            n, peak = nrhydm.encode(frame, 2 * W, W + 1, pw, ph, 0, 255, hf, gs, LF, out)
+            log("peak_H", {"target_name": tname, "knob": lab, "bytes_R": n, "peak_heap": peak,
+                           "heap_free_before": free0})
+        finally:
+            gc.enable()
     gc.collect()
     log("done", {"ok": True, "heap_free_end": gc.mem_free()})
 
