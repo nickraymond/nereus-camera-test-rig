@@ -173,8 +173,8 @@ Results, worse of the two lamps (colour error / tag SSIM):
 ## hydrium vs wl53 on the OpenMV boards (2026-10-01)
 
 **Answer: use hydrium on the N6 and AE3 for the routine 0.4 bpp (~51 kB) link; keep wl53 as the
-cheap fallback.** Under water at 0.4 bpp hydrium has about half wl53's card colour error and
-3–7× less whole-frame colour error, it writes standard JPEG XL (any stock decoder reads it),
+cheap fallback.** Under water at 0.4 bpp hydrium has about half wl53's card colour error (−23 to −56 % per
+frame set, mean 1.17 vs 2.05) and 2–4× less whole-frame colour error (6–7× in air), it writes standard JPEG XL (any stock decoder reads it),
 and it fits both boards (~1.3 MB heap, 1.5–2.1 s per HD frame). wl53 is 1.3–4× faster, needs
 0.5 MB, and is better at 0.8 bpp under water and in air on the AE3.
 
@@ -199,9 +199,9 @@ stored S4 frame), Pi 20/20. Floats match because every build uses IEEE single pr
 | | | stress ΔE wl53 | stress ΔE hydrium | block ΔE wl53 | block ΔE hydrium | s / HD frame wl53 | s / HD frame hydrium | heap wl53 | heap hydrium |
 |---|---|---|---|---|---|---|---|---|---|
 | N6 | air, 0.4 bpp | 0.49 | 0.49 | 0.75 | **0.10** | 1.24 | 1.53 | 0.5 MB | 1.3 MB |
-| N6 | air, 0.8 bpp | 0.18 | 0.16 | 0.36 | **0.06** | 1.27 | 1.67 | 0.5 MB | 1.3 MB |
+| N6 | air, 0.8 bpp | 0.18 | 0.16 | 0.35 | **0.06** | 1.27 | 1.67 | 0.5 MB | 1.3 MB |
 | N6 | water-sim, 0.4 bpp | 2.12 | **1.25** | 1.02 | **0.26** | 1.24 | 1.53 | 0.5 MB | 1.3 MB |
-| N6 | water-sim, 0.8 bpp | **0.55** | 0.67 | 0.52 | **0.20** | 1.27 | 1.67 | 0.5 MB | 1.3 MB |
+| N6 | water-sim, 0.8 bpp | **0.55** | 0.67 | 0.52 | **0.19** | 1.27 | 1.67 | 0.5 MB | 1.3 MB |
 | AE3 | air, 0.4 bpp | **0.50** | 0.70 | 0.71 | **0.10** | 0.44 | 1.85 | 0.5 MB | 1.3 MB |
 | AE3 | air, 0.8 bpp | **0.23** | 0.28 | 0.33 | **0.06** | 0.48 | 2.07 | 0.5 MB | 1.3 MB |
 | AE3 | water-sim, 0.4 bpp | 1.98 | **1.08** | 0.99 | **0.30** | 0.44 | 1.85 | 0.5 MB | 1.3 MB |
