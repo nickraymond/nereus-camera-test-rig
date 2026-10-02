@@ -1,0 +1,449 @@
+<meta charset="utf-8">
+<title>Clip Codec Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87,600;87,700&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f3f6f5; --surface:#ffffff; --sunk:#e8eeec;
+  --ink:#10201e; --ink-2:#465755; --muted:#6f807d; --rule:#d3dcda;
+  --accent:#0d6681; --accent-ink:#ffffff;
+  --h264:#2a78d6; --av1:#eb6834; --h265:#1baf7a;
+  --warn:#a35a00; --warn-bg:#fbefdc;
+  --stage:#0b1213;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0e1516; --surface:#152021; --sunk:#1c2829;
+    --ink:#e6eeec; --ink-2:#a9b9b6; --muted:#7f918e; --rule:#2b393a;
+    --accent:#5cb6d3; --accent-ink:#071214;
+    --h264:#3987e5; --av1:#d95926; --h265:#199e70;
+    --warn:#f0b35e; --warn-bg:#33270f;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0e1516; --surface:#152021; --sunk:#1c2829;
+  --ink:#e6eeec; --ink-2:#a9b9b6; --muted:#7f918e; --rule:#2b393a;
+  --accent:#5cb6d3; --accent-ink:#071214;
+  --h264:#3987e5; --av1:#d95926; --h265:#199e70;
+  --warn:#f0b35e; --warn-bg:#33270f;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;padding:0 16px;}
+.wrap{max-width:1040px;margin:0 auto;padding-block:36px 64px;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:var(--display);font-stretch:87%;text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(30px,5vw,44px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:24px;font-weight:700}
+h3{font-size:16px;font-weight:600}
+p{margin:0;max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:17px;color:var(--ink-2)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-direction:column;gap:14px}
+section{display:flex;flex-direction:column;gap:16px}
+.note{color:var(--ink-2);font-size:14px}
+.answer{border-left:3px solid var(--accent);padding:4px 0 4px 16px;display:flex;flex-direction:column;gap:8px}
+.answer p{color:var(--ink)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.tile .v{font-family:var(--display);font-stretch:87%;font-size:26px;font-weight:700;line-height:1.1}
+.tile .l{font-size:13px;color:var(--ink-2)}
+/* player */
+.player{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.ctrl-row{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field>span{font-size:12px;color:var(--muted);font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
+select,button{font:inherit;font-size:14px;color:var(--ink);background:var(--sunk);border:1px solid var(--rule);border-radius:5px;padding:6px 10px;max-width:100%}
+button{cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible,.stage:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:5px 10px;border-radius:999px;font-family:var(--mono);font-size:13px}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.stage{position:relative;background:var(--stage);border-radius:6px;overflow:auto;max-height:72vh;touch-action:pan-x pan-y;cursor:ew-resize}
+.inner{position:relative;width:100%;line-height:0}
+.inner video{display:block;width:100%;height:auto}
+.inner video.top{position:absolute;inset:0;clip-path:inset(0 0 0 50%)}
+.divider{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none}
+.divider::after{content:"";position:absolute;top:50%;left:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.pixel video{image-rendering:pixelated}
+.sidebar{display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.side{display:flex;flex-direction:column;gap:2px;min-width:0}
+.side.r{text-align:right;align-items:flex-end}
+.side b{font-weight:600}
+.over{color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:0 5px;font-family:var(--mono);font-size:12px}
+.transport{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.transport input[type=range]{flex:1 1 200px;accent-color:var(--accent)}
+.trace{width:100%;height:92px;display:block}
+.av1warn{background:var(--warn-bg);color:var(--warn);border-radius:5px;padding:8px 12px;font-size:14px}
+/* cut sheet */
+.cutsheets{display:flex;flex-direction:column;gap:28px}
+.sheet{display:flex;flex-direction:column;gap:10px}
+.sheet .row{display:grid;grid-template-columns:72px repeat(2,minmax(0,480px));gap:10px;align-items:start}
+.sheet .row .b{font-family:var(--mono);font-size:13px;color:var(--ink-2);padding-top:4px}
+.sheet figure{margin:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.sheet img{display:block;width:100%;max-width:480px;height:auto;image-rendering:auto;border-radius:3px;background:var(--sunk)}
+.sheet figcaption{font-size:12px;color:var(--ink-2);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sheet figcaption .h{color:var(--h264)} .sheet figcaption .a{color:var(--av1)}
+@media (max-width:640px){.sheet .row{grid-template-columns:1fr}.sheet .row .b{padding:0}}
+/* table */
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--muted);letter-spacing:.03em;background:var(--sunk)}
+tbody tr:last-child td{border-bottom:0}
+td .pair{display:inline-flex;gap:8px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+td .pair>span{min-width:5ch;text-align:right;display:inline-flex;flex-direction:column;align-items:flex-end}
+td .h{color:var(--h264)} td .a{color:var(--av1)}
+td .x{color:var(--muted)}
+td small{display:block;color:var(--muted);font-size:11px;font-family:var(--mono)}
+.grp td{background:var(--sunk);font-weight:600;text-align:left;font-family:var(--display);font-stretch:87%}
+/* charts */
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.chart{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:10px 10px 4px;position:relative}
+.chart h3{font-size:14px;margin:0 0 2px 4px}
+.chart .sub{font-size:12px;color:var(--muted);margin:0 0 4px 4px}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--ground);font-size:12px;font-family:var(--mono);padding:6px 8px;border-radius:4px;white-space:nowrap;z-index:2}
+/* limits */
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:10px}
+dl{margin:0;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr);gap:8px 14px;font-size:14px}
+dt{color:var(--ink-2)} dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media (max-width:520px){dl{grid-template-columns:1fr;gap:2px}dd{margin-bottom:8px}}
+ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;max-width:72ch}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--rule);padding-top:16px}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Nereus Vision · camera rig nereus002 · bench run 2026-10-02</div>
+  <h1>Clip Codec Bench</h1>
+  <p class="lede">A 15-second clip from the rig's IMX708 (Pi Zero 2 W) and OpenMV N6, recorded, saved, then compressed with H.264 or AV1 to fit a transmission budget. Everything below was measured on the rig and scored against the saved original.</p>
+  <div class="answer" id="answer"></div>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<section id="watch">
+  <div><h2>Watch both codecs at the same size</h2></div>
+  <p class="note">Each side plays the actual file that would be sent. Drag across the picture to move the divider; use 1:1 to see real pixels (scroll to pan). Original is a near-lossless copy of the recorded clip.</p>
+  <div class="player">
+    <div class="ctrl-row">
+      <label class="field"><span>Clip</span><select id="selClip"></select></label>
+      <div class="field"><span>Budget per 15 s clip</span><div class="chips" id="budgetChips"></div></div>
+    </div>
+    <div class="ctrl-row">
+      <label class="field"><span>Left side</span><select id="selA"></select></label>
+      <label class="field"><span>Right side</span><select id="selB"></select></label>
+      <div class="field"><span>View</span><div class="chips" id="zoomChips"></div></div>
+    </div>
+    <div id="av1warn" class="av1warn" hidden>This browser can't play AV1 video (Safari on Macs before M3 can't). Open the page in Chrome, Edge, Firefox or the Claude desktop app to see the AV1 side.</div>
+    <div class="sidebar"><div class="side" id="labA"></div><div class="side r" id="labB"></div></div>
+    <div class="stage" id="stage" tabindex="0" aria-label="Video comparison. Left and right arrow keys move the divider.">
+      <div class="inner" id="inner">
+        <video id="vA" muted playsinline preload="auto"></video>
+        <video id="vB" class="top" muted playsinline preload="auto"></video>
+        <div class="divider" id="divider"></div>
+      </div>
+    </div>
+    <div class="transport">
+      <button id="btnPlay" type="button">Play</button>
+      <button id="btnBack" type="button" aria-label="Previous frame">◀ frame</button>
+      <button id="btnFwd" type="button" aria-label="Next frame">frame ▶</button>
+      <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Position in clip">
+      <span class="num" id="clock">0.0 s</span>
+      <select id="selRate" aria-label="Playback speed"><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select>
+    </div>
+    <svg class="trace" id="trace" viewBox="0 0 1000 92" preserveAspectRatio="none" aria-label="Quality of each frame"></svg>
+    <p class="note" id="traceNote"></p>
+  </div>
+</section>
+
+<section id="cuts">
+  <h2>One frame at every budget</h2>
+  <p class="note">The same moment of each clip, card and colour chart cropped at real pixels (1:1). H.264 on the left, AV1 on the right, both encoded on the Pi Zero. The number is VMAF for this frame.</p>
+  <div id="cutSheets" class="cutsheets"></div>
+</section>
+
+<section id="budget">
+  <h2>What each budget buys</h2>
+  <p class="note">Picture quality as VMAF (0–100, scored as seen full-screen; about 80 and up looks good, 90 and up is hard to tell from the original). <span class="h" style="color:var(--h264)">Blue: H.264</span>, <span style="color:var(--av1)">orange: AV1</span>, both running on the device. A dash means that encoder can't make the clip that small; the small figure under it is its smallest file. Where an encoder never needed the whole budget, its best result is shown.</p>
+  <div class="ctrl-row"><div class="field"><span>Encoders</span><div class="chips" id="tableMode"></div></div></div>
+  <div class="tablewrap"><table id="budgetTable"></table></div>
+  <h3>Best setting at each budget</h3>
+  <p class="note">For each budget, the resolution and frame rate that scored highest. 10 fps looks choppier than 30 fps; VMAF scores each frame and does not count that, so watch the 10 fps clips in the player before choosing them.</p>
+  <div class="tablewrap"><table id="bestTable"></table></div>
+</section>
+
+<section id="curves">
+  <h2>Quality against file size</h2>
+  <div class="legend" id="legend"></div>
+  <div class="charts" id="charts"></div>
+</section>
+
+<section id="limits">
+  <h2>What the hardware allows</h2>
+  <div class="cols" id="limitCards"></div>
+</section>
+
+<section id="method">
+  <h2>How this was measured</h2>
+  <ul id="methodList"></ul>
+</section>
+
+<footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = /*DATA*/;
+</script>
+<script>
+(function(){
+const $ = s => document.querySelector(s);
+const ENC = DATA.encoders;               // {key:{label,codec,where,short}}
+const COL = {h264:'var(--h264)', av1:'var(--av1)', h265:'var(--h265)'};
+const fmtKB = b => b>=1e6 ? (b/1e6).toFixed(2)+' MB' : Math.round(b/1e3)+' kB';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- header ---------- */
+$('#answer').innerHTML = DATA.answer.map(p => `<p>${p}</p>`).join('');
+$('#tiles').innerHTML = DATA.tiles.map(t => `<div class="tile"><div class="v num">${esc(t.v)}</div><div class="l">${esc(t.l)}</div></div>`).join('');
+
+/* ---------- player ---------- */
+const P = DATA.player; // {clips:{stem:{label,fps,ref,files:{enc:{budget:{...}}}}}, order:[stems]}
+const vA = $('#vA'), vB = $('#vB'), stage = $('#stage'), inner = $('#inner');
+let st = {clip:P.order[0], budget:null, a:'h264_hw', b:'av1_svt_p12', zoom:'fit', split:0.5};
+const av1ok = !!document.createElement('video').canPlayType('video/mp4; codecs="av01.0.08M.08"');
+function optsFor(clip){
+  const c = P.clips[clip], o = [{k:'ref', label:'Original (near-lossless copy)'}];
+  for (const e of P.encoders) if (c.files[e]) o.push({k:e, label:ENC[e].label});
+  return o;
+}
+function budgetsFor(clip){
+  const c = P.clips[clip], s = new Set();
+  for (const e in c.files) for (const b in c.files[e]) s.add(+b);
+  return [...s].sort((x,y)=>x-y);
+}
+function fill(){
+  $('#selClip').innerHTML = P.order.map(k => `<option value="${k}">${esc(P.clips[k].label)}</option>`).join('');
+  $('#selClip').value = st.clip;
+  const bs = budgetsFor(st.clip);
+  if (!bs.includes(st.budget)) st.budget = bs.includes(P.default_budget) ? P.default_budget : bs[Math.floor(bs.length/2)];
+  $('#budgetChips').innerHTML = bs.map(b => `<button type="button" class="chip" aria-pressed="${b===st.budget}" data-b="${b}">${b} kB</button>`).join('');
+  const opts = optsFor(st.clip), have = opts.map(x => x.k);
+  if (!have.includes(st.a)) st.a = have[1] || 'ref';
+  if (!have.includes(st.b) || st.b === st.a) st.b = have.find(k => k !== st.a && k !== 'ref') || 'ref';
+  const o = opts.map(x => `<option value="${x.k}">${esc(x.label)}</option>`).join('');
+  $('#selA').innerHTML = o; $('#selB').innerHTML = o;
+  $('#selA').value = st.a; $('#selB').value = st.b;
+  $('#zoomChips').innerHTML = [['fit','Fit'],['1','1:1'],['2','2×']].map(([k,l]) => `<button type="button" class="chip" aria-pressed="${k===st.zoom}" data-z="${k}">${l}</button>`).join('');
+}
+function fileFor(side){
+  const c = P.clips[st.clip], k = side==='a' ? st.a : st.b;
+  if (k==='ref') return {url:c.ref.url, ref:true, size_B:c.ref.size_B};
+  return c.files[k] && c.files[k][st.budget] ? c.files[k][st.budget] : null;
+}
+function label(side){
+  const k = side==='a' ? st.a : st.b, f = fileFor(side);
+  if (k==='ref') return `<b>Original</b><span class="num">display copy · recorded clip</span>`;
+  if (!f) return `<b>${esc(ENC[k].label)}</b><span>no file at ${st.budget} kB</span>`;
+  const over = f.size_B > st.budget*1000*1.1 ? ` <span class="over">over budget</span>` : '';
+  return `<b>${esc(ENC[k].label)}</b><span class="num">${fmtKB(f.size_B)} sent${over} · VMAF ${f.vmaf_display.toFixed(0)}</span>`;
+}
+function load(keepTime){
+  const t = keepTime ? vA.currentTime : 0, playing = !vA.paused;
+  const fa = fileFor('a'), fb = fileFor('b');
+  const need = [st.a, st.b].some(k => k!=='ref' && ENC[k] && ENC[k].codec==='av1');
+  $('#av1warn').hidden = av1ok || !need;
+  for (const [v,f] of [[vA,fa],[vB,fb]]) {
+    if (!f) { v.removeAttribute('src'); v.load(); continue; }
+    if (v.getAttribute('src') !== f.url) { v.src = f.url; }
+    v.playbackRate = +$('#selRate').value;
+  }
+  const seek = () => { try { vA.currentTime = t; vB.currentTime = t; } catch(e){} };
+  vA.addEventListener('loadedmetadata', seek, {once:true}); seek();
+  if (playing) { vA.play().catch(()=>{}); vB.play().catch(()=>{}); }
+  $('#labA').innerHTML = label('a'); $('#labB').innerHTML = label('b');
+  setZoom(); drawTrace();
+}
+function setSplit(x){
+  st.split = Math.min(1, Math.max(0, x));
+  vB.style.clipPath = `inset(0 0 0 ${st.split*100}%)`;
+  $('#divider').style.left = (st.split*100)+'%';
+}
+function setZoom(){
+  const w = P.clips[st.clip].width;
+  inner.style.width = st.zoom==='fit' ? '100%' : (w*(+st.zoom))+'px';
+  stage.classList.toggle('pixel', st.zoom==='2');
+}
+let dragging = false;
+function splitFromEvent(e){ const r = inner.getBoundingClientRect(); setSplit((e.clientX - r.left)/r.width); }
+stage.addEventListener('pointerdown', e => { dragging = true; stage.setPointerCapture(e.pointerId); splitFromEvent(e); });
+stage.addEventListener('pointermove', e => { if (dragging) splitFromEvent(e); });
+stage.addEventListener('pointerup', () => dragging = false);
+stage.addEventListener('pointercancel', () => dragging = false);
+stage.addEventListener('keydown', e => {
+  if (e.key==='ArrowLeft'){ setSplit(st.split-0.05); e.preventDefault(); }
+  if (e.key==='ArrowRight'){ setSplit(st.split+0.05); e.preventDefault(); }
+});
+$('#selClip').addEventListener('change', e => { st.clip = e.target.value; fill(); load(false); });
+$('#selA').addEventListener('change', e => { st.a = e.target.value; load(true); });
+$('#selB').addEventListener('change', e => { st.b = e.target.value; load(true); });
+$('#budgetChips').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (!b) return; st.budget = +b.dataset.b; fill(); load(true); });
+$('#zoomChips').addEventListener('click', e => { const z = e.target.closest('[data-z]'); if (!z) return; st.zoom = z.dataset.z; fill(); setZoom(); });
+$('#selRate').addEventListener('change', e => { vA.playbackRate = vB.playbackRate = +e.target.value; });
+$('#btnPlay').addEventListener('click', () => {
+  if (vA.paused) { vA.play().catch(()=>{}); vB.play().catch(()=>{}); } else { vA.pause(); vB.pause(); }
+});
+vA.addEventListener('play', () => $('#btnPlay').textContent = 'Pause');
+vA.addEventListener('pause', () => $('#btnPlay').textContent = 'Play');
+vA.addEventListener('ended', () => { vA.currentTime = 0; vB.currentTime = 0; vA.play().catch(()=>{}); vB.play().catch(()=>{}); });
+function step(d){
+  vA.pause(); vB.pause();
+  const fps = P.clips[st.clip].fps, t = Math.max(0, Math.min(vA.duration||0, vA.currentTime + d/fps));
+  vA.currentTime = t; vB.currentTime = t;
+}
+$('#btnBack').addEventListener('click', () => step(-1));
+$('#btnFwd').addEventListener('click', () => step(1));
+$('#scrub').addEventListener('input', e => {
+  const t = (+e.target.value/1000)*(vA.duration||0); vA.currentTime = t; vB.currentTime = t;
+});
+function tick(){
+  if (vA.duration) {
+    if (!vB.paused !== !vA.paused) { if (vA.paused) vB.pause(); else vB.play().catch(()=>{}); }
+    if (Math.abs(vB.currentTime - vA.currentTime) > (vA.paused ? 0.001 : 0.06)) vB.currentTime = vA.currentTime;
+    $('#scrub').value = Math.round(1000*vA.currentTime/vA.duration);
+    $('#clock').textContent = vA.currentTime.toFixed(1)+' s';
+    const ph = $('#playhead'); if (ph) { const x = 1000*vA.currentTime/vA.duration; ph.setAttribute('x1',x); ph.setAttribute('x2',x); }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+function drawTrace(){
+  const svg = $('#trace'), parts = [];
+  for (const y of [20,40,60,80]) parts.push(`<line x1="0" x2="1000" y1="${92-y*0.9}" y2="${92-y*0.9}" stroke="var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
+  const notes = [];
+  for (const [side,dash] of [['a',''],['b','6 4']]) {
+    const k = side==='a' ? st.a : st.b, f = fileFor(side);
+    if (k==='ref' || !f || !f.per_frame) continue;
+    const pf = f.per_frame, n = pf.length;
+    const pts = pf.map((v,i) => `${(1000*i/(n-1)).toFixed(1)},${(92 - v*0.9).toFixed(1)}`).join(' ');
+    parts.push(`<polyline points="${pts}" fill="none" stroke="${COL[ENC[k].codec]}" stroke-width="2" stroke-dasharray="${dash}" vector-effect="non-scaling-stroke"/>`);
+    const lo = Math.min(...pf);
+    notes.push(`${ENC[k].label}: worst frame ${lo.toFixed(0)}, mean ${(pf.reduce((x,y)=>x+y,0)/n).toFixed(0)}`);
+  }
+  parts.push(`<line id="playhead" x1="0" x2="0" y1="0" y2="92" stroke="var(--ink)" stroke-width="1" vector-effect="non-scaling-stroke"/>`);
+  svg.innerHTML = parts.join('');
+  $('#traceNote').textContent = notes.length ? 'Quality of each frame at the clip’s own resolution (lines 20–80; left side solid, right side dashed). ' + notes.join(' · ') : '';
+}
+fill(); setSplit(0.5); load(false);
+
+/* ---------- cut sheets ---------- */
+$('#cutSheets').innerHTML = DATA.cuts.map(c => {
+  const row = r => `<div class="row"><div class="b">${r.budget} kB</div>` + r.cells.map(x => x ?
+    `<figure><img src="${x.url}" width="${c.w}" height="${c.h}" alt="${esc(ENC[x.enc].label)} at ${r.budget} kB, frame ${c.frame}" loading="lazy"><figcaption><span class="${ENC[x.enc].codec==='av1'?'a':'h'}">${esc(ENC[x.enc].short)}</span> · ${fmtKB(x.size_B)} sent${x.size_B > r.budget*1100 ? ' <span class="over">over budget</span>' : ''} · VMAF ${x.vmaf_frame}</figcaption></figure>` :
+    `<figure><figcaption>no file</figcaption></figure>`).join('') + '</div>';
+  return `<div class="sheet"><h3>${esc(c.title)} · frame ${c.frame} (${c.t} s)</h3>` +
+    `<div class="row"><div class="b">original</div><figure><img src="${c.original}" width="${c.w}" height="${c.h}" alt="Original frame ${c.frame}" loading="lazy"><figcaption>lossless source</figcaption></figure></div>` +
+    c.rows.map(row).join('') + '</div>';
+}).join('');
+
+/* ---------- budget table ---------- */
+const T = DATA.table; // {groups:[{label, rows:[{stem,label}]}], budgets, cells:{stem:{enc:{b:{vmaf,floor_kB,capped}}}}}
+let tableMode = 'device';
+function cell(c){
+  if (!c) return '<span class="x">·</span>';
+  if (c.vmaf == null) return `<span class="x">–</span>${c.floor_kB ? `<small>≥${Math.round(c.floor_kB)}k</small>` : ''}`;
+  return c.vmaf.toFixed(0);
+}
+function drawTable(){
+  const encs = tableMode==='device' ? DATA.device_encoders : DATA.ceiling_encoders;
+  const head = `<thead><tr><th>Clip</th>${T.budgets.map(b=>`<th>${b} kB</th>`).join('')}</tr></thead>`;
+  let body = '';
+  for (const g of T.groups) {
+    body += `<tr class="grp"><td colspan="${T.budgets.length+1}">${esc(g.label)}</td></tr>`;
+    for (const r of g.rows) {
+      body += `<tr><td>${esc(r.label)}</td>` + T.budgets.map(b => {
+        const s = encs.map(e => `<span style="color:${COL[ENC[e].codec]}">${cell((T.cells[r.stem]||{})[e] && T.cells[r.stem][e][b])}</span>`).join('');
+        return `<td><span class="pair">${s}</span></td>`;
+      }).join('') + '</tr>';
+    }
+  }
+  $('#budgetTable').innerHTML = head + `<tbody>${body}</tbody>`;
+  $('#tableMode').innerHTML = [['device','On the device (Zero)'],['ceiling','Best case (Mac)']].map(([k,l]) => `<button type="button" class="chip" aria-pressed="${k===tableMode}" data-m="${k}">${l}</button>`).join('');
+}
+$('#tableMode').addEventListener('click', e => { const m = e.target.closest('[data-m]'); if (!m) return; tableMode = m.dataset.m; drawTable(); });
+drawTable();
+
+const B = DATA.best; // {groups:[{key,label}], budgets, enc:[...], cells:{g:{enc:{b:{vmaf,label}}}}}
+(function(){
+  const head = `<thead><tr><th>Camera · scene</th><th>Codec</th>${B.budgets.map(b=>`<th>${b} kB</th>`).join('')}</tr></thead>`;
+  let body = '';
+  for (const g of B.groups) for (const e of B.enc) {
+    body += `<tr><td>${esc(g.label)}</td><td style="text-align:left;color:${COL[ENC[e].codec]}">${esc(ENC[e].short)}</td>` + B.budgets.map(b => {
+      const c = ((B.cells[g.key]||{})[e]||{})[b];
+      return c ? `<td><span class="num">${c.vmaf.toFixed(0)}</span><small>${esc(c.label)}</small></td>` : '<td><span class="x">–</span></td>';
+    }).join('') + '</tr>';
+  }
+  $('#bestTable').innerHTML = head + `<tbody>${body}</tbody>`;
+})();
+
+/* ---------- charts ---------- */
+const C = DATA.charts; // [{stem,title,sub,series:{enc:[[kB,vmaf,psnr]...]}}]
+const allEnc = DATA.chart_encoders;
+$('#legend').innerHTML = allEnc.map(e => {
+  const d = ENC[e].where==='mac';
+  return `<span><svg width="30" height="10" aria-hidden="true"><line x1="1" x2="29" y1="5" y2="5" stroke="${COL[ENC[e].codec]}" stroke-width="2" ${d?'stroke-dasharray="5 3"':''}/><circle cx="15" cy="5" r="3.2" fill="${d?'var(--surface)':COL[ENC[e].codec]}" stroke="${COL[ENC[e].codec]}" stroke-width="1.5"/></svg>${esc(ENC[e].label)}</span>`;
+}).join('');
+const W = 320, H = 210, m = {l:34, r:10, t:8, b:30};
+const xmin = Math.log(20), xmax = Math.log(2600);
+const X = kb => m.l + (Math.log(kb)-xmin)/(xmax-xmin)*(W-m.l-m.r);
+const Y = v => m.t + (1 - v/100)*(H-m.t-m.b);
+$('#charts').innerHTML = C.map((c,i) => `<div class="chart" data-i="${i}"><h3>${esc(c.title)}</h3><p class="sub">${esc(c.sub)}</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(c.title)}: VMAF against file size">${chartBody(c)}</svg></div>`).join('');
+function chartBody(c){
+  const g = [];
+  for (const v of [0,20,40,60,80,100]) g.push(`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--rule)" stroke-width="1"/><text x="${m.l-6}" y="${Y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono, monospace">${v}</text>`);
+  for (const kb of [50,100,200,400,800,1600]) g.push(`<line x1="${X(kb)}" x2="${X(kb)}" y1="${m.t}" y2="${H-m.b}" stroke="var(--rule)" stroke-width="1" stroke-dasharray="2 3"/><text x="${X(kb)}" y="${H-m.b+14}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono, monospace">${kb}</text>`);
+  g.push(`<text x="${(m.l+W-m.r)/2}" y="${H-3}" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="Public Sans, sans-serif">kB per clip (log scale)</text>`);
+  for (const e of allEnc) {
+    const s = c.series[e]; if (!s || !s.length) continue;
+    const d = ENC[e].where==='mac', col = COL[ENC[e].codec];
+    g.push(`<polyline points="${s.map(p=>`${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="2" ${d?'stroke-dasharray="5 3"':''} stroke-linejoin="round"/>`);
+    for (const p of s) g.push(`<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="4" fill="${d?'var(--surface)':col}" stroke="${col}" stroke-width="1.5"/>`);
+  }
+  return g.join('');
+}
+document.querySelectorAll('.chart').forEach(el => {
+  const c = C[+el.dataset.i], svg = el.querySelector('svg');
+  const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; el.appendChild(tip);
+  svg.addEventListener('pointermove', ev => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX-r.left)/r.width*W, sy = (ev.clientY-r.top)/r.height*H;
+    let best = null, bd = 1e9;
+    for (const e of allEnc) for (const p of (c.series[e]||[])) {
+      const d = Math.hypot(X(p[0])-sx, Y(p[1])-sy); if (d < bd) { bd = d; best = [e,p]; }
+    }
+    if (!best || bd > 28) { tip.hidden = true; return; }
+    const [e,p] = best;
+    tip.innerHTML = `${esc(ENC[e].label)}<br>${p[0].toFixed(0)} kB · VMAF ${p[1].toFixed(1)}<br>target ${p[2]} kB`;
+    tip.hidden = false;
+    const er = el.getBoundingClientRect();
+    tip.style.left = Math.min(er.width-170, Math.max(4, ev.clientX-er.left+12))+'px';
+    tip.style.top = (ev.clientY-er.top-10)+'px';
+  });
+  svg.addEventListener('pointerleave', () => tip.hidden = true);
+});
+
+/* ---------- limits + method ---------- */
+$('#limitCards').innerHTML = DATA.limits.map(c => `<div class="card"><h3>${esc(c.title)}</h3><dl>${c.rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${c.notes ? `<ul>${c.notes.map(n=>`<li>${n}</li>`).join('')}</ul>` : ''}</div>`).join('');
+$('#methodList').innerHTML = DATA.method.map(x => `<li>${x}</li>`).join('');
+$('#foot').innerHTML = DATA.footer;
+})();
+</script>
