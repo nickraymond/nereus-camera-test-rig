@@ -34,6 +34,14 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   is practical (`start_stream` → framed MJPEG, ~29 fps VGA / ~6.5 fps HD; `host_tools/focus_stream.py`).
   Short-clip **video-to-file** is still deferred; the host adapter reports `capture_video` as
   `not_supported`. AE3 unknown (Phase 4).
+  *Measured 2026-10-02 (video codec bench, `compression_study/video/`, N6 on OpenMV v5.0.1 /
+  MicroPython 1.28):* the PAG7936 delivers **118 fps** at 1280×800 (largest frame — no 1080p);
+  the firmware's hardware JPEG caps a snapshot+compress loop at **31 fps** at q90 (332 kB/frame;
+  q95 gives the same bytes) and 39 fps at q60. Streamed over USB (`start_stream`, unchanged) a
+  15 s clip arrives at **18.4 fps at q90** (6.1 MB/s) or **29.6 fps at q70**. A clip cannot stay
+  on the board: 25.6 MB of heap holds 76 q90 frames (~2.5 s), no SD card, ~3 MB flash free.
+  The N6 has **no video encoder in firmware**: the STM32N6's H.264 block (VENC, 1080p30) is used
+  by OpenMV only for JPEG so far; no H.265 or AV1. Today the Pi has to compress N6 clips.
 - **[RESOLVED-N6] OQ-5 — Board firmware versions in hand.** N6: MicroPython **1.26.0**
   (`v1.26.0-77`, 2025-12-22), build `OPENMV_N6`, STM32N657X0. AE3: `OpenMV-AE3`, MicroPython
   **1.25.0-preview** (reported at discovery; full validation in Phase 4).
@@ -128,6 +136,12 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   clip produced a valid 1920×1080 motion-JPEG). To get real H.264/MP4, install libav
   encoder support for rpicam (needs sudo) — deferred follow-up; not an MVP blocker
   (Spec §2: "video where practical"). Full-sensor 4608×2592 also exceeds H.264 limits.
+  *Zero 2 W, measured 2026-10-02 on `nereus002`:* the BCM2837 encoder (`/dev/video11`,
+  `bcm2835-codec-encode`) outputs **H.264 (High, no B-frames) and MJPEG only — no H.265**
+  (ffmpeg's `hevc_v4l2m2m` fails with EINVAL); `rpicam-vid --codec h264` works, `libav` is not
+  built in. A 15 s 1080p30 MJPEG q95 master records with no dropped frames (235 MB);
+  2304×1296 at 30 fps drops frames. Software encoders in Debian's ffmpeg: x264/x265 (GPL),
+  SVT-AV1 2.3 / libaom / rav1e (BSD). Compression results: `compression_study/video/`.
 
 ## Reference-card pipeline
 
