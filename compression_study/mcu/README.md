@@ -12,5 +12,9 @@ the study's own metrics on the S4 frames (`compression_study/mcu_codec_bench.py`
   `UPSTREAM_COMMIT`): float-input path, rounded LF, HF multiplier / global scale / LF step as
   parameters (a rate knob). Output stays standard JPEG XL (`djxl` decodes it). `drv.c` is the
   test driver.
+- **Follow-up (2026-10-01):** hydrium now runs on both boards as `natmod/nrhyd.mpy`, from the
+  vendored, patched source in `../methods/hydrium/` (`../methods/hyd.c` = the CLI); results in
+  `../REPORT.md`, "hydrium vs wl53 on the OpenMV boards". The patch here is the desk-study
+  version, kept for the record.
 - `timing.py`, `timing.json`, `heap.json` — Mac timings (no SIMD) and heap measurements; board
   times are estimates (Mac × the packer's measured Mac → board ratio), not board runs.
