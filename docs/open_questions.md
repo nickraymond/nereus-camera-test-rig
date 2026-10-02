@@ -269,8 +269,9 @@ Items for Nick are marked **(Nick)**.
 - **[NEEDS-HARDWARE] OQ-25 — Zero 2 W (rig / field Pi) processing time for full-res IMX708 RAW through physics
   v0.** *Informational, S3+.* Measure once `color/pipeline.py` exists. Fallback if too slow:
   the 2304×1296 binned sensor mode (brief §10).
-- **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
-  or cameras housed and cabled to a dry poolside Pi?
+- **[RESOLVED 2026-10-01] OQ-26 — Pool housing plan (Nick).** One housing: the Pi and all three
+  cameras (IMX708, N6, AE3) aimed at the same target, with a depth sensor. Depth-sensor model and
+  interface still open (`docs/SPEC_pool_codec_test.md` §9).
 - **[PARTIAL 2026-09-28] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *Answer:* no
   X-Rite; Nick has a **Datacolor SpyderCheckr 24** (SCK200) — same role (absolute reference beside
   the card). Its authoritative Lab values are in **Datacolor's SpyderCheckr software reference
@@ -612,6 +613,18 @@ Items for Nick are marked **(Nick)**.
   (3–5 % of copies damaged). Anything that moves data over the console (probes, debug dumps)
   needs framing + CRC; the rig service's framed, SHA-256-checked protocol is not affected (it
   checks every transfer). Worth knowing before Phase 2 moves bigger payloads.
+- **[RESOLVED] OQ-56 — C native modules on OpenMV (MicroPython 1.28): what the GC needs.**
+  Found porting hydrium (2026-10-01, `compression_study/natmod/hyd_mod.c`). (1) MicroPython's GC
+  counts a pointer as a reference only if it points to the **exact start** of a heap block
+  (`py/gc.c` `VERIFY_PTR` requires block alignment): C code that keeps `block + offset`
+  (e.g. a size header in front of each allocation) loses those blocks at the next collection.
+  On the AE3 (~2–3 MB free) collections run mid-encode and caused random internal errors; the
+  N6 (25 MB free) never collected, so it looked fine. Rule: hand `m_realloc` results to C
+  unmodified, or run the call with `gc.disable()`. (2) A large module needs its biggest buffer
+  allocated early (the caller passes it in): after the 1 MB frame copy the AE3 heap has
+  ~2–2.7 MB free in pieces, too fragmented for a 768 KB block. (3) mpy_ld places only
+  non-static global bss. Verified on both boards with a GC forced mid-encode
+  (`openmv/probes/hyd_stress_v5.py`) and 72/72 byte-identical planes.
 
 ---
 

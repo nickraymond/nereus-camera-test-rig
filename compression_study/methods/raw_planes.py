@@ -13,6 +13,7 @@ code each plane with a grayscale codec, and invert on decode.
 | D2     | sqrt   | 12     | JPEG XL lossy | yes |
 | D-lin / D2-lin | linear | 8 / native | JPEG / JPEG XL | yes (OpenMV ablation: no curve) |
 | W      | sqrt   | 12     | wl53 (own 5/3 wavelet + Rice coder, wl53_core.h) | yes |
+| H      | none   | native | hydrium JPEG XL VarDCT, linear light (hyd_plane.h) | yes |
 
 Layouts: ``4pl`` (R, G1, G2, B separately), ``3pl`` (G = (G1 + G2 + 1) >> 1, duplicated on
 decode), ``tiled`` (the four planes as one 2×2-tiled image). ``knobs`` maps plane name →
@@ -30,7 +31,7 @@ from . import plane_codecs as pc
 
 CODEC_OF = {"C": "packer", "C-jls": "jls", "C-png": "png", "C2": "jxl", "N": "packer",
             "D": "jpeg", "D-j": "jpegli", "D2": "jxl", "D-lin": "jpeg", "D2-lin": "jxl",
-            "W": "wl53"}
+            "W": "wl53", "H": "hyd"}
 CURVES = ("none", "sqrt", "linear")
 LAYOUTS = ("4pl", "3pl", "tiled")
 
@@ -82,7 +83,7 @@ def code_planes(raw: Raw, spec: RawSpec) -> tuple[dict[str, np.ndarray], int]:
         g = (planes["G1"].astype(np.uint32) + planes["G2"] + 1) >> 1
         planes = {"R": planes["R"], "G": g.astype(np.uint16), "B": planes["B"]}
     if spec.curve == "none":
-        maxval = raw.white if spec.codec in ("packer", "jls", "png") else 2 ** b - 1
+        maxval = raw.white if spec.codec in ("packer", "jls", "png", "hyd") else 2 ** b - 1
         codes = planes
     else:
         maxval = 2 ** b - 1
@@ -99,8 +100,8 @@ def _bin2(p: np.ndarray) -> np.ndarray:
 
 
 def encode_plane(codes: np.ndarray, maxval: int, spec: RawSpec, knob=None,
-                 measure_rss: bool = False):
-    """(bytes, RunStats|None) for one plane."""
+                 measure_rss: bool = False, black: int = 0):
+    """(bytes, RunStats|None) for one plane (``black``: hydrium's linear-light zero)."""
     c = spec.codec
     if c == "packer":
         return pc.packer_enc(codes, maxval)
@@ -117,6 +118,9 @@ def encode_plane(codes: np.ndarray, maxval: int, spec: RawSpec, knob=None,
         return pc.jpegli_enc(codes, maxval, int(knob), measure_rss)
     if c == "wl53":
         return pc.wl53_enc(codes, maxval, float(knob), measure_rss)
+    if c == "hyd":
+        return pc.hyd_enc(codes, maxval + 1, black, maxval, *pc.hyd_params(float(knob)),
+                          measure_rss=measure_rss)
     raise ValueError(f"unknown codec {c}")
 
 
@@ -134,7 +138,8 @@ def assemble(raw: Raw, spec: RawSpec, payloads: dict[str, bytes]) -> bytes:
 def encode(raw: Raw, spec: RawSpec, knobs: dict | None = None) -> bytes:
     codes, maxval = code_planes(raw, spec)
     knobs = knobs or {}
-    payloads = {k: encode_plane(v, maxval, spec, knobs.get(k))[0] for k, v in codes.items()}
+    payloads = {k: encode_plane(v, maxval, spec, knobs.get(k), black=raw.black)[0]
+                for k, v in codes.items()}
     return assemble(raw, spec, payloads)
 
 
@@ -150,6 +155,10 @@ def decode(blob: bytes) -> np.ndarray:
         dec = (pc.packer_dec_factory(cw, ch, h.b) if codec == "packer"
                else pc.wl53_dec_factory(cw, ch))
         planes = {k: dec(p) for k, p in zip(names, payloads)}
+    elif codec == "hyd":
+        names = {"4pl": ("R", "G1", "G2", "B"), "3pl": ("R", "G", "B")}[layout]
+        planes = {k: pc.hyd_dec(p) * (h.white - h.black) + h.black
+                  for k, p in zip(names, payloads)}
     else:
         dec = {"jls": pc.jls_dec, "png": pc.png_dec, "jxl": pc.jxl_dec, "jpeg": pc.jpeg_dec,
                "jpegli": pc.jpegli_dec}[codec]

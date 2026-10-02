@@ -50,9 +50,15 @@ def parse_probe(path: Path) -> dict:
             out["marks"].append((t, line.split()[1:]))
         elif line.startswith("#B "):
             parts = line.split(" ")
+            if len(parts) < 4:  # a line cut short by a console drop
+                out["chunk_errors"] += 1
+                continue
             name = parts[1]
             if parts[2] == "end":
-                ends[name] = (int(parts[3]), parts[4])
+                if len(parts) == 5 and len(parts[4]) == 64:
+                    ends[name] = (int(parts[3]), parts[4])
+                else:
+                    out["chunk_errors"] += 1
                 continue
             try:
                 off, crc, data = int(parts[2]), parts[3], base64.b64decode(parts[4])

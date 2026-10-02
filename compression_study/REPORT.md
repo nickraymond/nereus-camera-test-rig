@@ -170,6 +170,65 @@ Results, worse of the two lamps (colour error / tag SSIM):
 - **HEIC:** keeps the sharpest edges but has a 0.4–0.7 colour error at every size.
 - **Half-resolution (2×2-binned) wl53:** helped only at sizes already past breaking point.
 
+## hydrium vs wl53 on the OpenMV boards (2026-10-01)
+
+**Answer: use hydrium on the N6 and AE3 for the routine 0.4 bpp (~51 kB) link; keep wl53 as the
+cheap fallback.** Under water at 0.4 bpp hydrium has about half wl53's card colour error (−23 to −56 % per
+frame set, mean 1.17 vs 2.05) and 2–4× less whole-frame colour error (6–7× in air), it writes standard JPEG XL (any stock decoder reads it),
+and it fits both boards (~1.3 MB heap, 1.5–2.1 s per HD frame). wl53 is 1.3–4× faster, needs
+0.5 MB, and is better at 0.8 bpp under water and in air on the AE3.
+
+What was built:
+- `methods/hydrium/`: hydrium (BSD-2) vendored at upstream `45227f3`, then a study patch: rate
+  knobs per encoder, all allocations through `hyd_mem_*`, no 64-bit division or libm, a grey-plane
+  input through a per-code XYB table (no cube roots per pixel), a Huffman builder over the used
+  symbols only (stock sized it for the 16K-symbol LZ77 alphabet: ~1 MB), and a caller-supplied
+  768 KB tile buffer. `methods/hyd_plane.h` wraps one Bayer plane (linear light, 256×256 tiles,
+  LF ÷ 4 with rounding = the desk study's best variant `hyd-256-lf4-lin`).
+- `natmod/hyd_mod.c` → `nrhyd.mpy` (36 KB) and `nrhydm.mpy` (+ peak-heap count, GC off only);
+  `methods/hyd.c` = the Mac / Pi CLI from the same source; study method **H**.
+- `openmv/probes/hyd_probe_v5.py` (both codecs, on-board rate search to 0.4 and 0.8 bpp),
+  `phase2/verify_hyd.py` (byte-identity), `phase2/hyd_summary.py`, `phase2/pi_hyd_bench.py`.
+
+Byte-identical everywhere: boards 72/72 planes (N6 and AE3; live frames with the lights on and the
+stored S4 frame), Pi 20/20. Floats match because every build uses IEEE single precision with
+`-ffp-contract=off`.
+
+**Colour (stress ΔE00 on the card after the card correction; mean of the two lamps) and cost:**
+
+| | | stress ΔE wl53 | stress ΔE hydrium | block ΔE wl53 | block ΔE hydrium | s / HD frame wl53 | s / HD frame hydrium | heap wl53 | heap hydrium |
+|---|---|---|---|---|---|---|---|---|---|
+| N6 | air, 0.4 bpp | 0.49 | 0.49 | 0.75 | **0.10** | 1.24 | 1.53 | 0.5 MB | 1.3 MB |
+| N6 | air, 0.8 bpp | 0.18 | 0.16 | 0.35 | **0.06** | 1.27 | 1.67 | 0.5 MB | 1.3 MB |
+| N6 | water-sim, 0.4 bpp | 2.12 | **1.25** | 1.02 | **0.26** | 1.24 | 1.53 | 0.5 MB | 1.3 MB |
+| N6 | water-sim, 0.8 bpp | **0.55** | 0.67 | 0.52 | **0.19** | 1.27 | 1.67 | 0.5 MB | 1.3 MB |
+| AE3 | air, 0.4 bpp | **0.50** | 0.70 | 0.71 | **0.10** | 0.44 | 1.85 | 0.5 MB | 1.3 MB |
+| AE3 | air, 0.8 bpp | **0.23** | 0.28 | 0.33 | **0.06** | 0.48 | 2.07 | 0.5 MB | 1.3 MB |
+| AE3 | water-sim, 0.4 bpp | 1.98 | **1.08** | 0.99 | **0.30** | 0.44 | 1.85 | 0.5 MB | 1.3 MB |
+| AE3 | water-sim, 0.8 bpp | **0.43** | 0.67 | 0.49 | **0.22** | 0.48 | 2.07 | 0.5 MB | 1.3 MB |
+
+Times: the same stored S4 frame on both boards (`/flash/bench.bayer`); live frames give the same
+picture (N6 hydrium 1.3 s, AE3 2.0–2.4 s). The on-board rate search to a target takes 4–7 encodes
+(N6 6–10 s, AE3 9–12 s for hydrium; 2–9 s for wl53). Heap: hydrium's own peak 0.50–0.57 MB plus
+its 768 KB tile buffer; wl53's 512 KB plane copy. For reference: hydrium as C on the Pi Zero 2 W
+takes 0.24 s per OpenMV plane and 1.3 s for the IMX708 field crop at 50 kB (wl53 0.36 s, D2 6.4 s).
+Tag-region SSIM is about equal (0.92–0.97 at 0.4 bpp, 0.98–0.99 at 0.8; today's JPEG keeps
+edges sharper at 0.4 bpp: 0.98–0.99). The D2 (libjxl, desktop only) and today's-JPEG columns are
+in the report's "On-board encoders" section, with charts for every frame set.
+
+Board gotchas found (OQ-56): MicroPython's GC only sees pointers to the start of a block (a size
+header in front of each allocation got live buffers collected on the AE3); the AE3 heap is too
+fragmented after the frame copy for a 768 KB block, so the caller allocates it first; reading a
+1 MB file with `bytearray(f.read())` needs 2 MB (use `readinto`).
+
+Visual: https://claude.ai/artifact/4tFp73un3jGYXwsRWrVXaf (original vs hydrium vs wl53 vs D2 vs
+today's JPEG; whole frame, card and AprilTag at 1:1; click a view for full screen and zoom).
+Report: https://claude.ai/artifact/8MgizMsuEpo1xJC6cgdwQr (section "On-board encoders").
+
+Limits: lab frames under LEDs, simulated water; three repeats per stop; times measured with the
+sensor defaults (denoise + lens shading on); hydrium's knob range on the board is capped at 6
+(above ~2 bpp its buffers outgrow the AE3 heap).
+
 ## Recommendation
 
 | Option | Pros | Cons |

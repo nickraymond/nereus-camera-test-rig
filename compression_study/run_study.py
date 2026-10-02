@@ -165,7 +165,7 @@ def processed_rows(fs, raw, ctx, targets, renders, methods, crops) -> list[dict]
 
 def plane_curves(raw: Raw, spec: rp.RawSpec) -> tuple[dict[str, rate.Curve], int]:
     codes, maxval = rp.code_planes(raw, spec)
-    return ({k: rate.Curve(lambda q, c=c: rp.encode_plane(c, maxval, spec, q))
+    return ({k: rate.Curve(lambda q, c=c: rp.encode_plane(c, maxval, spec, q, black=raw.black))
              for k, c in codes.items()}, maxval)
 
 
@@ -315,7 +315,8 @@ def context_for(reps: list[Raw], roi: dict, vmin: float):
     return metrics.Context(reps[0], reps, roi, nm, grey_wb(reps[0], roi)), nm
 
 
-EXTRA_SPECS = {"W": rp.RawSpec("W", "sqrt", 12)}  # added after Phase 1 (2026-10-01)
+EXTRA_SPECS = {"W": rp.RawSpec("W", "sqrt", 12),  # added after Phase 1 (2026-10-01)
+               "H": rp.RawSpec("H", "none")}  # hydrium, linear light (2026-10-01)
 
 
 def run_frameset(job: dict) -> dict:

@@ -145,10 +145,12 @@ def supporting_gate(rows, fsid, d2_mode) -> dict:
 
 # ------------------------------------------------------------------ charts (inline SVG)
 
-def chart_svg(rows, fsid, metric, ylab, d2_mode, rd_floor: bool, width=440, height=270):
+def chart_svg(rows, fsid, metric, ylab, d2_mode, rd_floor: bool, width=440, height=270,
+              lines=None):
+    """``lines``: [(colour slot, (key, label))], default CHART_LINES in order."""
     pad_l, pad_r, pad_t, pad_b = 48, 12, 12, 40
     pts = {}
-    for i, (k, label) in enumerate(CHART_LINES):
+    for i, (k, label) in (lines if lines is not None else enumerate(CHART_LINES)):
         kk = k.format(m=d2_mode)
         rs = sorted([r for r in rows if r.get("fsid") == fsid and key(r) == kk
                      and r.get("bytes") and r.get(metric) is not None
@@ -168,6 +170,9 @@ def chart_svg(rows, fsid, metric, ylab, d2_mode, rd_floor: bool, width=440, heig
         off = [(lbl, v) for v, lbl in peaks if v > cut]
         y1 = cut
     y0 = 0.0
+    if metric.startswith("ssim"):  # similarity: zoom in on the top of the scale
+        y0 = max(0.0, math.floor(min(p[1] for _, ps in pts.values() for p in ps) * 50) / 50)
+        y1 = 1.0
     W, H = width - pad_l - pad_r, height - pad_t - pad_b
     sx = lambda x: pad_l + (math.log10(x) - x0) / (x1 - x0) * W  # noqa: E731
     sy = lambda y: pad_t + H - (min(y, y1) - y0) / (y1 - y0) * H  # noqa: E731
@@ -400,7 +405,7 @@ def build_gate(rows, meta, modes) -> dict:
 
 def render_html(rows, meta, modes, gate, inv, vers, work: Path) -> str:
     css = CSS
-    parts = [f"<title>Raw Compression Study</title><style>{css}</style>",
+    parts = [f"<meta charset=\"utf-8\"><title>Raw Compression Study</title><style>{css}</style>",
              '<link rel="preconnect" href="https://fonts.googleapis.com">',
              '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family='
              'IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">',
@@ -412,6 +417,7 @@ def render_html(rows, meta, modes, gate, inv, vers, work: Path) -> str:
     parts.append(lossless_section(rows))
     parts.append(field_section(rows))
     parts.append(phase2_section(work / "phase2"))
+    parts.append(mcu_section(rows, meta, modes, work / "phase2"))
     parts.append(crop_section(work, meta))
     parts.append(HOW_IT_WORKS)
     parts.append(inventory_section(inv, meta))
@@ -584,6 +590,113 @@ def field_section(rows) -> str:
                    f"<td class='n'>{fmt(r['block_de_med'])}</td>"
                    f"<td class='n'>{fmt(r.get('ssim_tex'), 3)}</td></tr>")
     out.append("</tbody></table></div></section>")
+    return "".join(out)
+
+
+MCU_LINES = [(0, ("M1|", "M1 JPEG (today)")), (5, ("D2|D2/{m}", "D2 libjxl (Pi/Mac only)")),
+             (6, ("W|W", "W wl53 (own C)")), (1, ("H|H", "H hydrium (JPEG XL, C)"))]
+
+
+def mcu_section(rows, meta, modes, d: Path) -> str:
+    """wl53 vs hydrium, the two encoders that run on the OpenMV boards (2026-10-01)."""
+    legend = "".join(f"<span class='key'><i class='sw s{i}'></i>{html.escape(lbl)}</span>"
+                     for i, (_, lbl) in MCU_LINES)
+    out = ["<section id='mcu'><h2>On-board encoders: wl53 vs hydrium</h2><p class='lede'>The "
+           "two lossy encoders that run on the N6 / AE3 as MicroPython native modules: wl53 (our "
+           "5/3 wavelet + Rice coder, sqrt-12 planes) and hydrium (a BSD-2 JPEG XL VarDCT "
+           "encoder in plain C, linear planes, 256×256 tiles; standard JPEG XL out). Scored on "
+           "the Mac with the Phase 1 metrics; the boards write byte-identical streams. Left: "
+           "mean stress ΔE2000 on the card patches after the card correction (red ×4). Middle: "
+           "median 16×16-block ΔE2000 over the frame. Right: SSIM of the AprilTag-0 region at "
+           "sensor resolution. Hover a point for its value.</p>",
+           f"<div class='legend'>{legend}</div>"]
+    for cam in ("n6", "ae3"):
+        m = modes.get(cam, "vardct")
+        lines = [(i, (k.format(m=m), lbl)) for i, (k, lbl) in MCU_LINES]
+        for cond in CONDS:
+            for ill in ("cool", "warm"):
+                fsid = f"{cam}_{ill}_s-1_{cond}"
+                if fsid not in meta:
+                    continue
+                out.append(f"<h3>{CAM_NAME[cam]} · {ill} lamp · {COND_NAME[cond]}</h3>"
+                           "<div class='grid3'>")
+                for metric, lab in (("stress_de_mean", "stress ΔE00"),
+                                    ("block_de_med", "block ΔE00"),
+                                    ("ssim_tex", "tag SSIM")):
+                    out.append(f"<figure><figcaption>{lab}</figcaption>"
+                               f"{chart_svg(rows, fsid, metric, lab, m, False, lines=lines)}"
+                               "</figure>")
+                out.append("</div>")
+    # the at-target table, every primary frame set
+    out.append("<h3>At 0.4 and 0.8 bpp, all primary frame sets</h3><div class='scroll'><table>"
+               "<thead><tr><th>Frame set</th><th>bpp</th>" + "".join(
+                   f"<th>{h}</th>" for h in ("stress ΔE W", "stress ΔE H", "block ΔE W",
+                                             "block ΔE H", "tag SSIM W", "tag SSIM H",
+                                             "stress ΔE D2", "stress ΔE M1"))
+               + "</tr></thead><tbody>")
+    for cam in CAMS:
+        m = modes.get(cam, "vardct")
+        for cond in CONDS:
+            for ill in ("cool", "warm"):
+                fsid = f"{cam}_{ill}_s-1_{cond}"
+                for t in ("T1", "T2"):
+                    v = [at_target(rows, fsid, k, t, met) for met, k in (
+                        ("stress_de_mean", "W|W"), ("stress_de_mean", "H|H"),
+                        ("block_de_med", "W|W"), ("block_de_med", "H|H"),
+                        ("ssim_tex", "W|W"), ("ssim_tex", "H|H"),
+                        ("stress_de_mean", f"D2|D2/{m}"), ("stress_de_mean", "M1|"))]
+                    if all(x is None for x in v):
+                        continue
+                    cells = []
+                    for j, x in enumerate(v):  # W/H pairs: mark the better of the two
+                        pair = v[j - j % 2:j - j % 2 + 2] if j < 6 else [None]
+                        better = max if j in (4, 5) else min  # SSIM: higher is better
+                        win = None not in pair and x == better(pair)
+                        cells.append(f"<td{' class=win' if win else ''}>{fmt(x, 3)}</td>")
+                    out.append(f"<tr><td>{CAM_NAME[cam]} · {ill} · {cond}</td>"
+                               f"<td>{BPP[t]}</td>{''.join(cells)}</tr>")
+    out.append("</tbody></table></div>")
+    out.append(mcu_board_table(d))
+    out.append("</section>")
+    return "".join(out)
+
+
+def mcu_board_table(d: Path) -> str:
+    f = d / "hyd_summary.json"
+    if not f.exists():
+        return ""
+    s = json.loads(f.read_text())
+    out = ["<h3>On the boards (nereus002)</h3><p class='lede'>Time per HD frame (4 planes, "
+           "1280×800 Bayer) at the final knob of the on-board rate search; heap = hydrium's peak "
+           "allocations plus its 768 KB tile buffer (wl53: its 512 KB plane copy). “S4 frame” = "
+           "the stored cool-lamp N6 frame from the dataset, loaded from /flash on both boards "
+           "(same scene); “live” = a camera frame with the room lights on. Byte-identical = "
+           "planes equal to the Mac encoder's output.</p><div class='scroll'><table><thead><tr>"
+           "<th>Board</th><th>Frame</th><th>Codec</th><th>bpp</th><th>s / frame</th>"
+           "<th>rate search</th><th>heap</th><th>byte-identical</th></tr></thead><tbody>"]
+    for stem, v in s.items():
+        src = "S4 frame" if "bench" in str(v["frame"].get("source", "")) else "live"
+        for codec, c in v["codecs"].items():
+            for t, r in c.items():
+                heap = (f"{(r['peak_heap'] + 786432) / 2**20:.2f} MB" if codec == "H" and
+                        r.get("peak_heap") else ("0.50 MB" if codec == "W" else "—"))
+                out.append(f"<tr><td>{v['board'].upper()}</td><td>{src}</td><td>"
+                           f"{'hydrium' if codec == 'H' else 'wl53'}</td><td>{r['bpp']:.2f}"
+                           f"</td><td>{r['frame_s']:.2f}</td><td>{r['search_s']:.1f} s "
+                           f"({r['search_steps']} steps)</td><td>{heap}</td>"
+                           f"<td>{r['byte_identical']}/{r['planes']}</td></tr>")
+    out.append("</tbody></table></div>")
+    pi = d / "pi_hyd" / "pi_results.json"
+    if pi.exists():
+        p = json.loads(pi.read_text())
+        rs = p["rows"]
+        omv = [r["wall_s"] for r in rs if not r["name"].startswith("imx708")]
+        imx = [r for r in rs if r["name"].startswith("imx708")]
+        out.append(f"<p>hydrium as C on the Pi Zero 2 W (gcc, one core): {min(omv):.2f}–"
+                   f"{max(omv):.2f} s per OpenMV plane; IMX708 1600×900 field crop at 50 kB "
+                   f"{sum(r['wall_s'] for r in imx):.2f} s for 4 planes, peak heap "
+                   f"{max(r['peak_heap'] for r in rs) / 2**20:.1f} MB; "
+                   f"{p['byte_identical']} streams byte-identical to the Mac.</p>")
     return "".join(out)
 
 
@@ -921,6 +1034,7 @@ nav a:hover,nav a:focus-visible{border-color:var(--accent);outline:none}
 .scroll{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:6px}
 table{border-collapse:collapse;width:100%;font-size:.86rem}
 th,td{padding:7px 10px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+td.win{font-weight:600;background:var(--win-bg,rgba(27,175,122,.12))}
 thead th{font-weight:600;color:var(--ink2);background:var(--bg);white-space:nowrap}
 tbody tr:last-child>*{border-bottom:none}
 .n{text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;
