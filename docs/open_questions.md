@@ -269,8 +269,9 @@ Items for Nick are marked **(Nick)**.
 - **[NEEDS-HARDWARE] OQ-25 — Zero 2 W (rig / field Pi) processing time for full-res IMX708 RAW through physics
   v0.** *Informational, S3+.* Measure once `color/pipeline.py` exists. Fallback if too slow:
   the 2304×1296 binned sensor mode (brief §10).
-- **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
-  or cameras housed and cabled to a dry poolside Pi?
+- **[RESOLVED 2026-10-01] OQ-26 — Pool housing plan (Nick).** One housing: the Pi and all three
+  cameras (IMX708, N6, AE3) aimed at the same target, with a depth sensor. Depth-sensor model and
+  interface still open (`docs/SPEC_pool_codec_test.md` §9).
 - **[PARTIAL 2026-09-28] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *Answer:* no
   X-Rite; Nick has a **Datacolor SpyderCheckr 24** (SCK200) — same role (absolute reference beside
   the card). Its authoritative Lab values are in **Datacolor's SpyderCheckr software reference
