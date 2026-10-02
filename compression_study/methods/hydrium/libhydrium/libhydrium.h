@@ -331,6 +331,13 @@ HYDRIUM_EXPORT HYDStatusCode hyd_study_set_params(HYDEncoder *encoder, uint32_t 
 HYDRIUM_EXPORT HYDStatusCode hyd_study_grey_lut(HYDEncoder *encoder, uint32_t size, int32_t black, int32_t white);
 
 /**
+ * @brief Use the caller's buffer for the tile's XYB working data (12 bytes per pixel of the
+ * tile, rounded up to 8x8 blocks: 786,432 bytes for 256x256 tiles) instead of allocating it.
+ * It must outlive the encoder; hydrium never frees it.
+ */
+HYDRIUM_EXPORT HYDStatusCode hyd_study_set_xyb_buffer(HYDEncoder *encoder, void *buffer, size_t bytes);
+
+/**
  * @brief Like hyd_send_tile for one grey plane of 1-byte or 2-byte (native-endian) codes;
  * strides are in samples. Codes >= the table size are clamped to its last entry.
  */

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     int32_t where;
     size_t n = hyd_plane_encode(img, 2, W, 1, (uint32_t)W, (uint32_t)H, (uint32_t)nlut,
                                 (int32_t)black, (int32_t)white, (uint32_t)hf, (uint32_t)gs,
-                                (uint32_t)lf, out, cap, &err, &where);
+                                (uint32_t)lf, out, cap, NULL, 0, &err, &where);
     if (!n) {
         fprintf(stderr, "hyd: %s (%d)\n", err, (int)where);
         return 2;

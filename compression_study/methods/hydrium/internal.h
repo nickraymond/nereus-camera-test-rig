@@ -90,6 +90,8 @@ struct HYDEncoder {
     uint32_t study_lf_f;
     float *grey_xyb_lut;
     uint32_t grey_lut_size;
+    void *xyb_ext;  /* caller's tile buffer (hyd_study_set_xyb_buffer), or NULL */
+    size_t xyb_ext_bytes;
 };
 
 HYDStatusCode hyd_populate_lf_group(HYDEncoder *encoder, HYDLFGroup **lf_group, uint32_t tile_x, uint32_t tile_y);

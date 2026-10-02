@@ -20,18 +20,22 @@
 #include "hydrium/libhydrium/libhydrium.h"
 
 #define HYD_PLANE_TILE 256
+/* XYB working buffer for one tile (3 floats per pixel), see hyd_study_set_xyb_buffer */
+#define HYD_PLANE_WORK_BYTES ((size_t)HYD_PLANE_TILE * HYD_PLANE_TILE * 12)
 
 /*
  * Samples: sample_bytes 1 (uint8) or 2 (uint16, native endian); strides in samples. Returns the
  * stream length, or 0 with *err set (bad arguments, out of memory, output buffer too small) and
  * *where = hydrium status code * 1000 - step * 100 - tile index (step: 1 setup, 2 send tile,
- * 3 flush, 4 output buffer).
+ * 3 flush, 4 output buffer). ``work``: optional caller buffer of HYD_PLANE_WORK_BYTES for the
+ * tile's XYB data (the one large block; an MCU can allocate it once, early), else NULL.
  */
 static size_t hyd_plane_encode(const void *src, int sample_bytes, ptrdiff_t row_stride,
                                ptrdiff_t pixel_stride, uint32_t w, uint32_t h, uint32_t nlut,
                                int32_t black, int32_t white, uint32_t hf_mult,
                                uint32_t global_scale, uint32_t lf_divisor, uint8_t *out,
-                               size_t cap, const char **err, int32_t *where) {
+                               size_t cap, void *work, size_t work_bytes, const char **err,
+                               int32_t *where) {
     size_t total = 0;
     int step = 1, tile = 0;
     *err = NULL;
@@ -55,6 +59,8 @@ static size_t hyd_plane_encode(const void *src, int sample_bytes, ptrdiff_t row_
         r = hyd_study_set_params(e, hf_mult, global_scale, lf_divisor);
     if (r >= HYD_ERROR_START)
         r = hyd_study_grey_lut(e, nlut, black, white);
+    if (r >= HYD_ERROR_START && work)
+        r = hyd_study_set_xyb_buffer(e, work, work_bytes);
     if (r >= HYD_ERROR_START)
         r = hyd_provide_output_buffer(e, out, cap);
     const uint32_t tw = (w + HYD_PLANE_TILE - 1) / HYD_PLANE_TILE;

@@ -550,6 +550,15 @@ HYDStatusCode hyd_send_tile_pre(HYDEncoder *encoder, uint32_t tile_x, uint32_t t
     }
 
     size_t xyb_pixels = lf_group->varblock_height * lf_group->varblock_width * 64;
+    if (encoder->xyb_ext) {
+        /* study patch: the caller's buffer (one contiguous block allocated up front) */
+        if (xyb_pixels > encoder->xyb_ext_bytes / sizeof(XYBEntry)) {
+            encoder->error = "xyb work buffer too small";
+            return HYD_API_ERROR;
+        }
+        encoder->xyb = encoder->xyb_ext;
+        return HYD_OK;
+    }
     ret = hyd_realloc_array_p(&encoder->xyb, xyb_pixels, sizeof(XYBEntry));
     if (ret < HYD_ERROR_START)
         return ret;

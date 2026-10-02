@@ -35,6 +35,8 @@ HYDRIUM_EXPORT HYDStatusCode hyd_encoder_destroy(HYDEncoder *encoder) {
     hyd_free_arraybuffer_p(encoder->section_endpos_array, &encoder->section_endpos);
     hyd_freep(&encoder->hf_stream_barrier);
     hyd_freep(&encoder->working_writer.buffer);
+    if (encoder->xyb_ext)
+        encoder->xyb = NULL;  /* the caller's */
     hyd_freep(&encoder->xyb);
     hyd_free_arraybuffer_p(encoder->lfg_perm_array, &encoder->lfg_perm);
     hyd_free_arraybuffer_p(encoder->lfg_array, &encoder->lfg);
@@ -226,6 +228,16 @@ HYDRIUM_EXPORT HYDStatusCode hyd_study_set_params(HYDEncoder *encoder, uint32_t 
     encoder->study_hf_mult = hf_mult;
     encoder->study_gs = global_scale;
     encoder->study_lf_f = lf_divisor;
+    return HYD_OK;
+}
+
+HYDRIUM_EXPORT HYDStatusCode hyd_study_set_xyb_buffer(HYDEncoder *encoder, void *buffer, size_t bytes) {
+    if (encoder->xyb && !encoder->xyb_ext) {
+        encoder->error = "set the xyb buffer before the first tile";
+        return HYD_API_ERROR;
+    }
+    encoder->xyb_ext = buffer;
+    encoder->xyb_ext_bytes = buffer ? bytes : 0;
     return HYD_OK;
 }
 

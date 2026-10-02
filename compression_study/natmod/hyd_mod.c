@@ -4,13 +4,15 @@
  * the same code as the Mac / Pi CLI methods/hyd.c, so the bytes are identical).
  *
  *   import nrhyd
- *   n, peak = nrhyd.encode(frame, stride, offset, w, h, black, white, hf, gs, lf, out)
+ *   n, peak = nrhyd.encode(frame, stride, offset, w, h, black, white, hf, gs, lf, out[, work])
  *
  * Plane sample (y, x) = frame[offset + y*stride + 2*x] (plane stride = 2 * frame width).
  * Linear light = (v - black) / (white - black). hf / gs / lf = HF multiplier, globalScale, LF
  * divisor. ``out`` is a writable buffer; returns the stream length and hydrium's peak heap
  * bytes (0 unless built with HYD_MEM_STATS: nrhydm.mpy), or (0, where) on failure (hydrium
- * status, step and tile: hyd_plane.h). nrhydm keeps a size header in front of each block,
+ * status, step and tile: hyd_plane.h). ``work`` (optional): a buffer of >= 786,432 bytes for
+ * hydrium's largest block, the tile's XYB data — allocate it early, while the heap is still in
+ * one piece (the AE3's is not, after the 1 MB frame copy). nrhydm keeps a size header in front of each block,
  * which MicroPython's GC does not see as a reference: call it only with gc.disable(). All of hydrium's memory comes from the MicroPython heap (m_realloc / m_free) and is
  * freed before returning; an allocation failure raises MemoryError (the GC reclaims the rest).
  * Uses single-precision floats (the M55 FPU); built with -ffp-contract=off like the CLI.
@@ -43,6 +45,13 @@ static mp_obj_t encode(size_t n_args, const mp_obj_t *args) {
     mp_int_t gs = mp_obj_get_int(args[8]);
     mp_int_t lf = mp_obj_get_int(args[9]);
     mp_get_buffer_raise(args[10], &dst, MP_BUFFER_WRITE);
+    mp_buffer_info_t work = {0};
+    if (n_args > 11) {
+        mp_get_buffer_raise(args[11], &work, MP_BUFFER_WRITE);
+        if (work.len < HYD_PLANE_WORK_BYTES) {
+            mp_raise_ValueError(MP_ERROR_TEXT("work buffer < 786432 bytes"));
+        }
+    }
     if (w < 1 || h < 1 || offset < 0 || stride < 2 * w
         || offset + (h - 1) * stride + 2 * (w - 1) >= (mp_int_t)src.len) {
         mp_raise_ValueError(MP_ERROR_TEXT("bad plane geometry"));
@@ -52,8 +61,8 @@ static mp_obj_t encode(size_t n_args, const mp_obj_t *args) {
     int32_t where;
     size_t n = hyd_plane_encode((const uint8_t *)src.buf + offset, 1, stride, 2, (uint32_t)w,
                                 (uint32_t)h, 256, (int32_t)black, (int32_t)white, (uint32_t)hf,
-                                (uint32_t)gs, (uint32_t)lf, (uint8_t *)dst.buf, dst.len, &err,
-                                &where);
+                                (uint32_t)gs, (uint32_t)lf, (uint8_t *)dst.buf, dst.len, work.buf,
+                                work.len, &err, &where);
     if (!n) {
         /* (0, where): status code * 1000 - step * 100 - tile (see hyd_plane.h); the message is
          * one of a few fixed strings, so the caller decodes ``where`` */
@@ -63,7 +72,7 @@ static mp_obj_t encode(size_t n_args, const mp_obj_t *args) {
     mp_obj_t res[2] = {mp_obj_new_int((mp_int_t)n), mp_obj_new_int((mp_int_t)hyd_mem_peak())};
     return mp_obj_new_tuple(2, res);
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(encode_obj, 11, 11, encode);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(encode_obj, 11, 12, encode);
 
 mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *args) {
     MP_DYNRUNTIME_INIT_ENTRY
