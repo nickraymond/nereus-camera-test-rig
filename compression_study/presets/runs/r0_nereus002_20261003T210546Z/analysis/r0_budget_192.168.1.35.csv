@@ -1,0 +1,3 @@
+preset,pre_capture_s (ASSUMPTION),capture_raw_median_s,prep_s (Sprint08),dng_planes_s (ESTIMATE),two_rungs_s,burst_s (176+2 msgs x 1.3),tail_s,predicted_end_s,budget_s,fits
+1600x900,9.0,3.50094,2.5,1.0,12.66,231.4,150.0,410.06094,480.0,True
+2304x1296,9.0,3.50094,2.5,1.0,24.907,231.4,150.0,422.30794000000003,480.0,True
