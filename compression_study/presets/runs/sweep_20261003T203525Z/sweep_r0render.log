@@ -1,0 +1,9 @@
+usable card colour patches: 10 of 13 → ['cream', 'tan', 'ochre', 'orange', 'brown', 'coral_pink', 'yellow', 'green', 'cyan', 'blue']
+[r0] pjpg q80 52198 B 182 msgs core SSIM 0.935 ΔE 2.65 (RAW 1.42) acu 1.05 tags 2/2
+[r0] 800x450    d= 1.047  51059 B 178 msgs core SSIM 0.991/0.935 roi SSIM 0.991 ΔE 1.30/2.65 (RAW 1.42) vsRAW 0.11 acu 1.00/1.05 → PASS
+[r0] 1200x676   d= 2.247  51613 B 180 msgs core SSIM 0.983/0.935 roi SSIM 0.984 ΔE 1.29/2.65 (RAW 1.42) vsRAW 0.20 acu 1.02/1.05 → PASS
+[r0] 1600x900   d= 3.811  51122 B 178 msgs core SSIM 0.970/0.935 roi SSIM 0.975 ΔE 1.42/2.65 (RAW 1.42) vsRAW 0.25 acu 1.00/1.05 → PASS
+[r0] 2000x1124  d= 6.340  51671 B 180 msgs core SSIM 0.954/0.935 roi SSIM 0.960 ΔE 1.20/2.65 (RAW 1.42) vsRAW 0.47 acu 1.08/1.05 → FAIL
+[r0] 2304x1296  d=10.141  50863 B 177 msgs core SSIM 0.937/0.935 roi SSIM 0.940 ΔE 1.92/2.65 (RAW 1.42) vsRAW 1.03 acu 0.90/1.05 → FAIL
+[r0] 3072x1728  does not fit 180 msgs at d 15 → 54328 B 189 msgs
+[r0] 4608x2592  does not fit 180 msgs at d 15 → 76753 B 267 msgs

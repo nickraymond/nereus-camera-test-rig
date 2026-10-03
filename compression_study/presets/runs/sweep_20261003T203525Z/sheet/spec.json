@@ -1,0 +1,339 @@
+{
+ "title": "ROI sweep at 180 messages",
+ "eyebrow": "Nereus Vision · IMX708 on nereus002 · 2026-10-03 · card at ≈ 1.5 m",
+ "lede": "Largest ROI that fits 180 msgs and is ≥ today's quality: 1600×900 (d 3.81, 178 msgs), and the Pi Zero encodes it in 8.5 s · 40 MiB. 2000×1124 and 2304×1296 also fit and the Zero encodes them, but they are WARN (tag edges overshoot / soften vs RAW); 3072×1728 needs 189 msgs at d 15; the full frame does not fit and trips the Zero's memory guard.",
+ "inline_max_width": 1400,
+ "facts": [
+  {
+   "value": "1600×900",
+   "label": "largest ROI ≥ today's quality at 180 msgs"
+  },
+  {
+   "value": "ΔE 1.28 vs 2.68",
+   "label": "card colour error, nrjxl vs today's pjpg (lower is better)"
+  },
+  {
+   "value": "SSIM 0.970 vs 0.935",
+   "label": "detail on the card area vs the RAW (1 = identical)"
+  },
+  {
+   "value": "8.5 s · 40 MiB",
+   "label": "production encode on the Pi Zero 2 W"
+  }
+ ],
+ "sections": [
+  {
+   "title": "Framing (frame 0, camera JPEG)",
+   "figure": "img/framing.jpg",
+   "note": "4608×2592, IMX708 on nereus002, card ≈ 1.5 m. Boxes: the seven ROIs (all centred on the card + checker; 4608×2592 is the whole frame). Dashed underline: today's fixed pjpg crop (1504, 846, 1600, 900)."
+  },
+  {
+   "title": "Every ROI at 180 messages (medians of 3 frames)",
+   "note": "Core SSIM = luma SSIM vs the RAW render on the 800×450 box around the card, which every ROI and today's pjpg contain. ROI SSIM = over the whole ROI. ΔE card = mean ΔE00 vs the V1 card truth after each image's own 3×3 card fit (10 patches). ΔE vs RAW = same patches, no fit: compression only. Tag acutance = edge sharpness on the 2 decodable tags relative to RAW (1 = same). Pi Zero = production CLI on nereus002, wall time and peak RSS.",
+   "table": {
+    "columns": [
+     "ROI",
+     "distance",
+     "bytes",
+     "msgs",
+     "core SSIM",
+     "ROI SSIM",
+     "ΔE card",
+     "ΔE vs RAW",
+     "tag acutance",
+     "colour",
+     "detail",
+     "Pi Zero encode"
+    ],
+    "rows": [
+     [
+      "800x450",
+      "1.05",
+      "50,913",
+      "177",
+      "0.991",
+      "0.991",
+      "1.21",
+      "0.15",
+      "1.00",
+      "PASS",
+      "PASS",
+      "3.1 s · 32 MiB"
+     ],
+     [
+      "1200x676",
+      "2.29",
+      "50,814",
+      "177",
+      "0.982",
+      "0.984",
+      "1.27",
+      "0.21",
+      "1.02",
+      "PASS",
+      "PASS",
+      "5.3 s · 36 MiB"
+     ],
+     [
+      "1600x900",
+      "3.81",
+      "51,128",
+      "178",
+      "0.970",
+      "0.975",
+      "1.28",
+      "0.38",
+      "1.00",
+      "PASS",
+      "PASS",
+      "8.5 s · 40 MiB"
+     ],
+     [
+      "2000x1124",
+      "6.34",
+      "51,671",
+      "180",
+      "0.955",
+      "0.960",
+      "1.37",
+      "0.43",
+      "1.08",
+      "PASS",
+      "WARN",
+      "12.5 s · 47 MiB"
+     ],
+     [
+      "2304x1296",
+      "10.14",
+      "50,871",
+      "177",
+      "0.937",
+      "0.940",
+      "1.92",
+      "1.03",
+      "0.90",
+      "PASS",
+      "WARN",
+      "16.0 s · 63 MiB"
+     ],
+     [
+      "3072x1728",
+      "does not fit at d 15",
+      "54,315",
+      "189",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "27.3 s · 113 MiB"
+     ],
+     [
+      "4608x2592",
+      "does not fit at d 15",
+      "76,764",
+      "267",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "guard stops cjxl (rfb=mem); ≈ 260 MiB needed, ESTIMATE"
+     ],
+     [
+      "today's pjpg (1600×900 → 1000×562, q80)",
+      "—",
+      "52,214",
+      "182",
+      "0.935",
+      "0.948",
+      "2.68",
+      "n/a (camera colour)",
+      "1.04",
+      "bar",
+      "bar",
+      "camera ISP"
+     ]
+    ]
+   }
+  },
+  {
+   "title": "800x450 · card + checker — PASS",
+   "note": "d 1.05 · 50,913 B · 177 msgs · core SSIM 0.991 (pjpg 0.935) · ΔE card 1.21 (pjpg 2.68) · ΔE vs RAW 0.15 · tag acutance 1.00 (pjpg 1.04) · Pi Zero 3.1 s · 32 MiB · colour PASS · detail PASS. View: 540×350 native px; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/800x450_card_ref_2x.png",
+   "before_full": "img/800x450_card_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs",
+     "image": "img/800x450_card_nrjxl_2x.png",
+     "image_full": "img/800x450_card_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "800x450 · texture — PASS",
+   "note": "d 1.05 · 50,913 B · 177 msgs · core SSIM 0.991 (pjpg 0.935) · ΔE card 1.21 (pjpg 2.68) · ΔE vs RAW 0.15 · tag acutance 1.00 (pjpg 1.04) · Pi Zero 3.1 s · 32 MiB · colour PASS · detail PASS. View: the most detailed 480×270 window in this ROI away from the card, picked on the RAW before any codec result was looked at; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/800x450_tex_ref_2x.png",
+   "before_full": "img/800x450_tex_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs",
+     "image": "img/800x450_tex_nrjxl_2x.png",
+     "image_full": "img/800x450_tex_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "1200x676 · card + checker — PASS",
+   "note": "d 2.29 · 50,814 B · 177 msgs · core SSIM 0.982 (pjpg 0.935) · ΔE card 1.27 (pjpg 2.68) · ΔE vs RAW 0.21 · tag acutance 1.02 (pjpg 1.04) · Pi Zero 5.3 s · 36 MiB · colour PASS · detail PASS. View: 540×350 native px; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/1200x676_card_ref_2x.png",
+   "before_full": "img/1200x676_card_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs",
+     "image": "img/1200x676_card_nrjxl_2x.png",
+     "image_full": "img/1200x676_card_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "1200x676 · texture — PASS",
+   "note": "d 2.29 · 50,814 B · 177 msgs · core SSIM 0.982 (pjpg 0.935) · ΔE card 1.27 (pjpg 2.68) · ΔE vs RAW 0.21 · tag acutance 1.02 (pjpg 1.04) · Pi Zero 5.3 s · 36 MiB · colour PASS · detail PASS. View: the most detailed 480×270 window in this ROI away from the card, picked on the RAW before any codec result was looked at; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/1200x676_tex_ref_2x.png",
+   "before_full": "img/1200x676_tex_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs",
+     "image": "img/1200x676_tex_nrjxl_2x.png",
+     "image_full": "img/1200x676_tex_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "1600x900 · card + checker — PASS",
+   "note": "d 3.81 · 51,128 B · 178 msgs · core SSIM 0.970 (pjpg 0.935) · ΔE card 1.28 (pjpg 2.68) · ΔE vs RAW 0.38 · tag acutance 1.00 (pjpg 1.04) · Pi Zero 8.5 s · 40 MiB · colour PASS · detail PASS. View: 540×350 native px; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/1600x900_card_ref_2x.png",
+   "before_full": "img/1600x900_card_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 178 msgs",
+     "image": "img/1600x900_card_nrjxl_2x.png",
+     "image_full": "img/1600x900_card_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "1600x900 · texture — PASS",
+   "note": "d 3.81 · 51,128 B · 178 msgs · core SSIM 0.970 (pjpg 0.935) · ΔE card 1.28 (pjpg 2.68) · ΔE vs RAW 0.38 · tag acutance 1.00 (pjpg 1.04) · Pi Zero 8.5 s · 40 MiB · colour PASS · detail PASS. View: the most detailed 480×270 window in this ROI away from the card, picked on the RAW before any codec result was looked at; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/1600x900_tex_ref_2x.png",
+   "before_full": "img/1600x900_tex_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 178 msgs",
+     "image": "img/1600x900_tex_nrjxl_2x.png",
+     "image_full": "img/1600x900_tex_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "2000x1124 · card + checker — WARN",
+   "note": "d 6.34 · 51,671 B · 180 msgs · core SSIM 0.955 (pjpg 0.935) · ΔE card 1.37 (pjpg 2.68) · ΔE vs RAW 0.43 · tag acutance 1.08 (pjpg 1.04) · Pi Zero 12.5 s · 47 MiB · colour PASS · detail WARN. View: 540×350 native px; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/2000x1124_card_ref_2x.png",
+   "before_full": "img/2000x1124_card_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 180 msgs",
+     "image": "img/2000x1124_card_nrjxl_2x.png",
+     "image_full": "img/2000x1124_card_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "2000x1124 · texture — WARN",
+   "note": "d 6.34 · 51,671 B · 180 msgs · core SSIM 0.955 (pjpg 0.935) · ΔE card 1.37 (pjpg 2.68) · ΔE vs RAW 0.43 · tag acutance 1.08 (pjpg 1.04) · Pi Zero 12.5 s · 47 MiB · colour PASS · detail WARN. View: the most detailed 480×270 window in this ROI away from the card, picked on the RAW before any codec result was looked at; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/2000x1124_tex_ref_2x.png",
+   "before_full": "img/2000x1124_tex_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 180 msgs",
+     "image": "img/2000x1124_tex_nrjxl_2x.png",
+     "image_full": "img/2000x1124_tex_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "2304x1296 · card + checker — WARN",
+   "note": "d 10.14 · 50,871 B · 177 msgs · core SSIM 0.937 (pjpg 0.935) · ΔE card 1.92 (pjpg 2.68) · ΔE vs RAW 1.03 · tag acutance 0.90 (pjpg 1.04) · Pi Zero 16.0 s · 63 MiB · colour PASS · detail WARN. View: 540×350 native px; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/2304x1296_card_ref_2x.png",
+   "before_full": "img/2304x1296_card_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs",
+     "image": "img/2304x1296_card_nrjxl_2x.png",
+     "image_full": "img/2304x1296_card_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "2304x1296 · texture — WARN",
+   "note": "d 10.14 · 50,871 B · 177 msgs · core SSIM 0.937 (pjpg 0.935) · ΔE card 1.92 (pjpg 2.68) · ΔE vs RAW 1.03 · tag acutance 0.90 (pjpg 1.04) · Pi Zero 16.0 s · 63 MiB · colour PASS · detail WARN. View: the most detailed 480×270 window in this ROI away from the card, picked on the RAW before any codec result was looked at; inline pixels enlarged 2×, full screen is 1:1.",
+   "before": "img/2304x1296_tex_ref_2x.png",
+   "before_full": "img/2304x1296_tex_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs",
+     "image": "img/2304x1296_tex_nrjxl_2x.png",
+     "image_full": "img/2304x1296_tex_nrjxl.png"
+    }
+   ]
+  },
+  {
+   "title": "Today's pjpg · card + checker (the bar)",
+   "note": "q80, 52,214 B, 182 msgs (its own 195-message cap). UPSAMPLED: the pjpg is sent at 1000×562 and shown 1.6× up to the sensor grid. Each side gets its own card matrix (the pjpg is the camera's ISP output, the RAW is not).",
+   "before": "img/pjpg_card_ref_2x.png",
+   "before_full": "img/pjpg_card_ref.png",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "today's pjpg (upsampled 1.6×)",
+     "image": "img/pjpg_card_2x.png",
+     "image_full": "img/pjpg_card.png"
+    }
+   ]
+  }
+ ],
+ "notes": [
+  "Slider: left of the divider is the RAW reference, right is nrjxl decoded back to raw; both rendered by one function (bilinear demosaic, the camera's locked WB gains, clipped at sensor white, the RAW's own card matrix, sRGB). Only today's pjpg is upsampled.",
+  "ΔE reliability: 10 of 13 card colour patches are usable (≈ 190 px each, ≈ 47 per Bayer plane). red_orange sits in glare; dark_brown and magenta are too noisy (within-patch spread > 8 %). The grey patches are in the plastic-wrap glare, so white balance uses the camera's locked AWB gains.",
+  "The RAW's own ΔE varies 1.17–1.42 across three identical frames, so ΔE differences under about 0.3 are noise. A 3×3 fit on 10 patches is close to exact and flatters every image; ΔE vs RAW (no fit) is the cleaner compression-only number.",
+  "Tag sharpness uses the 2 right-hand tags (≈ 32 px); glare hides the left two from the decoder (they were placed from their black borders for the card geometry).",
+  "Pi Zero: the production rc_raw_jxl CLI (bm #120, e5, cjxl under its 250 MiB guard), run with an extra 700 MiB address-space cap and nice 10, while recorder_web / workbench / field_power_log kept running. Full frame: the guard stops cjxl after 2.7 s (rfb=mem); ≈ 260 MiB is an ESTIMATE scaled from the 2304 and 3072 runs (64 → 113 MiB).",
+  "Levers not tried: effort 7 (smaller files, slower), and a 195-message budget (3072×1728 fits at 189 msgs, d 15)."
+ ],
+ "footer": "Data: compression_study/presets/runs/sweep_20261003T203525Z (3 locked RAW frames, 86 ms, gain 1.12). Encoder: bm_cam_legacy PR #120 head bd6f38c; identical bytes on the Mac and the Pi."
+}

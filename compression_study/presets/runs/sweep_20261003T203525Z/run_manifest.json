@@ -1,0 +1,76 @@
+{
+ "run": "sweep_20261003T203525Z",
+ "date_utc": "2026-10-03T20:35:25Z",
+ "question": "Largest native-density ROI that fits 180 messages (288 B) as nrjxl and is >= today's pjpg (Nick via EM, 2026-10-03)",
+ "host": "nereus002 (Pi Zero 2 W, IMX708 imx708_wide, Debian 13, rpicam-apps 1.12)",
+ "capture": {
+  "command": "python3 scripts/capture_raw_imx708.py --stops 0 --repeat 3 (worktree copy; the Pi checkout predates --repeat)",
+  "mode": "4608:2592",
+  "frames": 3,
+  "exposure_us": 85837,
+  "analogue_gain": 1.122807,
+  "colour_gains": [
+   1.9715,
+   2.1234
+  ],
+  "lens_position": 0.2408,
+  "scene": "room, card V1 + Pixel Perfect checker on a box at ~1.5 m; plastic-wrap glare over the card's left half"
+ },
+ "raw_files": {
+  "note": "NOT committed (*.dng/*.jpg are git-ignored). Copies: nereus002:~/s28_presets/sweep_20261003T203525Z/ and the Mac worktree's runs folder.",
+  "files": {
+   "meter.jpg": {
+    "bytes": 1239996,
+    "sha256": "c36970e83b45f9e659c490319c5bfc2647fbb736e7dd87782bc68b8d5e1bb8ad"
+   },
+   "probe.jpg": {
+    "bytes": 1245766,
+    "sha256": "91df9a78bfe7b02340d2b629a21307a9f678e1a588581438cf98da63a0498b42"
+   },
+   "stop_+0_r0.dng": {
+    "bytes": 24029068,
+    "sha256": "1ed77c1cdd596d023ebe0e1acc894f6eb58e765fbf035fc1651d8bd5417fb4d2"
+   },
+   "stop_+0_r0.jpg": {
+    "bytes": 1240148,
+    "sha256": "5501887ce3739ab9fe1d1717090559af3eb4befd9b5293f9ce74853fce0658c0"
+   },
+   "stop_+0_r1.dng": {
+    "bytes": 24029068,
+    "sha256": "5eeb5c8bf4a0ee84c8e8c83251d94fd1e35acfa90ddd72a970e19a549f4aa1ac"
+   },
+   "stop_+0_r1.jpg": {
+    "bytes": 1240289,
+    "sha256": "1e01f9815cb0b0525589cbd0222a6cd2652b0b38dca0abe0476715fa609216f5"
+   },
+   "stop_+0_r2.dng": {
+    "bytes": 24029068,
+    "sha256": "c55e5461a74610bceddd89dc4e3ad8acd5663d884da198a2cd50ec55269c9a34"
+   },
+   "stop_+0_r2.jpg": {
+    "bytes": 1240624,
+    "sha256": "dbbe20ba6e0e5e2ac43def81e117e019e2d51583cb47d275957246517b82bb54"
+   }
+  }
+ },
+ "encoder": {
+  "source": "bm_cam_legacy PR #120 (feature/sprint28-camera) head bd6f38c, BM_Devel_Pi/rc_raw_jxl.py sha256 4abc585674eccb75…, rc_jpeg_encoder.py 15e4739dac5f32cb…",
+  "cjxl": "modular, effort 5, one thread; Pi cjxl v0.11.2",
+  "budget_messages": 180,
+  "target_bytes": 51840,
+  "note": "Mac and Pi produce identical bytes for the same crop + distance"
+ },
+ "pi_bench": {
+  "wrapper": "pi_time.py (RLIMIT_AS 700 MiB outer cap, nice 10; cjxl keeps the production 250 MiB guard)",
+  "results": "pi_timing.txt"
+ },
+ "steps": [
+  "python -m compression_study.presets.roi_sweep --run <this> --prod <BM_Devel_Pi> --frames 0 1 2  → sweep.csv, pjpg.csv, patches.json, sweep_meta.json, slides/ (git-ignored PNGs)",
+  "python -m compression_study.presets.roi_sweep --run <this> --prod <BM_Devel_Pi> --frames 0 --suffix _r0render  → re-render of frame 0 slides after the highlight-clip fix (numbers identical to sweep.csv frame 0)",
+  "python -m compression_study.presets.roi_sweep_sheet --run <this>  → sheet/spec.json",
+  "python ~/.claude/skills/before-after-report/scripts/build_report.py sheet/spec.json sheet/index.html --split  → sheet/index.html + index_img/ (PNGs git-ignored)"
+ ],
+ "card_location": "rois_r0.json from sweep_rois.find_rois_quad: tags 1/3 decoded (ArUco on the JPEG), tags 0/2 placed from their dark borders (glare blocks decoding); tagcentres_r*.npy per frame agree within 0.5 px",
+ "published_sheet": "https://claude.ai/artifact/6ZpBEz7Yw887i2eT1VL18x",
+ "answer": "1600x900 (d 3.81, 178 msgs): core SSIM 0.970 vs pjpg 0.935, card dE 1.28 vs 2.68; Pi Zero 8.5 s / 40 MiB. 2000x1124 and 2304x1296 fit but WARN on detail; 3072x1728 needs 189 msgs at d 15; full frame does not fit and trips the 250 MiB guard (~260 MiB, ESTIMATE)."
+}
