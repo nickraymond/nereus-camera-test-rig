@@ -1,0 +1,275 @@
+[
+ {
+  "roi": "800x450",
+  "cap": 180,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   3,
+   3,
+   3
+  ],
+  "total_s_med": 6.9,
+  "total_s_max": 6.97,
+  "fill_med": 0.967,
+  "fill_min": 0.9647,
+  "d_med": 1.07,
+  "cjxl_rss_max_mib": 27.4,
+  "py_rss_max_mib": 27.4,
+  "fixed": "Counter({'ok': 3}) enc [1, 1, 1] d ['3.8', '3.8', '3.8'] fill ['0.4304', '0.4295', '0.4291']"
+ },
+ {
+  "roi": "800x450",
+  "cap": 195,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   3,
+   3,
+   3
+  ],
+  "total_s_med": 6.8,
+  "total_s_max": 6.8,
+  "fill_med": 0.968,
+  "fill_min": 0.9678,
+  "d_med": 0.94,
+  "cjxl_rss_max_mib": 27.4,
+  "py_rss_max_mib": 27.4,
+  "fixed": "Counter({'ok': 3}) enc [1, 1, 1] d ['3.8', '3.8', '3.8'] fill ['0.3973', '0.3965', '0.3961']"
+ },
+ {
+  "roi": "1200x676",
+  "cap": 180,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   2,
+   2,
+   2
+  ],
+  "total_s_med": 9.1,
+  "total_s_max": 9.08,
+  "fill_med": 0.99,
+  "fill_min": 0.989,
+  "d_med": 2.28,
+  "cjxl_rss_max_mib": 30.9,
+  "py_rss_max_mib": 30.9,
+  "fixed": "Counter({'ok': 3}) enc [1, 1, 1] d ['3.8', '3.8', '3.8'] fill ['0.6814', '0.6806', '0.6807']"
+ },
+ {
+  "roi": "1200x676",
+  "cap": 195,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   2,
+   2,
+   2
+  ],
+  "total_s_med": 9.0,
+  "total_s_max": 9.04,
+  "fill_med": 0.981,
+  "fill_min": 0.9804,
+  "d_med": 2.04,
+  "cjxl_rss_max_mib": 30.9,
+  "py_rss_max_mib": 30.9,
+  "fixed": "Counter({'ok': 3}) enc [1, 1, 1] d ['3.8', '3.8', '3.8'] fill ['0.629', '0.6283', '0.6283']"
+ },
+ {
+  "roi": "1600x900",
+  "cap": 180,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   1,
+   1,
+   1
+  ],
+  "total_s_med": 8.0,
+  "total_s_max": 8.06,
+  "fill_med": 0.975,
+  "fill_min": 0.9749,
+  "d_med": 3.87,
+  "cjxl_rss_max_mib": 35.7,
+  "py_rss_max_mib": 35.7,
+  "fixed": "Counter({'ok': 3}) enc [1, 1, 1] d ['3.8', '3.8', '3.8'] fill ['0.9883', '0.9886', '0.9885']"
+ },
+ {
+  "roi": "1600x900",
+  "cap": 195,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   1,
+   1,
+   1
+  ],
+  "total_s_med": 8.0,
+  "total_s_max": 8.03,
+  "fill_med": 0.973,
+  "fill_min": 0.9718,
+  "d_med": 3.5,
+  "cjxl_rss_max_mib": 35.7,
+  "py_rss_max_mib": 35.7,
+  "fixed": "Counter({'ok': 3}) enc [1, 1, 1] d ['3.8', '3.8', '3.8'] fill ['0.9123', '0.9126', '0.9125']"
+ },
+ {
+  "roi": "2000x1124",
+  "cap": 180,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   1,
+   1,
+   1
+  ],
+  "total_s_med": 12.0,
+  "total_s_max": 11.99,
+  "fill_med": 0.951,
+  "fill_min": 0.95,
+  "d_med": 6.75,
+  "cjxl_rss_max_mib": 41.8,
+  "py_rss_max_mib": 41.8,
+  "fixed": "Counter({'ok': 3}) enc [4, 4, 4] d ['8.25', '8.25', '8.25'] fill ['0.8155', '0.8178', '0.8175']"
+ },
+ {
+  "roi": "2000x1124",
+  "cap": 195,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   1,
+   1,
+   1
+  ],
+  "total_s_med": 11.9,
+  "total_s_max": 11.9,
+  "fill_med": 0.945,
+  "fill_min": 0.944,
+  "d_med": 6.11,
+  "cjxl_rss_max_mib": 41.8,
+  "py_rss_max_mib": 41.8,
+  "fixed": "Counter({'ok': 3}) enc [3, 3, 3] d ['5.95', '5.95', '5.95'] fill ['0.9621', '0.9614', '0.9615']"
+ },
+ {
+  "roi": "2304x1296",
+  "cap": 180,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   2,
+   2,
+   2
+  ],
+  "total_s_med": 30.3,
+  "total_s_max": 30.31,
+  "fill_med": 0.97,
+  "fill_min": 0.969,
+  "d_med": 10.3,
+  "cjxl_rss_max_mib": 62.7,
+  "py_rss_max_mib": 47.4,
+  "fixed": "Counter({'fallback': 3}) enc [4, 4, 4] d ['', '', ''] fill ['', '', '']"
+ },
+ {
+  "roi": "2304x1296",
+  "cap": 195,
+  "effort": 5,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   2,
+   2,
+   2
+  ],
+  "total_s_med": 30.4,
+  "total_s_max": 30.42,
+  "fill_med": 0.968,
+  "fill_min": 0.967,
+  "d_med": 9.35,
+  "cjxl_rss_max_mib": 62.7,
+  "py_rss_max_mib": 47.4,
+  "fixed": "Counter({'fallback': 3}) enc [4, 4, 4] d ['', '', ''] fill ['', '', '']"
+ },
+ {
+  "roi": "3072x1728",
+  "cap": 180,
+  "effort": 5,
+  "status": {
+   "fallback": 3
+  },
+  "encodes": [
+   0,
+   0,
+   0
+  ],
+  "total_s_med": 0.9,
+  "total_s_max": 1.01,
+  "fill_med": null,
+  "fill_min": null,
+  "d_med": null,
+  "cjxl_rss_max_mib": 0.0,
+  "py_rss_max_mib": 65.2,
+  "fixed": "Counter({'fallback': 3}) enc [4, 4, 4] d ['', '', ''] fill ['', '', '']"
+ },
+ {
+  "roi": "3072x1728",
+  "cap": 195,
+  "effort": 5,
+  "status": {
+   "fallback": 3
+  },
+  "encodes": [
+   0,
+   0,
+   0
+  ],
+  "total_s_med": 0.8,
+  "total_s_max": 0.81,
+  "fill_med": null,
+  "fill_min": null,
+  "d_med": null,
+  "cjxl_rss_max_mib": 0.0,
+  "py_rss_max_mib": 65.2,
+  "fixed": "Counter({'fallback': 3}) enc [4, 4, 4] d ['', '', ''] fill ['', '', '']"
+ },
+ {
+  "roi": "2000x1124",
+  "cap": 195,
+  "effort": 7,
+  "status": {
+   "ok": 3
+  },
+  "encodes": [
+   2,
+   2,
+   2
+  ],
+  "total_s_med": 27.5,
+  "total_s_max": 27.57,
+  "fill_med": 0.964,
+  "fill_min": 0.9636,
+  "d_med": 5.54,
+  "cjxl_rss_max_mib": 42.3,
+  "py_rss_max_mib": 41.8,
+  "fixed": "-"
+ }
+]

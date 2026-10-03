@@ -1,0 +1,27 @@
+{
+ "host": "nereus002 (192.168.1.35), Pi Zero 2 W — R0 PROXY for bmcam003/004 (EM, 2026-10-03)",
+ "probe": "compression_study/presets/r0/r0_proxy_nereus002.sh = bm_cam_legacy #120 (head bd6f38c) hil/tools/hil_s28_r0_probe.sh, on-unit part unchanged except as noted; analyzer = that branch's hil/tools/hil_s28_r0_analyze.py, copied unchanged to compression_study/presets/r0/",
+ "encoder": "bm #120 BM_Devel_Pi/rc_raw_jxl.py sha256 4abc585674eccb75…, run with the Pi's system python3 (numpy 2.2.4), cjxl v0.11.2",
+ "presets": {
+  "1600x900": "crop 1504,846,1600,900 (production), d 3.8 (probe default)",
+  "2304x1296": "crop 1152,648,2304,1296 (centred), d 10.1 (the 180-message distance from the 2026-10-03 sweep)"
+ },
+ "env_compare": "compression_study/presets/r0/ENV_COMPARE.md",
+ "not_committed": "*.nrjxl blobs (generated media); the Pi's /tmp/s28r0_* was deleted by the probe",
+ "pi_services": "recorder_web, workbench, field_power_log left running (they add memory pressure vs a bmcam unit)",
+ "run": "r0_nereus002_20261003T210546Z",
+ "status": "valid proxy run",
+ "change_vs_original": "the CMA sampler is written to sampler.py and run as `python3 sampler.py ... < /dev/null &` (marked PROXY FIX in the script); nothing else in the on-unit part changed",
+ "verdicts": {
+  "R0.1": "PASS — 10/10 --raw captures with DNG + JPEG, CmaFree min 57152 kB with --raw vs 97444 kB without (−40 MB), no camera/CMA errors in dmesg",
+  "R0.2": "PASS — median capture 3.50 s with --raw vs 3.23 s without (+0.27 s)",
+  "R0.3": "PASS — 1600x900: median rung 6.33 s, cjxl peak 38 MB, 0 failures, CmaFree ≥ 73.8 MB; 2304x1296: 12.45 s, 51 MB, 0 failures, CmaFree ≥ 62.0 MB; predicted wake 410 s / 422 s of 480",
+  "R0.4": "PASS — cjxl 0.11.2 + numpy 2.2.4 present; guard killed a 400 MB allocation (kind mem)"
+ },
+ "memavailable_min_kb": {
+  "plain capture": 197072,
+  "--raw capture": 116300,
+  "encode 1600x900": 150708,
+  "encode 2304x1296": 123308
+ }
+}

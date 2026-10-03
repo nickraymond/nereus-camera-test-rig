@@ -1,0 +1,16 @@
+{
+ "host": "nereus002 (192.168.1.35), Pi Zero 2 W — R0 PROXY for bmcam003/004 (EM, 2026-10-03)",
+ "probe": "compression_study/presets/r0/r0_proxy_nereus002.sh = bm_cam_legacy #120 (head bd6f38c) hil/tools/hil_s28_r0_probe.sh, on-unit part unchanged except as noted; analyzer = that branch's hil/tools/hil_s28_r0_analyze.py, copied unchanged to compression_study/presets/r0/",
+ "encoder": "bm #120 BM_Devel_Pi/rc_raw_jxl.py sha256 4abc585674eccb75…, run with the Pi's system python3 (numpy 2.2.4), cjxl v0.11.2",
+ "presets": {
+  "1600x900": "crop 1504,846,1600,900 (production), d 3.8 (probe default)",
+  "2304x1296": "crop 1152,648,2304,1296 (centred), d 10.1 (the 180-message distance from the 2026-10-03 sweep)"
+ },
+ "env_compare": "compression_study/presets/r0/ENV_COMPARE.md",
+ "not_committed": "*.nrjxl blobs (generated media); the Pi's /tmp/s28r0_* was deleted by the probe",
+ "pi_services": "recorder_web, workbench, field_power_log left running (they add memory pressure vs a bmcam unit)",
+ "run": "r0_nereus002_20261003T205806Z",
+ "status": "INVALID for R0.1 — kept as evidence of a probe bug",
+ "finding": "cma_samples.csv is EMPTY: the original sampler line `python3 - <<'PY' > cma_samples.csv 2> sampler.err < /dev/null &` lets `< /dev/null` replace the heredoc, so python runs an empty program. R0.1 reports FAIL with cma min = null on ANY unit. Reproduced in isolation (bash -s, 0 bytes written).",
+ "verdicts": "R0.1 FAIL (no samples), R0.2 PASS, R0.3 PASS, R0.4 PASS"
+}

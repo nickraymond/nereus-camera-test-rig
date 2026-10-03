@@ -1,0 +1,41 @@
+{
+ "run": "r0_nereus002_f2687ec_20261003T213621Z",
+ "host": "nereus002 (192.168.1.35), Pi Zero 2 W — R0 PROXY for bmcam003/004",
+ "probe": "bm_cam_legacy #120 f2687ec hil/tools/hil_s28_r0_probe.sh (sampler fix by the camera build session), on-unit part unchanged except presets; analyzer f2687ec (compression_study/presets/r0/hil_s28_r0_analyze_f2687ec.py)",
+ "wrapper": "compression_study/presets/r0/r0_proxy_nereus002_f2687ec.sh (no rig guard; presets 1600x900 @1504,846 d 3.8 and 2304x1296 @1152,648 d 10.1)",
+ "encoder": "rc_raw_jxl.py sha256 4abc585674eccb75… (unchanged bd6f38c → f2687ec)",
+ "verdict": {
+  "host": "192.168.1.35",
+  "R0.1": {
+   "verdict": "PASS",
+   "raw_ok": "10/10",
+   "cma_free_min_kb_raw": 58076,
+   "cma_free_min_kb_plain": 88388,
+   "dmesg_errors": []
+  },
+  "R0.2": {
+   "verdict": "PASS",
+   "median_raw_s": 3.59926,
+   "median_plain_s": 3.32601,
+   "delta_s": 0.27325
+  },
+  "R0.3": {
+   "verdict": "PASS",
+   "presets": {
+    "1600x900": true,
+    "2304x1296": true
+   },
+   "largest_passing_preset": "2304x1296"
+  },
+  "R0.4": {
+   "verdict": "PASS",
+   "env": [
+    "cjxl: /usr/bin/cjxl cjxl v0.11.2 [NEON_WITHOUT_AES]",
+    "numpy 2.2.4"
+   ],
+   "memory_guard_kind": "mem"
+  }
+ },
+ "not_committed": "*.nrjxl blobs",
+ "env_compare": "compression_study/presets/r0/ENV_COMPARE.md"
+}

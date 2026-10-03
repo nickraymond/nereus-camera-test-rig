@@ -1,0 +1,2 @@
+frame,quality,bytes,messages,raw_de_truth,ssim,patch_de,de_truth,tags_ref,tags_found,acutance_rel,contrast_rel,ssim_roi
+0,80,52198,182,1.42,0.9351,8.6221,2.6547,2,2,1.0484,1.6315,0.9478

@@ -1,0 +1,94 @@
+{
+ "usable": [
+  "cream",
+  "tan",
+  "ochre",
+  "orange",
+  "brown",
+  "coral_pink",
+  "yellow",
+  "green",
+  "cyan",
+  "blue"
+ ],
+ "stats": {
+  "cream": {
+   "px": 189,
+   "cv": 0.011,
+   "max": 0.472,
+   "usable": true
+  },
+  "tan": {
+   "px": 182,
+   "cv": 0.011,
+   "max": 0.413,
+   "usable": true
+  },
+  "ochre": {
+   "px": 203,
+   "cv": 0.02,
+   "max": 0.333,
+   "usable": true
+  },
+  "orange": {
+   "px": 203,
+   "cv": 0.021,
+   "max": 0.308,
+   "usable": true
+  },
+  "brown": {
+   "px": 196,
+   "cv": 0.026,
+   "max": 0.247,
+   "usable": true
+  },
+  "dark_brown": {
+   "px": 196,
+   "cv": 0.124,
+   "max": 0.104,
+   "usable": false
+  },
+  "coral_pink": {
+   "px": 196,
+   "cv": 0.027,
+   "max": 0.36,
+   "usable": true
+  },
+  "red_orange": {
+   "px": 189,
+   "cv": 0.456,
+   "max": 0.755,
+   "usable": false
+  },
+  "yellow": {
+   "px": 203,
+   "cv": 0.024,
+   "max": 0.378,
+   "usable": true
+  },
+  "green": {
+   "px": 196,
+   "cv": 0.024,
+   "max": 0.201,
+   "usable": true
+  },
+  "cyan": {
+   "px": 196,
+   "cv": 0.019,
+   "max": 0.321,
+   "usable": true
+  },
+  "blue": {
+   "px": 196,
+   "cv": 0.028,
+   "max": 0.263,
+   "usable": true
+  },
+  "magenta": {
+   "px": 189,
+   "cv": 0.094,
+   "max": 0.183,
+   "usable": false
+  }
+ }
+}
