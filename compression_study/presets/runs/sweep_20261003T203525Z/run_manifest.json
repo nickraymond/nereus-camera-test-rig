@@ -79,5 +79,12 @@
   "mac": "python -m compression_study.presets.roi_levers --run <this> --prod <BM_Devel_Pi>  → levers.csv, levers_summary.csv, levers.log",
   "pi": "pi_time.py NAME CROP D STEM OUT EFFORT on nereus002 (frame 0, frame-0 distances) → pi_levers.txt",
   "answer": "Only e7 at 195 msgs lifts 2000x1124 to PASS (marginal: acutance 1.05 vs pjpg 1.04+0.02); 2304x1296 stays WARN (acutance 0.90-0.93). Zero: max 19.4 s / 63 MiB (2304 e7), all 12 within budget."
+ },
+ "step_c_byte_target": {
+  "date_utc": "2026-10-03",
+  "proposal": "compression_study/presets/PROPOSAL_byte_target.md",
+  "pi": "byte_target_bench.sh on nereus002 (byte_target.py next to bm #120 rc_raw_jxl.py; ulimit -v 700 MiB, nice 10) → byte_target_pi.jsonl; summary byte_target_summary.json",
+  "baseline": "python -m compression_study.presets.fixed_rungs_desk (today's rungs 3.8/4.6/5.95/8.25, desk encodes) → fixed_rungs_desk.csv",
+  "answer": "33/33 encoding searches fit the cap (fill 94.4-99.0 %, median 97 %) in 1-3 encodes; Zero 6.9-30.3 s, cjxl <= 63 MiB; 3072x1728 stops at the d_max 10.4 floor in < 1 s. Fixed rungs under-fill small ROIs (43 %, 68 %), need 3-4 encodes at 2000x1124 and never fit 2304x1296."
  }
 }
