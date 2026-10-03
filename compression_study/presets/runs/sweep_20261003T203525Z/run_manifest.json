@@ -72,5 +72,12 @@
  ],
  "card_location": "rois_r0.json from sweep_rois.find_rois_quad: tags 1/3 decoded (ArUco on the JPEG), tags 0/2 placed from their dark borders (glare blocks decoding); tagcentres_r*.npy per frame agree within 0.5 px",
  "published_sheet": "https://claude.ai/artifact/6ZpBEz7Yw887i2eT1VL18x",
- "answer": "1600x900 (d 3.81, 178 msgs): core SSIM 0.970 vs pjpg 0.935, card dE 1.28 vs 2.68; Pi Zero 8.5 s / 40 MiB. 2000x1124 and 2304x1296 fit but WARN on detail; 3072x1728 needs 189 msgs at d 15; full frame does not fit and trips the 250 MiB guard (~260 MiB, ESTIMATE)."
+ "answer": "1600x900 (d 3.81, 178 msgs): core SSIM 0.970 vs pjpg 0.935, card dE 1.28 vs 2.68; Pi Zero 8.5 s / 40 MiB. 2000x1124 and 2304x1296 fit but WARN on detail; 3072x1728 needs 189 msgs at d 15; full frame does not fit and trips the 250 MiB guard (~260 MiB, ESTIMATE).",
+ "step_a_levers": {
+  "date_utc": "2026-10-03",
+  "question": "Do cjxl effort 7 or the 195-message production cap move 2000x1124 / 2304x1296 from WARN to PASS within encode <= 30 s and RSS <= 150 MiB on the Zero?",
+  "mac": "python -m compression_study.presets.roi_levers --run <this> --prod <BM_Devel_Pi>  → levers.csv, levers_summary.csv, levers.log",
+  "pi": "pi_time.py NAME CROP D STEM OUT EFFORT on nereus002 (frame 0, frame-0 distances) → pi_levers.txt",
+  "answer": "Only e7 at 195 msgs lifts 2000x1124 to PASS (marginal: acutance 1.05 vs pjpg 1.04+0.02); 2304x1296 stays WARN (acutance 0.90-0.93). Zero: max 19.4 s / 63 MiB (2304 e7), all 12 within budget."
+ }
 }
