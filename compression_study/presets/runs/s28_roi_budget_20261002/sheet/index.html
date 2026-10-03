@@ -1,0 +1,83 @@
+<meta charset="utf-8">
+<title>ROI Budget Check</title>
+<style>
+:root{--bg:#f3f5f6;--panel:#fff;--ink:#121a20;--ink2:#46535d;--rule:#d6dde2;--accent:#0f6f7c;
+--pass:#1d6b3a;--passbg:#e3f2e8;--fail:#9b2c1f;--failbg:#f8e4e0;--nofit:#5d666d;--nofitbg:#eceff1}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0f1418;--panel:#161d22;
+--ink:#e6ecf0;--ink2:#b2bec7;--rule:#2a343c;--accent:#4fb3bf;--pass:#8fd6a6;--passbg:#163222;--fail:#f0a597;
+--failbg:#3a1c17;--nofit:#a7b1b8;--nofitbg:#1f272d}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0f1418;--panel:#161d22;--ink:#e6ecf0;--ink2:#b2bec7;
+--rule:#2a343c;--accent:#4fb3bf;--pass:#8fd6a6;--passbg:#163222;--fail:#f0a597;--failbg:#3a1c17;
+--nofit:#a7b1b8;--nofitbg:#1f272d}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+padding-inline:16px;padding-block:20px 48px}
+main{max-width:1500px;margin:0 auto;display:grid;gap:18px}
+h1{font-size:1.6rem;margin:0} h2{font-size:1.15rem;margin:0 0 6px;text-wrap:balance}
+p{margin:0;max-width:95ch} .lede{color:var(--ink2)}
+.answer{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--accent);
+border-radius:6px;padding:12px 14px;font-size:1.05rem}
+.wrap{overflow-x:auto} table{border-collapse:collapse;width:100%}
+th,td{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.cell{font-variant-numeric:tabular-nums;min-width:120px} .cell span{display:block}
+.pass{background:var(--passbg)} .pass b{color:var(--pass)} .fail{background:var(--failbg)}
+.fail b{color:var(--fail)} .nofit{background:var(--nofitbg)} .nofit b{color:var(--nofit)}
+.pick{outline:2px solid var(--accent);outline-offset:-2px}
+.small{color:var(--ink2);font-size:.82rem} .state{display:block;font-weight:600}
+.sheet th[scope=row]{width:200px;min-width:150px} .sheet td{width:30%}
+.img{all:unset;cursor:zoom-in;display:block} .img:focus-visible{outline:2px solid var(--accent)}
+.img img{width:100%;height:auto;display:block;border-radius:4px}
+dl{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:0 0 4px}
+dl div{display:flex;justify-content:space-between;gap:6px;border-bottom:1px solid var(--rule)}
+dt{color:var(--ink2)} dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+section{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px}
+#zoom{position:fixed;inset:0;background:#000;overflow:auto;cursor:zoom-out;z-index:9}
+#zoom img{display:block;margin:auto;max-width:none;image-rendering:pixelated}
+</style>
+<main>
+<h1>Largest ROI per message budget</h1>
+<p class="lede">IMX708 on nereus002, cool lamp, one exposure. Every ROI at native sensor density. nrjxl = the
+Sprint28 container (4 Bayer planes, sqrt curve, cjxl modular, production effort 5), with the lowest distance
+that fits each budget (288-byte messages). Bar: ΔE below today's pjpg on the same 13 colour patches
+(<b>3.51</b>; q80, 169 messages).</p>
+<p class="answer"><b>Answer:</b> the largest ROI that passes is <b>LARGE (2304×1296), at 176 messages</b>
+(50.2 kB, ΔE 1.85 vs bar 3.51). It does not fit 120
+messages even at distance 15, the top of the production range.</p>
+
+<section><h2>ROI × budget</h2>
+<div class="wrap"><table><tr><th scope='col'>ROI</th><th scope='col' class='num'>60 msgs<br><span class='small'>17.3 kB</span></th><th scope='col' class='num'>120 msgs<br><span class='small'>34.6 kB</span></th><th scope='col' class='num'>176 msgs<br><span class='small'>50.7 kB</span></th><th scope='col' class='num'>250 msgs<br><span class='small'>72.0 kB</span></th><th scope='col' class='num'>300 msgs<br><span class='small'>86.4 kB</span></th><th scope='col' class='num'>500 msgs<br><span class='small'>144.0 kB</span></th></tr><tr><th scope='row'>LARGE<br><span class='small'>2304×1296</span></th><td class='cell nofit'><b>does not fit</b><span class='small'>40.1 kB at d 15</span></td><td class='cell nofit'><b>does not fit</b><span class='small'>40.1 kB at d 15</span></td><td class='cell pass pick'><b>PASS</b><span>ΔE 1.85 · SSIM 0.967</span><span class='small'>d 10.75 · 50,200 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.88 · SSIM 0.975</span><span class='small'>d 6.46 · 71,764 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.89 · SSIM 0.978</span><span class='small'>d 5.01 · 85,455 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.82 · SSIM 0.985</span><span class='small'>d 2.38 · 143,147 B</span></td></tr><tr><th scope='row'>MEDIUM<br><span class='small'>1600×900</span></th><td class='cell nofit'><b>does not fit</b><span class='small'>22.6 kB at d 15</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.85 · SSIM 0.973</span><span class='small'>d 8.02 · 34,084 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.84 · SSIM 0.981</span><span class='small'>d 4.46 · 49,894 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.83 · SSIM 0.985</span><span class='small'>d 2.58 · 71,233 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.82 · SSIM 0.986</span><span class='small'>d 1.96 · 85,073 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.83 · SSIM 0.990</span><span class='small'>d 0.98 · 141,397 B</span></td></tr><tr><th scope='row'>SMALL<br><span class='small'>800×450</span></th><td class='cell pass'><b>PASS</b><span>ΔE 1.86 · SSIM 0.974</span><span class='small'>d 5.64 · 17,127 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.81 · SSIM 0.986</span><span class='small'>d 1.74 · 34,231 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.82 · SSIM 0.990</span><span class='small'>d 0.93 · 49,860 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.82 · SSIM 0.993</span><span class='small'>d 0.56 · 71,525 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.83 · SSIM 0.995</span><span class='small'>d 0.43 · 85,688 B</span></td><td class='cell pass'><b>PASS</b><span>ΔE 1.83 · SSIM 0.998</span><span class='small'>d 0.17 · 143,376 B</span></td></tr></table></div>
+<p class="small">ΔE = mean ΔE00 vs the V1 card truth on the 13 colour patches after each image's own 3×3 card
+fit (the cloud step). RAW reference: ΔE 1.83 on every ROI (the floor). SSIM = luma vs the RAW render of
+the same ROI. Every cell that fits passes on colour, and ΔE sits at the RAW floor everywhere: the card fit on patch
+means is not sensitive to compression. SSIM is where the cells differ. Today's pjpg SSIM is 0.966,
+measured on its own crop after a tone match. Lever not tried yet: effort 7 (slower, smaller files).</p></section>
+
+<section><h2>LARGE at 176 messages: RAW | nrjxl | pjpg</h2>
+<p class="small">Click any image to open it at full size (1:1); click again or press Esc to close.
+Top row: before the card fit. Bottom row: after it.</p>
+<div class="wrap"><table class="sheet">
+<tr><th></th><th scope='col'>RAW reference</th><th scope='col'>nrjxl, 176-message budget</th><th scope='col'>Today's pjpg (q80)</th></tr><tr><th scope='row'><span class='state'>Uncorrected</span><span class='small'>As the MEDIUM sheet: RAW and nrjxl white-balanced on grey 128 only, no colour matrix, gamma 2.2. pjpg as the camera delivers it.</span></th><td><button class="img" type="button" aria-label="Open RAW reference, uncorrected at full size"><img src="img/raw_unc.webp" alt="RAW reference, uncorrected" loading="lazy"></button></td><td><button class="img" type="button" aria-label="Open nrjxl, 176-message budget, uncorrected at full size"><img src="img/nrjxl_unc.webp" alt="nrjxl, 176-message budget, uncorrected" loading="lazy"></button></td><td><button class="img" type="button" aria-label="Open Today's pjpg (q80), uncorrected at full size"><img src="img/pjpg_unc.webp" alt="Today's pjpg (q80), uncorrected" loading="lazy"></button></td></tr><tr><th scope='row'><span class='state'>Card-corrected</span><span class='small'>What Nick's pipeline sees: each image's own 3×3 matrix fitted to the card truth on the 13 colour patches, then sRGB.</span></th><td><button class="img" type="button" aria-label="Open RAW reference, card-corrected at full size"><img src="img/raw_cc.webp" alt="RAW reference, card-corrected" loading="lazy"></button></td><td><button class="img" type="button" aria-label="Open nrjxl, 176-message budget, card-corrected at full size"><img src="img/nrjxl_cc.webp" alt="nrjxl, 176-message budget, card-corrected" loading="lazy"></button></td><td><button class="img" type="button" aria-label="Open Today's pjpg (q80), card-corrected at full size"><img src="img/pjpg_cc.webp" alt="Today's pjpg (q80), card-corrected" loading="lazy"></button></td></tr><tr><th scope="row" class="small">Per image</th><td><dl><div><dt>Size</dt><dd>3.7 MB</dd></div><div><dt>Messages</dt><dd>12,960 (not sendable)</dd></div><div><dt>ΔE vs card</dt><dd>1.83</dd></div><div><dt>SSIM</dt><dd>1.000</dd></div></dl><p class='small'>2304×1296 native, uncompressed</p></td><td><dl><div><dt>Size</dt><dd>50.2 kB</dd></div><div><dt>Messages</dt><dd>175</dd></div><div><dt>ΔE vs card</dt><dd>1.85</dd></div><div><dt>SSIM</dt><dd>0.967</dd></div></dl><p class='small'>2304×1296 native, cjxl e5 d 10.75</p></td><td><dl><div><dt>Size</dt><dd>48.7 kB</dd></div><div><dt>Messages</dt><dd>169</dd></div><div><dt>ΔE vs card</dt><dd>3.51</dd></div><div><dt>SSIM</dt><dd>0.966</dd></div></dl><p class='small'>1000×562 upsampled 1.6×; covers only today's 1600×900 crop (grey = not sent)</p></td></tr>
+</table></div>
+<p class="small"><b>Upsampled:</b> only today's pjpg (sent at 1000×562, shown 1.6× up at its true position).
+RAW and nrjxl are native resolution.</p></section>
+
+<section><h2>Why the pjpg whites looked more correct</h2>
+<p>They are not more neutral, they are blue. In the MEDIUM sheet, RAW and nrjxl were shown <b>before</b> the card
+fit: white-balanced on grey 128, no colour matrix, gamma 2.2, so the greys are neutral by construction (a*, b*
+≈ 0). The pjpg is the camera's own render. Its AWB left a blue cast (b* −14 to −26; grey-light displays as
+RGB 139, 165, 206 vs RAW 139, 138, 139), and its tone curve puts whites near 255. The RAW render of this −1 stop
+frame has no tone curve, so its paper sits darker (99th percentile 211) and reads grey rather than white. Bright
+and slightly blue tends to read as "clean white"; the numbers say the RAW greys are the neutral ones.</p>
+<div class="wrap"><table><tr><th scope='col'>Image</th><th scope='col'>State</th><th scope='col' class='num'>grey light</th><th scope='col' class='num'>grey mid</th><th scope='col' class='num'>grey dark</th><th scope='col' class='num'>paper</th></tr><tr><td>pjpg q80</td><td>uncorrected</td><td class='num'>+0.7, -24.0</td><td class='num'>+3.0, -26.2</td><td class='num'>+2.8, -14.4</td><td class='num'>-2.6, -13.6</td></tr><tr><td>pjpg q80</td><td>card-corrected</td><td class='num'>-1.9, -6.2</td><td class='num'>-1.6, -11.2</td><td class='num'>+0.5, -5.1</td><td class='num'>-1.5, +5.5</td></tr><tr><td>RAW</td><td>uncorrected</td><td class='num'>+0.5, -0.4</td><td class='num'>+0.0, -0.0</td><td class='num'>+0.7, +1.6</td><td class='num'>-0.4, +0.9</td></tr><tr><td>RAW</td><td>card-corrected</td><td class='num'>+0.6, -5.5</td><td class='num'>-0.4, -3.6</td><td class='num'>+1.1, -0.0</td><td class='num'>-1.9, -4.2</td></tr><tr><td>nrjxl 176 msgs</td><td>uncorrected</td><td class='num'>+0.5, -0.4</td><td class='num'>+0.0, -0.0</td><td class='num'>+0.8, +1.6</td><td class='num'>-0.4, +0.8</td></tr><tr><td>nrjxl 176 msgs</td><td>card-corrected</td><td class='num'>+0.7, -5.6</td><td class='num'>-0.4, -3.7</td><td class='num'>+1.2, -0.1</td><td class='num'>-1.8, -4.3</td></tr></table></div>
+<p class="small">a*, b* (CIELAB, D65); 0, 0 = neutral. "paper" = the brightest unclipped card pixels in today's
+crop. Grey-white is outside today's crop, so grey-light is the brightest patch here. nrjxl = MEDIUM at 176
+messages, the cell shown in the earlier sheet. After the card fit the greys pick up b* −4 to −6, because the fit
+uses only the 13 colour patches (no greys); including the greys in the fit would pin them.</p></section>
+</main>
+<div id="zoom" hidden><img alt="Full-size view"></div>
+<script>
+const z=document.getElementById('zoom'),zi=z.querySelector('img');
+document.querySelectorAll('.img').forEach(b=>b.addEventListener('click',()=>{zi.src=b.querySelector('img').src;z.hidden=false;}));
+z.addEventListener('click',()=>{z.hidden=true;});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')z.hidden=true;});
+</script>

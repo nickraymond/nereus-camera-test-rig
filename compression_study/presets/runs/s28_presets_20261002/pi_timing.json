@@ -1,0 +1,5 @@
+{"M-1600@50kB": {"time": "6.6", "rss": "41"}, "M-1600@75kB": {"time": "6.4", "rss": "41"}, "M-1600@112kB": {"time": "6.4", "rss": "41"},
+ "M-1920@50kB": {"time": "9.0", "rss": "46"}, "M-2000@50kB": {"time": "9.5", "rss": "48"},
+ "H-1000@50kB": {"time": "2.6", "rss": "34"}, "H-800@50kB": {"time": "1.8", "rss": "33"},
+ "W-binmode@50kB": {"time": "12.7 (proxy)", "rss": "53"}, "W-binplanes@50kB": {"time": "14.1 (est.)", "rss": "83"},
+ "W-full@75kB": {"time": "fails", "rss": ">250 (rfb=mem)"}, "W-full@112kB": {"time": "fails", "rss": ">250 (rfb=mem)"}, "W-full@50kB": {"time": "fails", "rss": ">250 (rfb=mem)"}}

@@ -1,0 +1,31 @@
+{
+ "run": "framing_20261003T180334Z",
+ "not_in_git": {
+  "why": "generated media / large renders stay out of git (repo data rules; EM 2026-10-03)",
+  "location": "Mac: nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/framing_20261003T180334Z/; also nereus002:~/s28_presets/framing_20261003T180334Z/",
+  "files": {
+   "frame.dng": {
+    "bytes": 24029068,
+    "sha256": "38a5b9f846befff3016ce8773830dd487db59ff24cf461dcce3ef78edd8476aa"
+   },
+   "frame.jpg": {
+    "bytes": 1031000,
+    "sha256": "42733a099f44a57786a214dca466203604d65444c6fbecc3e35973b657c30850"
+   },
+   "preview/img/closeup.jpg": {
+    "bytes": 111840,
+    "sha256": "1c9ce2a3a1c4e73cbc0d970b940025daccc6dbec267b1e049ffe2392811c6aec"
+   },
+   "preview/img/frame.jpg": {
+    "bytes": 165536,
+    "sha256": "cd85b17eb4f816eed2bf22e1d599e391d03e4a73e8295dd89aadd6772dc820d3"
+   }
+  }
+ },
+ "date_utc": "2026-10-03T18:03:34Z",
+ "host": "nereus002 (Pi Zero 2 W, IMX708)",
+ "purpose": "Step 1 framing check for the real-hardware cut sheet: one full frame with the LARGE / MEDIUM / SMALL ROI boxes (EM, 2026-10-03)",
+ "capture": "rpicam-still -n --mode 4608:2592 --width 4608 --height 2592 --raw -t 2000 --metadata meta.json -o frame.jpg (auto exposure: 30 ms, gain 1.29, AWB 4300 K)",
+ "published": "https://claude.ai/artifact/MRkdRwyPazTwYMQnfs22cC",
+ "finding": "card ~3.7x smaller than in the S4 frames and glare on the card; SMALL missed most of the card. Nick then moved the camera and kept the card at ~1.5 m (sweep_20261003T203525Z)."
+}

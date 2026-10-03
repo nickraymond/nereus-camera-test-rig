@@ -1,0 +1,66 @@
+{
+ "run": "s28_roi_budget_20261002",
+ "not_in_git": {
+  "why": "generated media / large renders stay out of git (repo data rules; EM 2026-10-03)",
+  "location": "Mac: nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/",
+  "files": {
+   "img/nrjxl_cc.webp": {
+    "bytes": 1698578,
+    "sha256": "47873977bcb58e2bfb210c632c22aa9dfcea767757674ff5c0731774333c6b8d"
+   },
+   "img/nrjxl_unc.webp": {
+    "bytes": 969854,
+    "sha256": "2931847c16e615549ca7e8b11a506e44bfd997b7c31a35c4cea0d76ffc3961fa"
+   },
+   "img/pjpg_cc.webp": {
+    "bytes": 473216,
+    "sha256": "19cd9f92d82f23956596915d9a217210ff55e12d1222ea8e1b8b27c078d0a606"
+   },
+   "img/pjpg_unc.webp": {
+    "bytes": 454710,
+    "sha256": "f0bd90ad574701bc605ea601e176e3b98bd4bbbf1506ac4b39d68f82a65a88d1"
+   },
+   "img/raw_cc.webp": {
+    "bytes": 3150776,
+    "sha256": "db1adf70026772914f5cc7d1699f59d137f058f617a3298e0cb4108002ebee3c"
+   },
+   "img/raw_unc.webp": {
+    "bytes": 2340460,
+    "sha256": "a892b25065d6e2c5f422e3a6b33fc2b59356e63622aa5dd6699168f3af784466"
+   },
+   "sheet/img/nrjxl_cc.webp": {
+    "bytes": 1698578,
+    "sha256": "47873977bcb58e2bfb210c632c22aa9dfcea767757674ff5c0731774333c6b8d"
+   },
+   "sheet/img/nrjxl_unc.webp": {
+    "bytes": 969854,
+    "sha256": "2931847c16e615549ca7e8b11a506e44bfd997b7c31a35c4cea0d76ffc3961fa"
+   },
+   "sheet/img/pjpg_cc.webp": {
+    "bytes": 480650,
+    "sha256": "245478dfa6b0946fcb1a2b2f67b346904c39f76b3dfae7e282665230bf5ccb67"
+   },
+   "sheet/img/pjpg_unc.webp": {
+    "bytes": 462516,
+    "sha256": "95065b9002dc7e1915cecd32d2bf016a1ef79ac3dcbe56e0136eee343594239c"
+   },
+   "sheet/img/raw_cc.webp": {
+    "bytes": 3150776,
+    "sha256": "db1adf70026772914f5cc7d1699f59d137f058f617a3298e0cb4108002ebee3c"
+   },
+   "sheet/img/raw_unc.webp": {
+    "bytes": 2340460,
+    "sha256": "a892b25065d6e2c5f422e3a6b33fc2b59356e63622aa5dd6699168f3af784466"
+   }
+  }
+ },
+ "date_utc": "2026-10-02",
+ "data": "S4 session frames data/s4_20260930/cool_imx708/stop_-1_r0 (IMX708, cool lamp; local dataset, not in git)",
+ "purpose": "Largest ROI per message budget (60-500 msgs) with colour error below today's pjpg on the 13 common colour patches (Nick via EM)",
+ "commands": [
+  "python -m compression_study.presets.roi_budget --data <primary>/data/s4_20260930 --prod <BM_Devel_Pi>",
+  "python -m compression_study.presets.roi_budget_sheet"
+ ],
+ "published": "https://claude.ai/artifact/RtgYCNhWvhiRbHGGjDzfLt",
+ "answer": "LARGE 2304x1296 at 176 msgs (dE 1.85 vs pjpg bar 3.51); colour bar non-discriminating (every fitting cell at the RAW floor), SSIM separates cells"
+}
