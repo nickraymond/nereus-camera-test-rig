@@ -1,0 +1,97 @@
+lamp,preset,candidate,label,target,bytes,messages,distance,quality,fits,ssim,patch_de,tags_ref,tags_found,acutance_rel,contrast_rel,verdict,container_v2,compare_box,de_truth,patches,search_s,sha256
+cool,WIDE,today_pjpg,today's pjpg q80 (1600×900 → 1000×562),today,48664,169,,80,,0.96627,8.4999,2,2,1.2565,1.0656,baseline,,"[1504, 846, 1600, 900]",5.0214,29,,
+cool,WIDE,raw_reference,RAW reference,raw,1800000,,,,,1,0,,,,,reference,,"[1504, 846, 1600, 900]",2.5095,29,,
+cool,WIDE,W-full,4608×2592 native,today_size,96144,334,15,,False,0.9582,0.17891,2,2,0.85444,1.0107,FAIL,False,"[1504, 846, 1600, 900]",2.6001,29,4.4,f638e568e77a0e96
+cool,WIDE,W-full,4608×2592 native,17kB,96144,334,15,,False,0.9582,0.17891,2,2,0.85444,1.0107,FAIL,False,"[1504, 846, 1600, 900]",2.6001,29,0.8,f638e568e77a0e96
+cool,WIDE,W-full,4608×2592 native,50kB,96144,334,15,,False,0.9582,0.17891,2,2,0.85444,1.0107,FAIL,False,"[1504, 846, 1600, 900]",2.6001,29,0.8,f638e568e77a0e96
+cool,WIDE,W-full,4608×2592 native,75kB,96144,334,15,,False,0.9582,0.17891,2,2,0.85444,1.0107,FAIL,False,"[1504, 846, 1600, 900]",2.6001,29,0.8,f638e568e77a0e96
+cool,WIDE,W-full,4608×2592 native,112kB,110261,383,12.577,,True,0.96336,0.16439,2,2,0.85768,1.0107,FAIL,False,"[1504, 846, 1600, 900]",2.5743,29,28.9,03bd872e1672903d
+cool,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",today_size,47920,167,9.752,,True,0.92445,0.35641,2,2,0.55471,0.97399,FAIL,True,"[1504, 846, 1600, 900]",2.7302,29,8.3,0682e12188406e7e
+cool,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",17kB,35843,125,15,,False,0.91208,0.51076,2,2,0.53283,0.97896,FAIL,True,"[1504, 846, 1600, 900]",2.9197,29,0.5,4700054b968d1cfa
+cool,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",50kB,49180,171,9.377,,True,0.9257,0.32635,2,2,0.55713,0.98091,FAIL,True,"[1504, 846, 1600, 900]",2.7067,29,0.5,8142b708d3635ec5
+cool,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",75kB,74743,260,5.162,,True,0.94478,0.19552,2,2,0.61049,0.98852,FAIL,True,"[1504, 846, 1600, 900]",2.6058,29,6.4,0be5285bfd5ff0f3
+cool,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",112kB,110954,386,2.898,,True,0.95069,0.13886,2,2,0.59456,0.98264,FAIL,True,"[1504, 846, 1600, 900]",2.5727,29,4.4,f573a1727fb877e4
+cool,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),today_size,47924,167,9.752,,True,0.92213,0.35629,2,2,0.52633,0.97399,FAIL,False,"[1504, 846, 1600, 900]",2.7303,29,8.3,b1626877fd35498e
+cool,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),17kB,35847,125,15,,False,0.91025,0.51069,2,2,0.50548,0.98071,FAIL,False,"[1504, 846, 1600, 900]",2.9199,29,0.5,01b1b433912a4af2
+cool,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),50kB,49184,171,9.377,,True,0.92336,0.32622,2,2,0.53195,0.97444,FAIL,False,"[1504, 846, 1600, 900]",2.7068,29,0.5,381ab11809d10f3f
+cool,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),75kB,74747,260,5.162,,True,0.94218,0.19577,2,2,0.57619,0.98264,FAIL,False,"[1504, 846, 1600, 900]",2.6061,29,6.4,70bb0cb345a5f6b3
+cool,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),112kB,110958,386,2.898,,True,0.94822,0.13895,2,2,0.56037,0.98264,FAIL,False,"[1504, 846, 1600, 900]",2.5729,29,4.4,b0f3e62188174c65
+cool,MEDIUM,today_pjpg,today's pjpg q80 (1600×900 → 1000×562),today,48664,169,,80,,0.96627,8.4999,2,2,1.2565,1.0656,baseline,,"[1504, 846, 1600, 900]",5.0214,29,,
+cool,MEDIUM,raw_reference,RAW reference,raw,1800000,,,,,1,0,,,,,reference,,"[1504, 846, 1600, 900]",2.5095,29,,
+cool,MEDIUM,M-1600,"1600×900 native, today's centred view",today_size,47970,167,4.727,,True,0.98066,0.071385,2,2,0.98652,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.516,29,5.4,59a228339743443b
+cool,MEDIUM,M-1600,"1600×900 native, today's centred view",17kB,22631,79,15,,False,0.95786,0.16762,2,2,0.79328,1.0027,FAIL,False,"[1504, 846, 1600, 900]",2.5979,29,0.4,f3628e8888311ecd
+cool,MEDIUM,M-1600,"1600×900 native, today's centred view",50kB,49894,174,4.457,,True,0.98123,0.063716,2,2,0.99539,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.5237,29,0.9,b2ae0942ab4a08b4
+cool,MEDIUM,M-1600,"1600×900 native, today's centred view",75kB,74903,261,2.383,,True,0.98552,0.042845,2,2,0.98495,1,PASS,False,"[1504, 846, 1600, 900]",2.4992,29,3.2,01dc7a8266abfb8c
+cool,MEDIUM,M-1600,"1600×900 native, today's centred view",112kB,109969,382,1.377,,True,0.98801,0.035267,2,2,0.99598,1,PASS,False,"[1504, 846, 1600, 900]",2.4996,29,2.6,c88abd5c58d76049
+cool,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",today_size,48629,169,7.13,,True,0.97561,0.091789,2,2,0.91035,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.496,29,6.4,811332bdae512357
+cool,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",17kB,29199,102,15,,False,0.95839,0.14842,2,2,0.84177,1.0123,FAIL,False,"[1504, 846, 1600, 900]",2.5333,29,0.4,4cea78c83cafdede
+cool,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",50kB,49693,173,6.856,,True,0.97619,0.093307,2,2,0.91449,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.4902,29,0.4,f0199f96d641ed8e
+cool,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",75kB,73630,256,3.811,,True,0.98266,0.069688,2,2,0.99078,1,PASS,False,"[1504, 846, 1600, 900]",2.4983,29,4.3,48a2d4c9150dd9b6
+cool,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",112kB,110951,386,2.078,,True,0.98619,0.043304,2,2,0.9827,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.5013,29,4.3,6841bf40c5e14058
+cool,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",today_size,47843,167,7.863,,True,0.97362,0.096219,2,2,0.91298,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.562,29,7.4,818f50c0b443edf3
+cool,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",17kB,31186,109,15,,False,0.95801,0.14099,2,2,0.77907,1.0065,FAIL,False,"[1504, 846, 1600, 900]",2.4748,29,0.4,3c993c5f611fba10
+cool,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",50kB,49971,174,7.414,,True,0.97467,0.094945,2,2,0.925,1.0044,PASS,False,"[1504, 846, 1600, 900]",2.5406,29,0.4,0e32c001861b6040
+cool,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",75kB,73901,257,4.122,,True,0.98198,0.071004,2,2,0.99539,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.493,29,4.3,ea79410795ebd4e4
+cool,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",112kB,110374,384,2.291,,True,0.98567,0.044888,2,2,0.97976,1.0065,PASS,False,"[1504, 846, 1600, 900]",2.4877,29,0.4,fc9c8ae64f7fa1d6
+cool,HIGH,today_pjpg,today's pjpg q80 (1600×900 → 1000×562),today,48664,169,,80,,0.95575,8.2861,1,1,1.2739,1.042,baseline,,"[2172, 1000, 800, 450]",3.507,13,,
+cool,HIGH,raw_reference,RAW reference,raw,450000,,,,,1,0,,,,,reference,,"[2172, 1000, 800, 450]",1.8305,13,,
+cool,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",today_size,47736,166,1.742,,True,0.9863,0.0296,1,1,0.99213,1,PASS,False,"[2172, 1000, 800, 450]",1.8168,13,2.9,c36729c8512410aa
+cool,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",17kB,16426,58,9.752,,True,0.9595,0.10627,1,1,0.8772,1.015,PASS,False,"[2172, 1000, 800, 450]",1.821,13,1.9,697af628257c5ca0
+cool,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",50kB,49429,172,1.643,,True,0.98661,0.031434,1,1,0.9924,1,PASS,False,"[2172, 1000, 800, 450]",1.8139,13,1.5,220e3dea841dcb75
+cool,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",75kB,74646,260,0.861,,True,0.99031,0.021807,1,1,0.99957,1,PASS,False,"[2172, 1000, 800, 450]",1.815,13,2.2,4b20a8317509ff90
+cool,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",112kB,110395,384,0.518,,True,0.99358,0.013145,1,1,1.0013,1,PASS,False,"[2172, 1000, 800, 450]",1.822,13,1.2,906d4d7a7c9b59c4
+cool,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",today_size,47780,166,0.988,,True,0.98956,0.025801,1,1,1.0011,1,PASS,False,"[2172, 1000, 800, 450]",1.8244,13,1.9,c7be9de3799f1bf5
+cool,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",17kB,16644,58,5.862,,True,0.97326,0.062798,1,1,0.96242,1,PASS,False,"[2172, 1000, 800, 450]",1.8516,13,0.7,de6c4969651cdef3
+cool,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",50kB,49860,174,0.931,,True,0.98991,0.020407,1,1,1.0005,1,PASS,False,"[2172, 1000, 800, 450]",1.8232,13,0.4,e05e86514b6ed221
+cool,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",75kB,73873,257,0.538,,True,0.99331,0.014716,1,1,1.0001,1,PASS,False,"[2172, 1000, 800, 450]",1.8263,13,0.9,689385ccf5f49e43
+cool,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",112kB,111257,387,0.288,,True,0.99683,0.013828,1,1,1.0001,1,PASS,False,"[2172, 1000, 800, 450]",1.82,13,1.1,b362fc70ce3b2dff
+warm,WIDE,today_pjpg,today's pjpg q80 (1600×900 → 1000×562),today,48743,170,,80,,0.96895,8.453,2,2,1.2352,1.0621,baseline,,"[1504, 846, 1600, 900]",5.369,29,,
+warm,WIDE,raw_reference,RAW reference,raw,1800000,,,,,1,0,,,,,reference,,"[1504, 846, 1600, 900]",3.3974,29,,
+warm,WIDE,W-full,4608×2592 native,today_size,96406,335,15,,False,0.95902,0.086531,2,2,0.8426,1.0121,FAIL,False,"[1504, 846, 1600, 900]",3.4873,29,4.5,0a68d9571a6ae1cd
+warm,WIDE,W-full,4608×2592 native,17kB,96406,335,15,,False,0.95902,0.086531,2,2,0.8426,1.0121,FAIL,False,"[1504, 846, 1600, 900]",3.4873,29,0.9,0a68d9571a6ae1cd
+warm,WIDE,W-full,4608×2592 native,50kB,96406,335,15,,False,0.95902,0.086531,2,2,0.8426,1.0121,FAIL,False,"[1504, 846, 1600, 900]",3.4873,29,0.9,0a68d9571a6ae1cd
+warm,WIDE,W-full,4608×2592 native,75kB,96406,335,15,,False,0.95902,0.086531,2,2,0.8426,1.0121,FAIL,False,"[1504, 846, 1600, 900]",3.4873,29,0.9,0a68d9571a6ae1cd
+warm,WIDE,W-full,4608×2592 native,112kB,111031,386,12.334,,True,0.96429,0.061437,2,2,0.86016,1.014,FAIL,False,"[1504, 846, 1600, 900]",3.4505,29,26.4,b882aa33fafb1e22
+warm,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",today_size,48232,168,9.563,,True,0.92921,0.13421,2,2,0.55861,0.98692,FAIL,True,"[1504, 846, 1600, 900]",3.5688,29,9.5,21b185f40a1673b5
+warm,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",17kB,35676,124,15,,False,0.91725,0.23033,2,2,0.53826,0.98869,FAIL,True,"[1504, 846, 1600, 900]",3.674,29,0.5,cbf9db64e1c8f0f1
+warm,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",50kB,49385,172,9.196,,True,0.93029,0.1253,2,2,0.56733,0.98496,FAIL,True,"[1504, 846, 1600, 900]",3.6216,29,3.5,5b8ae25ea098dede
+warm,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",75kB,74655,260,5.112,,True,0.94751,0.096262,2,2,0.60204,0.99375,FAIL,True,"[1504, 846, 1600, 900]",3.348,29,5.4,a8ded33cd641a38c
+warm,WIDE,W-binplanes,"4608×2592, planes binned 2×2 on the Pi",112kB,110230,383,2.898,,True,0.95255,0.066075,2,2,0.58634,0.99133,FAIL,True,"[1504, 846, 1600, 900]",3.5237,29,4.5,b7a0cbdb9f15ac97
+warm,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),today_size,48236,168,9.563,,True,0.92694,0.13433,2,2,0.53154,0.98205,FAIL,False,"[1504, 846, 1600, 900]",3.5688,29,9.4,d863bf2531b56713
+warm,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),17kB,35680,124,15,,False,0.91541,0.23019,2,2,0.50862,0.99119,FAIL,False,"[1504, 846, 1600, 900]",3.674,29,0.5,6604e143ca95297c
+warm,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),50kB,49389,172,9.196,,True,0.92798,0.12536,2,2,0.53699,0.98741,FAIL,False,"[1504, 846, 1600, 900]",3.6215,29,3.5,6eb50c092b81fc9f
+warm,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),75kB,74659,260,5.112,,True,0.94504,0.096402,2,2,0.56415,0.99375,FAIL,False,"[1504, 846, 1600, 900]",3.3482,29,5.5,8e35d0a7a8d3fd39
+warm,WIDE,W-binmode,2304×1296 binned sensor mode (simulated),112kB,110234,383,2.898,,True,0.95018,0.06616,2,2,0.55227,0.99133,FAIL,False,"[1504, 846, 1600, 900]",3.5239,29,4.5,32a185071e29c61a
+warm,MEDIUM,today_pjpg,today's pjpg q80 (1600×900 → 1000×562),today,48743,170,,80,,0.96895,8.453,2,2,1.2352,1.0621,baseline,,"[1504, 846, 1600, 900]",5.369,29,,
+warm,MEDIUM,raw_reference,RAW reference,raw,1800000,,,,,1,0,,,,,reference,,"[1504, 846, 1600, 900]",3.3974,29,,
+warm,MEDIUM,M-1600,"1600×900 native, today's centred view",today_size,48434,169,4.635,,True,0.98144,0.025705,2,2,0.99065,1.0043,PASS,False,"[1504, 846, 1600, 900]",3.4303,29,4.3,76d82e6aced156bf
+warm,MEDIUM,M-1600,"1600×900 native, today's centred view",17kB,22497,79,15,,False,0.95869,0.07812,2,2,0.78269,1.014,FAIL,False,"[1504, 846, 1600, 900]",3.5635,29,0.4,36cfb33be580972b
+warm,MEDIUM,M-1600,"1600×900 native, today's centred view",50kB,49627,173,4.457,,True,0.98185,0.027391,2,2,0.99525,1.0097,PASS,False,"[1504, 846, 1600, 900]",3.408,29,1,4045850710a2bec7
+warm,MEDIUM,M-1600,"1600×900 native, today's centred view",75kB,74531,259,2.383,,True,0.98592,0.020197,2,2,0.97628,1.0024,PASS,False,"[1504, 846, 1600, 900]",3.3936,29,3.2,71c4f1570205e38d
+warm,MEDIUM,M-1600,"1600×900 native, today's centred view",112kB,110381,384,1.377,,True,0.98838,0.013574,2,2,0.99355,1,PASS,False,"[1504, 846, 1600, 900]",3.3974,29,2.7,818b8643c9a5f532
+warm,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",today_size,48130,168,7.13,,True,0.97568,0.043511,2,2,0.91961,1,PASS,False,"[1504, 846, 1600, 900]",3.3882,29,6.6,38234e65b8f525c9
+warm,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",17kB,29057,101,15,,False,0.95908,0.087786,2,2,0.83326,1.0164,FAIL,False,"[1504, 846, 1600, 900]",3.3631,29,0.4,f1711bdbf90919ce
+warm,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",50kB,49201,171,6.856,,True,0.97635,0.042384,2,2,0.92568,1,PASS,False,"[1504, 846, 1600, 900]",3.388,29,0.4,857e261a2bce05bc
+warm,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",75kB,74499,259,3.737,,True,0.98333,0.025979,2,2,0.9813,1.0116,PASS,False,"[1504, 846, 1600, 900]",3.4182,29,5.1,2193b2c2c7613a3a
+warm,MEDIUM,M-1920,"1920×1080 native, slightly wider view (centred, contains today's)",112kB,110182,383,2.119,,True,0.98651,0.020682,2,2,0.99099,1,PASS,False,"[1504, 846, 1600, 900]",3.3737,29,2.8,4688d04c97168fef
+warm,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",today_size,48187,168,7.71,,True,0.97429,0.049417,2,2,0.91766,1,PASS,False,"[1504, 846, 1600, 900]",3.4825,29,6.7,d02f5191d733453c
+warm,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",17kB,30962,108,15,,False,0.9589,0.078455,2,2,0.78985,1,FAIL,False,"[1504, 846, 1600, 900]",3.3739,29,0.4,da438b4d6a5726aa
+warm,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",50kB,49489,172,7.414,,True,0.97497,0.047985,2,2,0.91846,1.0074,PASS,False,"[1504, 846, 1600, 900]",3.4602,29,0.4,93c4c1e56fe3a5dd
+warm,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",75kB,73638,256,4.122,,True,0.98256,0.032166,2,2,1.0019,1.0024,PASS,False,"[1504, 846, 1600, 900]",3.4308,29,4.3,acc6f5a34ce80f95
+warm,MEDIUM,M-2000,"2000×1124 native, slightly wider view (centred, contains today's)",112kB,110225,383,2.291,,True,0.98615,0.020011,2,2,0.97735,1.0024,PASS,False,"[1504, 846, 1600, 900]",3.4192,29,0.4,27b6165558cb054b
+warm,HIGH,today_pjpg,today's pjpg q80 (1600×900 → 1000×562),today,48743,170,,80,,0.95991,9.5426,1,1,1.2455,1.0378,baseline,,"[2172, 1000, 800, 450]",4.168,13,,
+warm,HIGH,raw_reference,RAW reference,raw,450000,,,,,1,0,,,,,reference,,"[2172, 1000, 800, 450]",2.9714,13,,
+warm,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",today_size,48474,169,1.708,,True,0.98672,0.01591,1,1,0.98957,1,PASS,False,"[2172, 1000, 800, 450]",2.9912,13,3.3,9a4e2360277f651f
+warm,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",17kB,16637,58,9.377,,True,0.96127,0.067847,1,1,0.8764,1.0038,PASS,False,"[2172, 1000, 800, 450]",2.9709,13,1.2,99b4e014a7c56a8f
+warm,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",50kB,49563,173,1.643,,True,0.98692,0.015763,1,1,0.98706,1,PASS,False,"[2172, 1000, 800, 450]",2.9885,13,1.6,e2e8f381dcd06997
+warm,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",75kB,74172,258,0.895,,True,0.99038,0.010492,1,1,0.9979,1,PASS,False,"[2172, 1000, 800, 450]",2.9619,13,1.2,6112dfe641026934
+warm,HIGH,H-1000,"1000×562 native, on the card's colour patches (centred would be 1804,1014)",112kB,110864,385,0.528,,True,0.99369,0.0064823,1,1,1.0013,1,PASS,False,"[2172, 1000, 800, 450]",2.9718,13,1.9,2fc2817cd094fc2b
+warm,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",today_size,47928,167,0.988,,True,0.98977,0.012172,1,1,1.0011,1,PASS,False,"[2172, 1000, 800, 450]",2.9797,13,2,c28c579b7f9c3302
+warm,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",17kB,16436,58,5.862,,True,0.97339,0.037336,1,1,0.97635,1,PASS,False,"[2172, 1000, 800, 450]",3.012,13,0.8,1b8bc082a2df0d30
+warm,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",50kB,49632,173,0.95,,True,0.99001,0.0084403,1,1,1.0002,1,PASS,False,"[2172, 1000, 800, 450]",2.9773,13,0.5,95804948009dfa12
+warm,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",75kB,74949,261,0.538,,True,0.99354,0.0066685,1,1,0.99985,1,PASS,False,"[2172, 1000, 800, 450]",2.9699,13,0.9,bcc79bcd8f55f7be
+warm,HIGH,H-800,"800×450 native, on the card's colour patches (centred would be 1904,1070)",112kB,109970,382,0.299,,True,0.99684,0.0050868,1,1,1.0006,1,PASS,False,"[2172, 1000, 800, 450]",2.9646,13,0.8,85eb17fc1f005397
+cool,WIDE,W-pjpg1000,pjpg of the full frame at 1000×562 (production prepare_source + ladder),50kB,51348,179,,70,,0.92388,8.5141,2,2,0.64063,1.0788,reading (b),,"[1504, 846, 1600, 900]",5.0714,29,,
+cool,WIDE,W-pjpg2304,pjpg of the full frame at 2304×1296 (production prepare_source + ladder),50kB,52478,183,,11,,0.91983,8.5179,2,2,0.99975,1.057,reading (b),,"[1504, 846, 1600, 900]",5.5609,29,,
+warm,WIDE,W-pjpg1000,pjpg of the full frame at 1000×562 (production prepare_source + ladder),50kB,50720,177,,70,,0.93017,8.3468,2,2,0.62978,1.0717,reading (b),,"[1504, 846, 1600, 900]",5.4823,29,,
+warm,WIDE,W-pjpg2304,pjpg of the full frame at 2304×1296 (production prepare_source + ladder),50kB,52629,183,,11,,0.92928,8.3945,2,2,0.96907,1.0538,reading (b),,"[1504, 846, 1600, 900]",5.5853,29,,

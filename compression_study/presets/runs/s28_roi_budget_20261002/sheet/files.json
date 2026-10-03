@@ -1,0 +1,8 @@
+{
+ "img/raw_unc.webp": "/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/sheet/img/raw_unc.webp",
+ "img/raw_cc.webp": "/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/sheet/img/raw_cc.webp",
+ "img/nrjxl_unc.webp": "/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/sheet/img/nrjxl_unc.webp",
+ "img/nrjxl_cc.webp": "/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/sheet/img/nrjxl_cc.webp",
+ "img/pjpg_unc.webp": "/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/sheet/img/pjpg_unc.webp",
+ "img/pjpg_cc.webp": "/Users/nickbuemond/Documents/GitHub/nereus-camera-test-rig/.claude/worktrees/raw-compression-test-spec-dc1818/compression_study/presets/runs/s28_roi_budget_20261002/sheet/img/pjpg_cc.webp"
+}

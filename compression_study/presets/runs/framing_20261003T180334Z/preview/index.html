@@ -1,0 +1,38 @@
+<meta charset="utf-8">
+<title>nereus002 Framing Check</title>
+<style>
+:root{--bg:#f3f5f6;--panel:#fff;--ink:#121a20;--ink2:#46535d;--rule:#d6dde2;--ok:#1d6b3a;--okbg:#e3f2e8;--bad:#9b2c1f;--badbg:#f8e4e0;--part:#7a5300;--partbg:#fbf0d6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0f1418;--panel:#161d22;--ink:#e6ecf0;--ink2:#b2bec7;--rule:#2a343c;--ok:#8fd6a6;--okbg:#163222;--bad:#f0a597;--badbg:#3a1c17;--part:#f2cf7a;--partbg:#33290f}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0f1418;--panel:#161d22;--ink:#e6ecf0;--ink2:#b2bec7;--rule:#2a343c;--ok:#8fd6a6;--okbg:#163222;--bad:#f0a597;--badbg:#3a1c17;--part:#f2cf7a;--partbg:#33290f}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding-inline:16px;padding-block:20px 48px}
+main{max-width:1200px;margin:0 auto;display:grid;gap:16px}
+h1{font-size:1.5rem;margin:0} h2{font-size:1.1rem;margin:0 0 6px} p{margin:0;max-width:90ch}
+.lede,.small{color:var(--ink2)} .small{font-size:.85rem}
+section{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px;display:grid;gap:8px}
+img{width:100%;height:auto;display:block;border-radius:4px}
+.wrap{overflow-x:auto} table{border-collapse:collapse;width:100%}
+th,td{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:left}
+.ok{background:var(--okbg);color:var(--ok);font-weight:600}.bad{background:var(--badbg);color:var(--bad);font-weight:600}.part{background:var(--partbg);color:var(--part);font-weight:600}
+ul{margin:0;padding-left:20px;display:grid;gap:4px;max-width:90ch}
+</style>
+<main>
+<h1>nereus002 framing check</h1>
+<p class="lede">One IMX708 capture at 4608×2592, the study's mode, taken 2026-10-03 18:03 UTC (auto exposure: 30 ms, gain 1.29, AWB 4300 K; JPEG + DNG). The boxes are the three ROIs in sensor pixels: <b style="color:#0aa6d8">LARGE</b> [1152, 648, 2304, 1296], <b style="color:#c99700">MEDIUM</b> [1504, 846, 1600, 900], <b style="color:#e0359a">SMALL</b> [2172, 1000, 800, 450]. Thin white boxes mark the reef card and the checker.</p>
+<section><h2>Full frame</h2><img src="img/frame.jpg" alt="Full frame with the LARGE, MEDIUM and SMALL boxes drawn over a cardboard box with the reef card and checker"></section>
+<section><h2>Card close-up (native pixels)</h2><img src="img/closeup.jpg" alt="Close-up of the reef card and checker; the SMALL box's left edge cuts through the card's colour patches"></section>
+<section><h2>What sits inside each ROI</h2>
+<div class="wrap"><table>
+<tr><th>ROI</th><th>Reef card</th><th>Card colour patches</th><th>Checker</th></tr>
+<tr><td>LARGE</td><td class="ok">inside</td><td class="ok">inside</td><td class="ok">inside</td></tr>
+<tr><td>MEDIUM</td><td class="ok">inside</td><td class="ok">inside</td><td class="ok">inside</td></tr>
+<tr><td>SMALL</td><td class="part">right quarter only (top-right and bottom-right tags)</td><td class="part">about half the columns; the left edge cuts through the patch rows</td><td class="bad">outside (left of and below SMALL)</td></tr>
+</table></div>
+<p class="small">Positions read from the JPEG. Card paper ≈ x 1840–2290, y 1255–1525; checker ≈ x 1985–2145, y 1468–1578; colour patches ≈ x 2100–2270, y 1350–1400.</p></section>
+<section><h2>Before the cut sheet</h2>
+<ul>
+<li><b>The card is much farther away than in the study frames.</b> It is about 450 px wide, against about 1660 px in the S4 session. AprilTags are about 32 px, and colour patches about 22 px (11 px per Bayer plane). That is too small for reliable patch colour.</li>
+<li><b>Glare:</b> a bright reflection from the plastic wrap runs across the top-centre of the card, over the title and part of the grey and colour rows. The tag finder sees only 2 of 4 tags (bottom left, bottom right), so the card is not located automatically.</li>
+<li><b>SMALL misses most of the card and all of the checker.</b> SMALL sits over the colour patches only when the card is framed as in the study, with the patches near x 2170–2970, y 1000–1450.</li>
+</ul>
+<p class="small">Suggested move (Nick's call): bring the card back to the study framing, about 0.5 m away, with its colour patches inside the pink box. Then take the plastic wrap off the card or angle it out of the window light.</p></section>
+</main>

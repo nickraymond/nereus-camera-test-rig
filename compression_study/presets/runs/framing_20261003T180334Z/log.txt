@@ -1,0 +1,22 @@
+[121:49:08.144773696] [478181]  INFO Camera camera_manager.cpp:340 libcamera v0.7.2+rpt20260817
+[121:49:08.272467087] [478184]  WARN CameraSensorProperties camera_sensor_properties.cpp:612 No static properties available for 'imx708_wide'
+[121:49:08.272594326] [478184]  WARN CameraSensorProperties camera_sensor_properties.cpp:614 Please consider updating the camera sensor properties database
+[121:49:08.357007595] [478184]  INFO RPI pipeline_base.cpp:1133 Using configuration file '/usr/share/libcamera/pipeline/rpi/vc4/rpi_apps.yaml'
+[121:49:08.726279826] [478184]  INFO IPAProxy ipa_proxy.cpp:184 Using tuning file /usr/share/libcamera/ipa/rpi/vc4/imx708_wide.json
+[121:49:08.742808491] [478184]  WARN CameraSensor camera_sensor_legacy.cpp:502 'imx708_wide': No sensor delays found in static properties. Assuming unverified defaults.
+[121:49:08.744128123] [478184]  INFO Camera camera_manager.cpp:223 Adding camera '/base/soc/i2c0mux/i2c@1/imx708@1a' for pipeline handler rpi/vc4
+[121:49:08.744230884] [478184]  INFO RPI vc4.cpp:445 Registered camera /base/soc/i2c0mux/i2c@1/imx708@1a to Unicam device /dev/media0 and ISP device /dev/media1
+Mode selection for 2304:1296:12:P
+    SRGGB10_CSI2P,1536x864/0 - Score: 3400
+    SRGGB10_CSI2P,2304x1296/0 - Score: 1000
+    SRGGB10_CSI2P,4608x2592/0 - Score: 1900
+[121:49:08.763914282] [478181]  INFO Camera camera.cpp:1216 configuring streams: (0) 2304x1296-YUV420/sYCC (1) 2304x1296-SBGGR10_CSI2P/RAW
+[121:49:08.764647405] [478184]  INFO RPI vc4.cpp:620 Sensor: /base/soc/i2c0mux/i2c@1/imx708@1a - Selected sensor format: 2304x1296-SBGGR10_1X10/RAW - Selected unicam format: 2304x1296-pBAA/RAW
+Mode selection for 4608:2592:12:P
+    SRGGB10_CSI2P,1536x864/0 - Score: 10600
+    SRGGB10_CSI2P,2304x1296/0 - Score: 8200
+    SRGGB10_CSI2P,4608x2592/0 - Score: 1000
+[121:49:10.865097166] [478181]  INFO Camera camera.cpp:1216 configuring streams: (0) 4608x2592-YUV420/sYCC (1) 4608x2592-SBGGR10_CSI2P/RAW
+[121:49:10.866526434] [478184]  INFO RPI vc4.cpp:620 Sensor: /base/soc/i2c0mux/i2c@1/imx708@1a - Selected sensor format: 4608x2592-SBGGR10_1X10/RAW - Selected unicam format: 4608x2592-pBAA/RAW
+Still capture image received
+Bayer format is BGGR-10
