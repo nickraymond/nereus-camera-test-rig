@@ -1,0 +1,49 @@
+[r0] 1600x900 e5 180 msgs: d=3.811 51122 B 178 msgs SSIM 0.970/0.935 ΔE 1.42 vsRAW 0.25 acu 1.00/1.05
+[r0] 1600x900 e5 195 msgs: d=3.389 55918 B 195 msgs SSIM 0.974/0.935 ΔE 1.46 vsRAW 0.32 acu 1.02/1.05
+[r0] 1600x900 e7 180 msgs: d=3.524 51506 B 179 msgs SSIM 0.973/0.935 ΔE 1.37 vsRAW 0.32 acu 1.01/1.05
+[r0] 1600x900 e7 195 msgs: d=3.196 55647 B 194 msgs SSIM 0.975/0.935 ΔE 1.64 vsRAW 0.35 acu 1.01/1.05
+[r0] 2000x1124 e5 180 msgs: d=6.340 51671 B 180 msgs SSIM 0.954/0.935 ΔE 1.20 vsRAW 0.47 acu 1.08/1.05
+[r0] 2000x1124 e5 195 msgs: d=5.749 55664 B 194 msgs SSIM 0.958/0.935 ΔE 1.57 vsRAW 0.46 acu 1.06/1.05
+[r0] 2000x1124 e7 180 msgs: d=5.862 51746 B 180 msgs SSIM 0.957/0.935 ΔE 1.40 vsRAW 0.46 acu 1.07/1.05
+[r0] 2000x1124 e7 195 msgs: d=5.421 55180 B 192 msgs SSIM 0.960/0.935 ΔE 1.36 vsRAW 0.41 acu 1.05/1.05
+[r0] 2304x1296 e5 180 msgs: d=10.141 50863 B 177 msgs SSIM 0.937/0.935 ΔE 1.93 vsRAW 1.03 acu 0.90/1.05
+[r0] 2304x1296 e5 195 msgs: d=9.017 56126 B 195 msgs SSIM 0.942/0.935 ΔE 1.59 vsRAW 1.01 acu 0.91/1.05
+[r0] 2304x1296 e7 180 msgs: d=9.377 51775 B 180 msgs SSIM 0.941/0.935 ΔE 1.69 vsRAW 0.75 acu 0.91/1.05
+[r0] 2304x1296 e7 195 msgs: d=8.671 55185 B 192 msgs SSIM 0.943/0.935 ΔE 1.42 vsRAW 0.72 acu 0.93/1.05
+[r1] 1600x900 e5 180 msgs: d=3.811 51146 B 178 msgs SSIM 0.970/0.935 ΔE 1.25 vsRAW 0.43 acu 1.00/1.03
+[r1] 1600x900 e5 195 msgs: d=3.389 56036 B 195 msgs SSIM 0.974/0.935 ΔE 1.52 vsRAW 0.37 acu 1.02/1.03
+[r1] 1600x900 e7 180 msgs: d=3.524 51551 B 179 msgs SSIM 0.973/0.935 ΔE 1.30 vsRAW 0.36 acu 1.01/1.03
+[r1] 1600x900 e7 195 msgs: d=3.196 55730 B 194 msgs SSIM 0.975/0.935 ΔE 1.29 vsRAW 0.33 acu 1.01/1.03
+[r1] 2000x1124 e5 180 msgs: d=6.340 51634 B 180 msgs SSIM 0.955/0.935 ΔE 1.40 vsRAW 0.43 acu 1.08/1.03
+[r1] 2000x1124 e5 195 msgs: d=5.749 55615 B 194 msgs SSIM 0.958/0.935 ΔE 1.42 vsRAW 0.52 acu 1.05/1.03
+[r1] 2000x1124 e7 180 msgs: d=5.862 51646 B 180 msgs SSIM 0.957/0.935 ΔE 1.65 vsRAW 0.53 acu 1.05/1.03
+[r1] 2000x1124 e7 195 msgs: d=5.421 55113 B 192 msgs SSIM 0.960/0.935 ΔE 1.17 vsRAW 0.52 acu 1.05/1.03
+[r1] 2304x1296 e5 180 msgs: d=10.141 50932 B 177 msgs SSIM 0.937/0.935 ΔE 1.62 vsRAW 1.09 acu 0.89/1.03
+[r1] 2304x1296 e5 195 msgs: d=9.106 55874 B 195 msgs SSIM 0.942/0.935 ΔE 1.46 vsRAW 0.88 acu 0.89/1.03
+[r1] 2304x1296 e7 180 msgs: d=9.563 51059 B 178 msgs SSIM 0.939/0.935 ΔE 1.42 vsRAW 0.88 acu 0.92/1.03
+[r1] 2304x1296 e7 195 msgs: d=8.671 55353 B 193 msgs SSIM 0.943/0.935 ΔE 1.33 vsRAW 0.83 acu 0.90/1.03
+[r2] 1600x900 e5 180 msgs: d=3.811 51128 B 178 msgs SSIM 0.971/0.935 ΔE 1.28 vsRAW 0.38 acu 1.01/1.04
+[r2] 1600x900 e5 195 msgs: d=3.389 55820 B 194 msgs SSIM 0.974/0.935 ΔE 1.35 vsRAW 0.30 acu 1.03/1.04
+[r2] 1600x900 e7 180 msgs: d=3.524 51451 B 179 msgs SSIM 0.973/0.935 ΔE 1.24 vsRAW 0.33 acu 1.03/1.04
+[r2] 1600x900 e7 195 msgs: d=3.196 55457 B 193 msgs SSIM 0.975/0.935 ΔE 1.39 vsRAW 0.29 acu 1.00/1.04
+[r2] 2000x1124 e5 180 msgs: d=6.340 51702 B 180 msgs SSIM 0.955/0.935 ΔE 1.37 vsRAW 0.35 acu 1.08/1.04
+[r2] 2000x1124 e5 195 msgs: d=5.749 55606 B 194 msgs SSIM 0.958/0.935 ΔE 1.41 vsRAW 0.56 acu 1.06/1.04
+[r2] 2000x1124 e7 180 msgs: d=5.862 51689 B 180 msgs SSIM 0.957/0.935 ΔE 1.55 vsRAW 0.53 acu 1.07/1.04
+[r2] 2000x1124 e7 195 msgs: d=5.421 55133 B 192 msgs SSIM 0.960/0.935 ΔE 1.71 vsRAW 0.66 acu 1.06/1.04
+[r2] 2304x1296 e5 180 msgs: d=10.141 50871 B 177 msgs SSIM 0.937/0.935 ΔE 1.99 vsRAW 0.99 acu 0.91/1.04
+[r2] 2304x1296 e5 195 msgs: d=9.017 56127 B 195 msgs SSIM 0.942/0.935 ΔE 1.52 vsRAW 0.98 acu 0.92/1.04
+[r2] 2304x1296 e7 180 msgs: d=9.377 51824 B 180 msgs SSIM 0.940/0.935 ΔE 1.26 vsRAW 1.01 acu 0.92/1.04
+[r2] 2304x1296 e7 195 msgs: d=8.671 55256 B 192 msgs SSIM 0.943/0.935 ΔE 1.41 vsRAW 0.94 acu 0.93/1.04
+{'roi': '1600x900', 'effort': 5, 'budget': 180, 'fits': True, 'distance': 3.811, 'bytes': 51128, 'messages': 178, 'ssim': 0.9704, 'ssim_roi': 0.9747, 'de_truth': 1.28, 'de_raw': 0.378, 'acu': 1.005, 'colour': 'PASS', 'detail': 'PASS'}
+{'roi': '1600x900', 'effort': 5, 'budget': 195, 'fits': True, 'distance': 3.389, 'bytes': 55918, 'messages': 195, 'ssim': 0.9738, 'ssim_roi': 0.9774, 'de_truth': 1.459, 'de_raw': 0.321, 'acu': 1.019, 'colour': 'PASS', 'detail': 'PASS'}
+{'roi': '1600x900', 'effort': 7, 'budget': 180, 'fits': True, 'distance': 3.524, 'bytes': 51506, 'messages': 179, 'ssim': 0.9727, 'ssim_roi': 0.9765, 'de_truth': 1.303, 'de_raw': 0.334, 'acu': 1.015, 'colour': 'PASS', 'detail': 'PASS'}
+{'roi': '1600x900', 'effort': 7, 'budget': 195, 'fits': True, 'distance': 3.196, 'bytes': 55647, 'messages': 194, 'ssim': 0.9753, 'ssim_roi': 0.9786, 'de_truth': 1.388, 'de_raw': 0.329, 'acu': 1.006, 'colour': 'PASS', 'detail': 'PASS'}
+{'roi': '2000x1124', 'effort': 5, 'budget': 180, 'fits': True, 'distance': 6.34, 'bytes': 51671, 'messages': 180, 'ssim': 0.9545, 'ssim_roi': 0.9604, 'de_truth': 1.371, 'de_raw': 0.434, 'acu': 1.077, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': '2000x1124', 'effort': 5, 'budget': 195, 'fits': True, 'distance': 5.749, 'bytes': 55615, 'messages': 194, 'ssim': 0.9579, 'ssim_roi': 0.9624, 'de_truth': 1.418, 'de_raw': 0.522, 'acu': 1.057, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': '2000x1124', 'effort': 7, 'budget': 180, 'fits': True, 'distance': 5.862, 'bytes': 51689, 'messages': 180, 'ssim': 0.9573, 'ssim_roi': 0.962, 'de_truth': 1.55, 'de_raw': 0.529, 'acu': 1.066, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': '2000x1124', 'effort': 7, 'budget': 195, 'fits': True, 'distance': 5.421, 'bytes': 55133, 'messages': 192, 'ssim': 0.9599, 'ssim_roi': 0.9636, 'de_truth': 1.361, 'de_raw': 0.516, 'acu': 1.051, 'colour': 'PASS', 'detail': 'PASS'}
+{'roi': '2304x1296', 'effort': 5, 'budget': 180, 'fits': True, 'distance': 10.141, 'bytes': 50871, 'messages': 177, 'ssim': 0.9369, 'ssim_roi': 0.9397, 'de_truth': 1.925, 'de_raw': 1.033, 'acu': 0.897, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': '2304x1296', 'effort': 5, 'budget': 195, 'fits': True, 'distance': 9.017, 'bytes': 56126, 'messages': 195, 'ssim': 0.9416, 'ssim_roi': 0.9436, 'de_truth': 1.517, 'de_raw': 0.976, 'acu': 0.906, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': '2304x1296', 'effort': 7, 'budget': 180, 'fits': True, 'distance': 9.377, 'bytes': 51775, 'messages': 180, 'ssim': 0.9401, 'ssim_roi': 0.9424, 'de_truth': 1.424, 'de_raw': 0.883, 'acu': 0.916, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': '2304x1296', 'effort': 7, 'budget': 195, 'fits': True, 'distance': 8.671, 'bytes': 55256, 'messages': 192, 'ssim': 0.9434, 'ssim_roi': 0.945, 'de_truth': 1.409, 'de_raw': 0.832, 'acu': 0.926, 'colour': 'PASS', 'detail': 'WARN'}
+{'roi': 'pjpg', 'ssim': 0.9351, 'de_truth': 2.685, 'acu': 1.036}

@@ -1,0 +1,3 @@
+preset,runs,failed_or_killed,median_rung_s,peak_rss_kb,median_bytes,distance,cma_free_min_kb,verdict
+1600x900,10,0,6.7325,38244,49972.0,3.8,,PASS
+2304x1296,10,0,13.584,63988,47841.0,10.1,,PASS

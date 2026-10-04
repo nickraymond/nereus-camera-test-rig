@@ -1,0 +1,62 @@
+2026-10-03T21:36:21Z [192.168.1.35] R0 probe start: N=10 ENC_N=10 presets=1600x900 2304x1296 remote=/tmp/s28r0_20261003T213621Z
+2026-10-03T21:36:24Z [192.168.1.35] encoder copied: rc_raw_jxl.py sha256=4abc585674eccb75
+[r0][pi] 2026-10-03T21:36:25Z
+[r0][pi] nereus002
+[r0][pi] Linux nereus002 6.18.34+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.18.34-1+rpt1 (2026-06-09) aarch64 GNU/Linux
+[r0][pi] PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+[r0][pi] NAME="Debian GNU/Linux"
+[r0][pi] VERSION_ID="13"
+[r0][pi] rpicam-apps build: v1.12.0 12-05-2026 (11:49:26)
+[r0][pi] rpicam-apps capabilites: egl:0 qt:0 drm:1 libav:0
+[r0][pi] cjxl: /usr/bin/cjxl cjxl v0.11.2 [NEON_WITHOUT_AES]
+[r0][pi] numpy 2.2.4
+[r0][pi] MemTotal:         425172 kB
+[r0][pi] MemAvailable:     248160 kB
+[r0][pi] CmaTotal:         262144 kB
+[r0][pi] CmaFree:          118156 kB
+[r0][pi] cmdline: coherent_pool=1M 8250.nr_uarts=0 snd_bcm2835.enable_headphones=0 cgroup_disable=memory snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_hdmi=0  smsc95xx.macaddr=B8:27:EB:A3:1E:62 vc_mem.mem_base=0x1ec00000 vc_mem.mem_size=0x20000000  console=tty1 root=PARTUUID=f1f40773-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=US
+[r0][pi] /dev/mmcblk0p2  116G   43G   69G  39% /
+[r0][pi] tmpfs           208M  120K  208M   1% /tmp
+[r0][pi] guard {"rc": 1, "kind": "mem", "seconds": 0.308, "peak_rss_kb": 14504}
+[r0][pi] CMA sampler running: pid 489022, 10 rows in the first second
+[r0][pi] capture plain #1 rc=0 jpeg=1605810 dng=0
+[r0][pi] capture plain #2 rc=0 jpeg=1607771 dng=0
+[r0][pi] capture plain #3 rc=0 jpeg=1608985 dng=0
+[r0][pi] capture plain #4 rc=0 jpeg=1609424 dng=0
+[r0][pi] capture plain #5 rc=0 jpeg=1609384 dng=0
+[r0][pi] capture plain #6 rc=0 jpeg=1610070 dng=0
+[r0][pi] capture plain #7 rc=0 jpeg=1608465 dng=0
+[r0][pi] capture plain #8 rc=0 jpeg=1607382 dng=0
+[r0][pi] capture plain #9 rc=0 jpeg=1606895 dng=0
+[r0][pi] capture plain #10 rc=0 jpeg=1607259 dng=0
+[r0][pi] capture raw #1 rc=0 jpeg=1604539 dng=24029068
+[r0][pi] capture raw #2 rc=0 jpeg=1608694 dng=24029068
+[r0][pi] capture raw #3 rc=0 jpeg=1612473 dng=24029068
+[r0][pi] capture raw #4 rc=0 jpeg=1611892 dng=24029068
+[r0][pi] capture raw #5 rc=0 jpeg=1614256 dng=24029068
+[r0][pi] capture raw #6 rc=0 jpeg=1611719 dng=24029068
+[r0][pi] capture raw #7 rc=0 jpeg=1612682 dng=24029068
+[r0][pi] capture raw #8 rc=0 jpeg=1610390 dng=24029068
+[r0][pi] capture raw #9 rc=0 jpeg=1609202 dng=24029068
+[r0][pi] capture raw #10 rc=0 jpeg=1609970 dng=24029068
+[r0][pi] 1600x900,1,0,8.09262,50020,3.8,6.337,38292,
+[r0][pi] 1600x900,2,0,7.47279,50020,3.8,6.331,38220,
+[r0][pi] 1600x900,3,0,7.47468,50020,3.8,6.33,38224,
+[r0][pi] 1600x900,4,0,7.47676,50020,3.8,6.331,38232,
+[r0][pi] 1600x900,5,0,7.42784,50020,3.8,6.281,38228,
+[r0][pi] 1600x900,6,0,7.42907,50020,3.8,6.281,38240,
+[r0][pi] 1600x900,7,0,7.47317,50020,3.8,6.331,38236,
+[r0][pi] 1600x900,8,0,7.45147,50020,3.8,6.282,38244,
+[r0][pi] 1600x900,9,0,7.44021,50020,3.8,6.28,38240,
+[r0][pi] 1600x900,10,0,7.47674,50020,3.8,6.33,38236,
+[r0][pi] 2304x1296,1,0,13.7929,48130,10.1,12.506,51332,
+[r0][pi] 2304x1296,2,0,13.7336,48130,10.1,12.455,51332,
+[r0][pi] 2304x1296,3,0,13.7339,48130,10.1,12.453,51332,
+[r0][pi] 2304x1296,4,0,13.7325,48130,10.1,12.453,51332,
+[r0][pi] 2304x1296,5,0,13.7436,48130,10.1,12.455,51332,
+[r0][pi] 2304x1296,6,0,13.7843,48130,10.1,12.507,51332,
+[r0][pi] 2304x1296,7,0,13.7526,48130,10.1,12.455,51332,
+[r0][pi] 2304x1296,8,0,13.7347,48130,10.1,12.453,51332,
+[r0][pi] 2304x1296,9,0,13.7383,48130,10.1,12.454,51332,
+[r0][pi] 2304x1296,10,0,13.7339,48130,10.1,12.453,51332,
+2026-10-03T21:43:09Z [192.168.1.35] R0 probe done: pulled to compression_study/presets/runs/r0_nereus002_f2687ec_20261003T213621Z/pulled/192.168.1.35_r0 (46 entries); next: hil/tools/hil_s28_r0_analyze.py compression_study/presets/runs/r0_nereus002_f2687ec_20261003T213621Z 192.168.1.35

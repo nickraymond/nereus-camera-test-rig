@@ -1,0 +1,8 @@
+avail_before=242 {"name": "800x450", "crop": "1944,1078,800,450", "d": 1.047, "rc": 0, "wall_s": 3.09, "peak_rss_mib": 32.2, "log": ["[RAW] rung d=1.047: 51059 B, 178 msgs, over_cap=False, budget_fit=True, 2.1 s, peak_rss=33000 KiB"]}
+avail_before=244 {"name": "1200x676", "crop": "1744,966,1200,676", "d": 2.247, "rc": 0, "wall_s": 5.3, "peak_rss_mib": 35.7, "log": ["[RAW] rung d=2.247: 51613 B, 180 msgs, over_cap=False, budget_fit=True, 4.3 s, peak_rss=36600 KiB"]}
+avail_before=247 {"name": "1600x900", "crop": "1544,854,1600,900", "d": 3.811, "rc": 0, "wall_s": 8.53, "peak_rss_mib": 40.5, "log": ["[RAW] rung d=3.811: 51122 B, 178 msgs, over_cap=False, budget_fit=True, 7.4 s, peak_rss=41464 KiB"]}
+avail_before=251 {"name": "2000x1124", "crop": "1344,742,2000,1124", "d": 6.34, "rc": 0, "wall_s": 12.49, "peak_rss_mib": 46.6, "log": ["[RAW] rung d=6.34: 51671 B, 180 msgs, over_cap=False, budget_fit=True, 11.3 s, peak_rss=47724 KiB"]}
+avail_before=249 {"name": "2304x1296", "crop": "1192,656,2304,1296", "d": 10.141, "rc": 0, "wall_s": 15.97, "peak_rss_mib": 62.7, "log": ["[RAW] rung d=10.141: 50863 B, 177 msgs, over_cap=False, budget_fit=True, 14.8 s, peak_rss=64204 KiB"]}
+avail_before=252 {"name": "3072x1728", "crop": "808,440,3072,1728", "d": 15.0, "rc": 0, "wall_s": 27.3, "peak_rss_mib": 112.7, "log": ["[RAW] rung d=15.0: 54328 B, 189 msgs, over_cap=False, budget_fit=True, 25.9 s, peak_rss=115412 KiB"]}
+avail_before=244 {"name": "4608x2592", "crop": "0,0,4608,2592", "d": 15.0, "rc": 1, "wall_s": 5.83, "peak_rss_mib": 165.8, "log": ["[RAW][FALLBACK] rfb=mem: cjxl plane R d=15.0: mem rc=-6 after 2.672 s"]}
+Mem:             415         136         248           0          85         278

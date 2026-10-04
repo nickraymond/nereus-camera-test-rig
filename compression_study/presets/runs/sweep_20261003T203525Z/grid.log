@@ -1,0 +1,129 @@
+[r0] pjpg {'frame': 0, 'quality': 80, 'bytes': 52198, 'messages': 182, 'ssim_card': 0.9351, 'de_raw': 8.622, 'de_truth': 2.655, 'raw_de_truth': 1.415, 'acu': 1.048}
+[r0] 800x450 e5 180: d=1.082 50011 B 174 msgs card 0.991 tex 0.990 acu 1.00 ΔEraw 0.10
+[r0] 800x450 e5 250: d=0.611 70415 B 245 msgs card 0.995 tex 0.995 acu 1.01 ΔEraw 0.11
+[r0] 800x450 e5 500: d=0.179 136160 B 473 msgs card 0.998 tex 0.999 acu 1.00 ΔEraw 0.03
+[r0] 800x450 e7 180: d=0.979 49997 B 174 msgs card 0.992 tex 0.991 acu 1.00 ΔEraw 0.12
+[r0] 800x450 e7 250: d=0.583 70097 B 244 msgs card 0.995 tex 0.995 acu 1.00 ΔEraw 0.10
+[r0] 800x450 e7 500: d=0.176 135606 B 471 msgs card 0.998 tex 0.999 acu 1.00 ΔEraw 0.02
+[r0] 1200x676 e5 180: d=2.276 51269 B 179 msgs card 0.983 tex 0.979 acu 1.01 ΔEraw 0.19
+[r0] 1200x676 e5 250: d=1.425 70822 B 246 msgs card 0.989 tex 0.987 acu 1.01 ΔEraw 0.13
+[r0] 1200x676 e5 500: d=0.526 138809 B 482 msgs card 0.995 tex 0.996 acu 1.00 ΔEraw 0.08
+[r0] 1200x676 e7 180: d=2.086 50696 B 177 msgs card 0.984 tex 0.981 acu 1.02 ΔEraw 0.22
+[r0] 1200x676 e7 250: d=1.305 69441 B 242 msgs card 0.989 tex 0.988 acu 0.99 ΔEraw 0.15
+[r0] 1200x676 e7 500: d=0.490 137473 B 478 msgs card 0.996 tex 0.996 acu 1.00 ΔEraw 0.07
+[r0] 1600x900 e5 180: d=3.868 50537 B 176 msgs card 0.970 tex 0.968 acu 1.00 ΔEraw 0.30
+[r0] 1600x900 e5 250: d=2.565 69524 B 242 msgs card 0.980 tex 0.981 acu 1.00 ΔEraw 0.24
+[r0] 1600x900 e5 500: d=1.003 138450 B 481 msgs card 0.992 tex 0.992 acu 1.00 ΔEraw 0.12
+[r0] 1600x900 e7 180: d=3.653 50056 B 174 msgs card 0.972 tex 0.970 acu 1.01 ΔEraw 0.35
+[r0] 1600x900 e7 250: d=2.338 69191 B 241 msgs card 0.982 tex 0.983 acu 1.00 ΔEraw 0.24
+[r0] 1600x900 e7 500: d=0.903 138599 B 482 msgs card 0.992 tex 0.993 acu 1.00 ΔEraw 0.13
+[r0] 2000x1124 e5 180: d=6.749 49409 B 172 msgs card 0.952 tex 0.952 acu 1.06 ΔEraw 0.56
+[r0] 2000x1124 e5 250: d=4.476 67716 B 236 msgs card 0.966 tex 0.966 acu 1.04 ΔEraw 0.33
+[r0] 2000x1124 e5 500: d=1.882 140610 B 489 msgs card 0.985 tex 0.984 acu 1.01 ΔEraw 0.17
+[r0] 2000x1124 e7 180: d=6.184 50146 B 175 msgs card 0.955 tex 0.955 acu 1.08 ΔEraw 0.52
+[r0] 2000x1124 e7 250: d=4.030 69754 B 243 msgs card 0.969 tex 0.969 acu 1.00 ΔEraw 0.44
+[r0] 2000x1124 e7 500: d=1.652 138823 B 483 msgs card 0.987 tex 0.986 acu 1.00 ΔEraw 0.16
+[r0] 2304x1296 e5 180: d=10.297 50287 B 175 msgs card 0.936 tex 0.858 acu 0.90 ΔEraw 1.12
+[r0] 2304x1296 e5 250: d=6.932 69687 B 242 msgs card 0.951 tex 0.885 acu 1.04 ΔEraw 0.67
+[r0] 2304x1296 e5 500: d=3.065 139332 B 484 msgs card 0.977 tex 0.941 acu 1.00 ΔEraw 0.33
+[r0] 2304x1296 e7 180: d=9.624 50768 B 177 msgs card 0.939 tex 0.864 acu 0.90 ΔEraw 1.02
+[r0] 2304x1296 e7 250: d=6.383 71191 B 248 msgs card 0.954 tex 0.891 acu 1.04 ΔEraw 0.60
+[r0] 2304x1296 e7 500: d=2.821 139845 B 486 msgs card 0.979 tex 0.947 acu 0.99 ΔEraw 0.31
+[r0] 3072x1728 e5 180: does not fit (54328 B at d 15)
+[r0] 3072x1728 e5 250: d=10.990 70047 B 244 msgs card 0.934 tex 0.839 acu 0.86 ΔEraw 0.80
+[r0] 3072x1728 e5 500: d=4.796 140993 B 490 msgs card 0.964 tex 0.914 acu 1.05 ΔEraw 0.57
+[r0] 3072x1728 e7 180: does not fit (51846 B at d 15)
+[r0] 3072x1728 e7 250: d=10.335 70741 B 246 msgs card 0.936 tex 0.846 acu 0.89 ΔEraw 0.81
+[r0] 3072x1728 e7 500: d=4.477 141994 B 494 msgs card 0.966 tex 0.920 acu 1.02 ΔEraw 0.55
+[r0] 4608x2592 e5 180: does not fit (76753 B at d 15)
+[r0] 4608x2592 e5 250: does not fit (76753 B at d 15)
+[r0] 4608x2592 e5 500: d=7.096 141640 B 492 msgs card 0.951 tex 0.875 acu 1.03 ΔEraw 0.59
+[r0] 4608x2592 e7 180: does not fit (73964 B at d 15)
+[r0] 4608x2592 e7 250: does not fit (73964 B at d 15)
+[r0] 4608x2592 e7 500: d=6.776 139624 B 485 msgs card 0.952 tex 0.879 acu 1.03 ΔEraw 0.45
+[r1] pjpg {'frame': 1, 'quality': 80, 'bytes': 52214, 'messages': 182, 'ssim_card': 0.9352, 'de_raw': 8.617, 'de_truth': 2.685, 'raw_de_truth': 1.169, 'acu': 1.03}
+[r1] 800x450 e5 180: d=1.074 50232 B 175 msgs card 0.991 tex 0.990 acu 1.00 ΔEraw 0.15
+[r1] 800x450 e5 250: d=0.609 70867 B 247 msgs card 0.995 tex 0.995 acu 1.00 ΔEraw 0.09
+[r1] 800x450 e5 500: d=0.179 136108 B 473 msgs card 0.998 tex 0.999 acu 1.00 ΔEraw 0.03
+[r1] 800x450 e7 180: d=0.977 49937 B 174 msgs card 0.992 tex 0.991 acu 1.01 ΔEraw 0.15
+[r1] 800x450 e7 250: d=0.581 69965 B 243 msgs card 0.995 tex 0.995 acu 1.00 ΔEraw 0.08
+[r1] 800x450 e7 500: d=0.176 135545 B 471 msgs card 0.998 tex 0.999 acu 1.00 ΔEraw 0.03
+[r1] 1200x676 e5 180: d=2.276 51321 B 179 msgs card 0.982 tex 0.979 acu 1.01 ΔEraw 0.26
+[r1] 1200x676 e5 250: d=1.426 70704 B 246 msgs card 0.989 tex 0.987 acu 1.00 ΔEraw 0.19
+[r1] 1200x676 e5 500: d=0.526 139009 B 483 msgs card 0.995 tex 0.996 acu 1.00 ΔEraw 0.08
+[r1] 1200x676 e7 180: d=2.089 50728 B 177 msgs card 0.984 tex 0.980 acu 1.03 ΔEraw 0.28
+[r1] 1200x676 e7 250: d=1.303 69477 B 242 msgs card 0.989 tex 0.988 acu 1.00 ΔEraw 0.18
+[r1] 1200x676 e7 500: d=0.490 137540 B 478 msgs card 0.996 tex 0.996 acu 1.00 ΔEraw 0.09
+[r1] 1600x900 e5 180: d=3.868 50540 B 176 msgs card 0.970 tex 0.968 acu 1.00 ΔEraw 0.44
+[r1] 1600x900 e5 250: d=2.565 69695 B 242 msgs card 0.980 tex 0.981 acu 1.01 ΔEraw 0.30
+[r1] 1600x900 e5 500: d=1.005 138767 B 482 msgs card 0.992 tex 0.992 acu 1.00 ΔEraw 0.14
+[r1] 1600x900 e7 180: d=3.649 50113 B 175 msgs card 0.972 tex 0.971 acu 1.02 ΔEraw 0.42
+[r1] 1600x900 e7 250: d=2.345 69182 B 241 msgs card 0.982 tex 0.983 acu 1.01 ΔEraw 0.24
+[r1] 1600x900 e7 500: d=0.905 138649 B 482 msgs card 0.992 tex 0.993 acu 1.00 ΔEraw 0.11
+[r1] 2000x1124 e5 180: d=6.749 49312 B 172 msgs card 0.952 tex 0.952 acu 1.05 ΔEraw 0.68
+[r1] 2000x1124 e5 250: d=4.476 67691 B 236 msgs card 0.966 tex 0.966 acu 1.03 ΔEraw 0.50
+[r1] 2000x1124 e5 500: d=1.882 140530 B 488 msgs card 0.985 tex 0.984 acu 1.00 ΔEraw 0.24
+[r1] 2000x1124 e7 180: d=6.165 50044 B 174 msgs card 0.956 tex 0.955 acu 1.07 ΔEraw 0.47
+[r1] 2000x1124 e7 250: d=4.018 69750 B 243 msgs card 0.969 tex 0.969 acu 1.00 ΔEraw 0.41
+[r1] 2000x1124 e7 500: d=1.650 138821 B 483 msgs card 0.987 tex 0.986 acu 1.00 ΔEraw 0.21
+[r1] 2304x1296 e5 180: d=10.282 50326 B 175 msgs card 0.936 tex 0.858 acu 0.88 ΔEraw 0.99
+[r1] 2304x1296 e5 250: d=6.941 69502 B 242 msgs card 0.951 tex 0.885 acu 1.03 ΔEraw 0.74
+[r1] 2304x1296 e5 500: d=3.070 139418 B 485 msgs card 0.977 tex 0.941 acu 1.00 ΔEraw 0.23
+[r1] 2304x1296 e7 180: d=9.624 50722 B 177 msgs card 0.939 tex 0.863 acu 0.91 ΔEraw 0.92
+[r1] 2304x1296 e7 250: d=6.383 71206 B 248 msgs card 0.954 tex 0.891 acu 1.06 ΔEraw 0.54
+[r1] 2304x1296 e7 500: d=2.827 139831 B 486 msgs card 0.978 tex 0.947 acu 0.99 ΔEraw 0.36
+[r1] 3072x1728 e5 180: does not fit (54315 B at d 15)
+[r1] 3072x1728 e5 250: d=10.971 70153 B 244 msgs card 0.933 tex 0.839 acu 0.86 ΔEraw 1.19
+[r1] 3072x1728 e5 500: d=4.788 140781 B 489 msgs card 0.964 tex 0.914 acu 1.02 ΔEraw 0.44
+[r1] 3072x1728 e7 180: does not fit (51882 B at d 15)
+[r1] 3072x1728 e7 250: d=10.336 70327 B 245 msgs card 0.936 tex 0.846 acu 0.90 ΔEraw 0.86
+[r1] 3072x1728 e7 500: d=4.470 142584 B 496 msgs card 0.966 tex 0.920 acu 1.02 ΔEraw 0.54
+[r1] 4608x2592 e5 180: does not fit (76764 B at d 15)
+[r1] 4608x2592 e5 250: does not fit (76764 B at d 15)
+[r1] 4608x2592 e5 500: d=7.098 141475 B 492 msgs card 0.951 tex 0.875 acu 1.02 ΔEraw 0.62
+[r1] 4608x2592 e7 180: does not fit (73229 B at d 15)
+[r1] 4608x2592 e7 250: does not fit (73229 B at d 15)
+[r1] 4608x2592 e7 500: d=6.692 140918 B 490 msgs card 0.953 tex 0.880 acu 1.03 ΔEraw 0.60
+[r2] pjpg {'frame': 2, 'quality': 80, 'bytes': 52229, 'messages': 182, 'ssim_card': 0.9348, 'de_raw': 8.85, 'de_truth': 2.689, 'raw_de_truth': 1.212, 'acu': 1.036}
+[r2] 800x450 e5 180: d=1.071 50144 B 175 msgs card 0.991 tex 0.990 acu 1.00 ΔEraw 0.15
+[r2] 800x450 e5 250: d=0.609 71013 B 247 msgs card 0.995 tex 0.995 acu 1.00 ΔEraw 0.10
+[r2] 800x450 e5 500: d=0.179 135859 B 472 msgs card 0.998 tex 0.999 acu 1.00 ΔEraw 0.04
+[r2] 800x450 e7 180: d=0.978 49816 B 173 msgs card 0.992 tex 0.991 acu 1.00 ΔEraw 0.14
+[r2] 800x450 e7 250: d=0.581 69902 B 243 msgs card 0.995 tex 0.995 acu 1.00 ΔEraw 0.10
+[r2] 800x450 e7 500: d=0.176 135379 B 471 msgs card 0.998 tex 0.999 acu 1.01 ΔEraw 0.05
+[r2] 1200x676 e5 180: d=2.274 51326 B 179 msgs card 0.983 tex 0.979 acu 1.02 ΔEraw 0.15
+[r2] 1200x676 e5 250: d=1.427 70732 B 246 msgs card 0.989 tex 0.987 acu 1.00 ΔEraw 0.15
+[r2] 1200x676 e5 500: d=0.526 138924 B 483 msgs card 0.995 tex 0.996 acu 1.00 ΔEraw 0.08
+[r2] 1200x676 e7 180: d=2.084 50763 B 177 msgs card 0.984 tex 0.981 acu 1.03 ΔEraw 0.17
+[r2] 1200x676 e7 250: d=1.303 69433 B 242 msgs card 0.989 tex 0.988 acu 1.00 ΔEraw 0.17
+[r2] 1200x676 e7 500: d=0.489 137533 B 478 msgs card 0.996 tex 0.996 acu 0.99 ΔEraw 0.08
+[r2] 1600x900 e5 180: d=3.868 50590 B 176 msgs card 0.970 tex 0.968 acu 1.00 ΔEraw 0.34
+[r2] 1600x900 e5 250: d=2.565 69575 B 242 msgs card 0.980 tex 0.981 acu 1.01 ΔEraw 0.28
+[r2] 1600x900 e5 500: d=1.004 138411 B 481 msgs card 0.992 tex 0.992 acu 1.00 ΔEraw 0.15
+[r2] 1600x900 e7 180: d=3.657 50098 B 174 msgs card 0.972 tex 0.971 acu 1.02 ΔEraw 0.35
+[r2] 1600x900 e7 250: d=2.348 69100 B 240 msgs card 0.982 tex 0.983 acu 1.01 ΔEraw 0.29
+[r2] 1600x900 e7 500: d=0.902 138733 B 482 msgs card 0.992 tex 0.993 acu 1.00 ΔEraw 0.13
+[r2] 2000x1124 e5 180: d=6.749 49248 B 171 msgs card 0.952 tex 0.952 acu 1.06 ΔEraw 0.52
+[r2] 2000x1124 e5 250: d=4.476 67589 B 235 msgs card 0.966 tex 0.966 acu 1.04 ΔEraw 0.49
+[r2] 2000x1124 e5 500: d=1.882 140492 B 488 msgs card 0.985 tex 0.984 acu 1.01 ΔEraw 0.19
+[r2] 2000x1124 e7 180: d=6.155 50207 B 175 msgs card 0.956 tex 0.956 acu 1.08 ΔEraw 0.44
+[r2] 2000x1124 e7 250: d=4.016 69849 B 243 msgs card 0.969 tex 0.969 acu 0.99 ΔEraw 0.30
+[r2] 2000x1124 e7 500: d=1.648 138689 B 482 msgs card 0.987 tex 0.986 acu 1.01 ΔEraw 0.14
+[r2] 2304x1296 e5 180: d=10.299 50233 B 175 msgs card 0.936 tex 0.858 acu 0.92 ΔEraw 0.80
+[r2] 2304x1296 e5 250: d=6.929 69508 B 242 msgs card 0.951 tex 0.886 acu 1.03 ΔEraw 0.82
+[r2] 2304x1296 e5 500: d=3.066 139248 B 484 msgs card 0.976 tex 0.942 acu 1.01 ΔEraw 0.32
+[r2] 2304x1296 e7 180: d=9.624 50713 B 177 msgs card 0.939 tex 0.863 acu 0.91 ΔEraw 1.02
+[r2] 2304x1296 e7 250: d=6.383 71050 B 247 msgs card 0.954 tex 0.892 acu 1.05 ΔEraw 0.48
+[r2] 2304x1296 e7 500: d=2.818 139672 B 485 msgs card 0.978 tex 0.947 acu 1.00 ΔEraw 0.27
+[r2] 3072x1728 e5 180: does not fit (54268 B at d 15)
+[r2] 3072x1728 e5 250: d=10.993 70157 B 244 msgs card 0.934 tex 0.838 acu 0.88 ΔEraw 1.26
+[r2] 3072x1728 e5 500: d=4.791 140926 B 490 msgs card 0.964 tex 0.915 acu 1.03 ΔEraw 0.43
+[r2] 3072x1728 e7 180: d=15.000 51816 B 180 msgs card 0.919 tex 0.804 acu 0.78 ΔEraw 1.26
+[r2] 3072x1728 e7 250: d=10.364 70370 B 245 msgs card 0.936 tex 0.845 acu 0.91 ΔEraw 0.90
+[r2] 3072x1728 e7 500: d=4.474 142012 B 494 msgs card 0.966 tex 0.920 acu 1.04 ΔEraw 0.52
+[r2] 4608x2592 e5 180: does not fit (77355 B at d 15)
+[r2] 4608x2592 e5 250: does not fit (77355 B at d 15)
+[r2] 4608x2592 e5 500: d=7.166 139081 B 483 msgs card 0.950 tex 0.874 acu 1.01 ΔEraw 0.53
+[r2] 4608x2592 e7 180: does not fit (73838 B at d 15)
+[r2] 4608x2592 e7 250: does not fit (73838 B at d 15)
+[r2] 4608x2592 e7 500: d=6.761 139934 B 486 msgs card 0.952 tex 0.879 acu 1.04 ΔEraw 0.60

@@ -1,0 +1,1052 @@
+{
+ "title": "ROI × budget grid",
+ "eyebrow": "Nereus Vision · IMX708 on nereus002 · 2026-10-03 · card ≈ 1.5 m · 3 locked frames",
+ "lede": "Largest ROI at or above today's quality that the Pi Zero can encode — 180 msgs: 1600×900 (e7, d 3.65, card SSIM 0.972 vs 0.935) — Zero 9.7 s · 41 MiB · 250 msgs: 2304×1296 (e7, d 6.38, card SSIM 0.954 vs 0.935) — Zero 19.2 s · 63 MiB · 500 msgs: 3072×1728 (e5, d 4.79, card SSIM 0.964 vs 0.935) — Zero 28.1 s · 113 MiB",
+ "facts": [
+  {
+   "value": "1600×900",
+   "label": "largest ROI ≥ today's quality at 180 msgs"
+  },
+  {
+   "value": "2304×1296",
+   "label": "largest ROI ≥ today's quality at 250 msgs"
+  },
+  {
+   "value": "3072×1728",
+   "label": "largest ROI ≥ today's quality at 500 msgs"
+  },
+  {
+   "value": "SSIM 0.935",
+   "label": "today's pjpg on the card area (the bar)"
+  }
+ ],
+ "sections": [
+  {
+   "title": "Detail heat map",
+   "figure": "img/heat_detail.png",
+   "note": "Best setting per cell, among e5 / e7 runs the Zero can encode: better verdict first, then a Zero cost within 30 s / 150 MiB, then higher card SSIM. Medians of 3 frames. Texture SSIM (tex) is on each ROI's most detailed 480×270 window away from the card."
+  },
+  {
+   "title": "Pi Zero cost heat map",
+   "figure": "img/heat_zero.png",
+   "note": "Production rc_raw_jxl CLI on nereus002 (bm #120 bd6f38c), frame 0, an extra 700 MiB address-space cap and nice 10; recorder_web / workbench / field_power_log kept running."
+  },
+  {
+   "title": "The full frame with the seven ROIs",
+   "figure": "img/frame_rois.jpg",
+   "note": "Frame 0, 4608×2592 RAW rendered like the sliders, DOWNSCALED 2× to 2304×1296 for display (a static picture; the crops below open at full resolution)."
+  },
+  {
+   "title": "Every cell, both efforts (medians of 3 frames)",
+   "note": "✓ = the setting shown in the heat map. ΔE vs RAW = the 10 usable card patches with no fit (the clean compression number). ΔE card = vs the card truth after a 3×3 fit on the same 10 patches (flattering; the RAW itself scores 1.17–1.42). Today's pjpg: card SSIM 0.935, ΔE card 2.69, acutance 1.04.",
+   "table": {
+    "columns": [
+     "ROI",
+     "msgs",
+     "effort",
+     "shown",
+     "distance",
+     "bytes",
+     "msgs used",
+     "card SSIM",
+     "texture SSIM",
+     "acutance",
+     "ΔE vs RAW",
+     "ΔE card",
+     "Zero",
+     "detail",
+     "colour"
+    ],
+    "rows": [
+     [
+      "800×450",
+      "180",
+      "e5",
+      "",
+      "1.07",
+      "50,144",
+      "175",
+      "0.991",
+      "0.990",
+      "1.00",
+      "0.15",
+      "1.28",
+      "3.7 s · 32 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "800×450",
+      "180",
+      "e7",
+      "✓",
+      "0.98",
+      "49,937",
+      "174",
+      "0.992",
+      "0.991",
+      "1.00",
+      "0.14",
+      "1.22",
+      "3.6 s · 32 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "800×450",
+      "250",
+      "e5",
+      "",
+      "0.61",
+      "70,867",
+      "247",
+      "0.995",
+      "0.995",
+      "1.00",
+      "0.10",
+      "1.17",
+      "3.2 s · 32 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "800×450",
+      "250",
+      "e7",
+      "✓",
+      "0.58",
+      "69,965",
+      "243",
+      "0.995",
+      "0.995",
+      "1.00",
+      "0.10",
+      "1.16",
+      "3.8 s · 32 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "800×450",
+      "500",
+      "e5",
+      "✓",
+      "0.18",
+      "136,108",
+      "473",
+      "0.998",
+      "0.999",
+      "1.00",
+      "0.03",
+      "1.25",
+      "3.2 s · 32 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "800×450",
+      "500",
+      "e7",
+      "",
+      "0.18",
+      "135,545",
+      "471",
+      "0.998",
+      "0.999",
+      "1.00",
+      "0.03",
+      "1.26",
+      "4.1 s · 32 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1200×676",
+      "180",
+      "e5",
+      "",
+      "2.28",
+      "51,321",
+      "179",
+      "0.983",
+      "0.979",
+      "1.01",
+      "0.19",
+      "1.24",
+      "5.3 s · 36 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1200×676",
+      "180",
+      "e7",
+      "✓",
+      "2.09",
+      "50,728",
+      "177",
+      "0.984",
+      "0.981",
+      "1.03",
+      "0.22",
+      "1.24",
+      "6.0 s · 36 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1200×676",
+      "250",
+      "e5",
+      "",
+      "1.43",
+      "70,732",
+      "246",
+      "0.989",
+      "0.987",
+      "1.00",
+      "0.15",
+      "1.15",
+      "5.3 s · 36 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1200×676",
+      "250",
+      "e7",
+      "✓",
+      "1.30",
+      "69,441",
+      "242",
+      "0.989",
+      "0.988",
+      "1.00",
+      "0.17",
+      "1.22",
+      "6.2 s · 36 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1200×676",
+      "500",
+      "e5",
+      "",
+      "0.53",
+      "138,924",
+      "483",
+      "0.995",
+      "0.996",
+      "1.00",
+      "0.08",
+      "1.19",
+      "5.5 s · 36 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1200×676",
+      "500",
+      "e7",
+      "✓",
+      "0.49",
+      "137,533",
+      "478",
+      "0.996",
+      "0.996",
+      "1.00",
+      "0.08",
+      "1.21",
+      "6.2 s · 36 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1600×900",
+      "180",
+      "e5",
+      "",
+      "3.87",
+      "50,540",
+      "176",
+      "0.970",
+      "0.968",
+      "1.00",
+      "0.34",
+      "1.28",
+      "8.6 s · 41 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1600×900",
+      "180",
+      "e7",
+      "✓",
+      "3.65",
+      "50,098",
+      "174",
+      "0.972",
+      "0.971",
+      "1.02",
+      "0.35",
+      "1.46",
+      "9.7 s · 41 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1600×900",
+      "250",
+      "e5",
+      "",
+      "2.56",
+      "69,575",
+      "242",
+      "0.980",
+      "0.981",
+      "1.01",
+      "0.28",
+      "1.40",
+      "8.5 s · 41 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1600×900",
+      "250",
+      "e7",
+      "✓",
+      "2.35",
+      "69,182",
+      "241",
+      "0.982",
+      "0.983",
+      "1.01",
+      "0.24",
+      "1.33",
+      "9.3 s · 41 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1600×900",
+      "500",
+      "e5",
+      "",
+      "1.00",
+      "138,450",
+      "481",
+      "0.992",
+      "0.992",
+      "1.00",
+      "0.14",
+      "1.21",
+      "8.6 s · 41 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "1600×900",
+      "500",
+      "e7",
+      "✓",
+      "0.90",
+      "138,649",
+      "482",
+      "0.992",
+      "0.993",
+      "1.00",
+      "0.13",
+      "1.19",
+      "9.4 s · 41 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2000×1124",
+      "180",
+      "e5",
+      "",
+      "6.75",
+      "49,312",
+      "172",
+      "0.952",
+      "0.952",
+      "1.06",
+      "0.56",
+      "1.91",
+      "12.5 s · 47 MiB",
+      "WARN",
+      "PASS"
+     ],
+     [
+      "2000×1124",
+      "180",
+      "e7",
+      "✓",
+      "6.17",
+      "50,146",
+      "175",
+      "0.956",
+      "0.955",
+      "1.08",
+      "0.47",
+      "1.58",
+      "14.4 s · 47 MiB",
+      "WARN",
+      "PASS"
+     ],
+     [
+      "2000×1124",
+      "250",
+      "e5",
+      "",
+      "4.48",
+      "67,691",
+      "236",
+      "0.966",
+      "0.966",
+      "1.04",
+      "0.49",
+      "1.42",
+      "12.5 s · 47 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2000×1124",
+      "250",
+      "e7",
+      "✓",
+      "4.02",
+      "69,754",
+      "243",
+      "0.969",
+      "0.969",
+      "1.00",
+      "0.41",
+      "1.04",
+      "14.5 s · 47 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2000×1124",
+      "500",
+      "e5",
+      "",
+      "1.88",
+      "140,530",
+      "488",
+      "0.985",
+      "0.984",
+      "1.01",
+      "0.19",
+      "1.37",
+      "12.7 s · 47 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2000×1124",
+      "500",
+      "e7",
+      "✓",
+      "1.65",
+      "138,821",
+      "483",
+      "0.987",
+      "0.986",
+      "1.00",
+      "0.16",
+      "1.25",
+      "14.1 s · 47 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2304×1296",
+      "180",
+      "e5",
+      "",
+      "10.30",
+      "50,287",
+      "175",
+      "0.936",
+      "0.858",
+      "0.90",
+      "0.99",
+      "1.67",
+      "15.9 s · 63 MiB",
+      "WARN",
+      "PASS"
+     ],
+     [
+      "2304×1296",
+      "180",
+      "e7",
+      "✓",
+      "9.62",
+      "50,722",
+      "177",
+      "0.939",
+      "0.863",
+      "0.91",
+      "1.02",
+      "1.46",
+      "18.7 s · 63 MiB",
+      "WARN",
+      "PASS"
+     ],
+     [
+      "2304×1296",
+      "250",
+      "e5",
+      "",
+      "6.93",
+      "69,508",
+      "242",
+      "0.951",
+      "0.885",
+      "1.03",
+      "0.74",
+      "1.82",
+      "16.2 s · 63 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2304×1296",
+      "250",
+      "e7",
+      "✓",
+      "6.38",
+      "71,191",
+      "248",
+      "0.954",
+      "0.891",
+      "1.05",
+      "0.54",
+      "1.44",
+      "19.2 s · 63 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2304×1296",
+      "500",
+      "e5",
+      "",
+      "3.07",
+      "139,332",
+      "484",
+      "0.977",
+      "0.941",
+      "1.00",
+      "0.32",
+      "1.42",
+      "16.2 s · 63 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "2304×1296",
+      "500",
+      "e7",
+      "✓",
+      "2.82",
+      "139,831",
+      "486",
+      "0.978",
+      "0.947",
+      "0.99",
+      "0.31",
+      "1.54",
+      "18.5 s · 63 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "3072×1728",
+      "180",
+      "e5",
+      "",
+      "no fit at d 15",
+      "54,315",
+      "189",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "not run",
+      "—",
+      "—"
+     ],
+     [
+      "3072×1728",
+      "180",
+      "e7",
+      "",
+      "no fit at d 15",
+      "51,846",
+      "181",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "not run",
+      "—",
+      "—"
+     ],
+     [
+      "3072×1728",
+      "250",
+      "e5",
+      "",
+      "10.99",
+      "70,153",
+      "244",
+      "0.934",
+      "0.839",
+      "0.86",
+      "1.19",
+      "2.03",
+      "27.9 s · 113 MiB",
+      "FAIL",
+      "PASS"
+     ],
+     [
+      "3072×1728",
+      "250",
+      "e7",
+      "✓",
+      "10.34",
+      "70,370",
+      "245",
+      "0.936",
+      "0.846",
+      "0.90",
+      "0.86",
+      "2.00",
+      "32.6 s · 113 MiB (WARN)",
+      "WARN",
+      "PASS"
+     ],
+     [
+      "3072×1728",
+      "500",
+      "e5",
+      "✓",
+      "4.79",
+      "140,926",
+      "490",
+      "0.964",
+      "0.914",
+      "1.03",
+      "0.44",
+      "1.68",
+      "28.1 s · 113 MiB",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "3072×1728",
+      "500",
+      "e7",
+      "",
+      "4.47",
+      "142,012",
+      "494",
+      "0.966",
+      "0.920",
+      "1.02",
+      "0.54",
+      "1.53",
+      "34.0 s · 113 MiB (WARN)",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "4608×2592",
+      "180",
+      "e5",
+      "",
+      "no fit at d 15",
+      "76,764",
+      "267",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "not run",
+      "—",
+      "—"
+     ],
+     [
+      "4608×2592",
+      "180",
+      "e7",
+      "",
+      "no fit at d 15",
+      "73,838",
+      "257",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "not run",
+      "—",
+      "—"
+     ],
+     [
+      "4608×2592",
+      "250",
+      "e5",
+      "",
+      "no fit at d 15",
+      "76,764",
+      "267",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "not run",
+      "—",
+      "—"
+     ],
+     [
+      "4608×2592",
+      "250",
+      "e7",
+      "",
+      "no fit at d 15",
+      "73,838",
+      "257",
+      "—",
+      "—",
+      "—",
+      "—",
+      "—",
+      "not run",
+      "—",
+      "—"
+     ],
+     [
+      "4608×2592",
+      "500",
+      "e5",
+      "",
+      "7.10",
+      "141,475",
+      "492",
+      "0.951",
+      "0.875",
+      "1.02",
+      "0.59",
+      "1.74",
+      "guard stops cjxl (rfb=mem)",
+      "PASS",
+      "PASS"
+     ],
+     [
+      "4608×2592",
+      "500",
+      "e7",
+      "✓",
+      "6.76",
+      "139,934",
+      "486",
+      "0.952",
+      "0.879",
+      "1.03",
+      "0.60",
+      "1.57",
+      "guard stops cjxl (rfb=mem)",
+      "PASS",
+      "PASS"
+     ]
+    ]
+   }
+  },
+  {
+   "title": "Whole crop · 1600×900 — RAW vs nrjxl at each budget",
+   "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop's full resolution, then 1:1 and beyond.",
+   "before": "img/1600x900_ref.webp",
+   "before_label": "RAW reference",
+   "afters": [
+    {
+     "label": "180 msgs · e7 d 3.65 · 50.1 kB · PASS",
+     "image": "img/1600x900_180_e7.webp"
+    },
+    {
+     "label": "250 msgs · e7 d 2.34 · 69.2 kB · PASS",
+     "image": "img/1600x900_250_e7.webp"
+    },
+    {
+     "label": "500 msgs · e7 d 0.90 · 138.6 kB · PASS",
+     "image": "img/1600x900_500_e7.webp"
+    }
+   ]
+  },
+  {
+   "title": "Whole crop · 2304×1296 — RAW vs nrjxl at each budget",
+   "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop's full resolution, then 1:1 and beyond.",
+   "before": "img/2304x1296_ref.webp",
+   "before_label": "RAW reference",
+   "afters": [
+    {
+     "label": "180 msgs · e7 d 9.62 · 50.8 kB · WARN",
+     "image": "img/2304x1296_180_e7.webp"
+    },
+    {
+     "label": "250 msgs · e7 d 6.38 · 71.2 kB · PASS",
+     "image": "img/2304x1296_250_e7.webp"
+    },
+    {
+     "label": "500 msgs · e7 d 2.82 · 139.8 kB · PASS",
+     "image": "img/2304x1296_500_e7.webp"
+    }
+   ]
+  },
+  {
+   "title": "Whole crop · 3072×1728 — RAW vs nrjxl at each budget",
+   "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop's full resolution, then 1:1 and beyond. Not shown: 180 msgs (does not fit).",
+   "before": "img/3072x1728_ref.webp",
+   "before_label": "RAW reference",
+   "afters": [
+    {
+     "label": "250 msgs · e7 d 10.34 · 70.7 kB · WARN",
+     "image": "img/3072x1728_250_e7.webp"
+    },
+    {
+     "label": "500 msgs · e5 d 4.80 · 141.0 kB · PASS",
+     "image": "img/3072x1728_500_e5.webp"
+    }
+   ]
+  },
+  {
+   "title": "180 msgs · 1600×900 · card + checker — PASS",
+   "note": "e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/1600x900_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 174 msgs (e7)",
+     "image": "img/1600x900_180_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "180 msgs · 1600×900 · texture — PASS",
+   "note": "e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/1600x900_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 174 msgs (e7)",
+     "image": "img/1600x900_180_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "180 msgs · 2304×1296 · card + checker — WARN",
+   "note": "e7 · d 9.62 · 50,722 B · 177 msgs · card SSIM 0.939 (pjpg 0.935) · texture SSIM 0.863 · acutance 0.91 (pjpg 1.04) · ΔE vs RAW 1.02 · ΔE card 1.46 (pjpg 2.69) · Zero 18.7 s · 63 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/2304x1296_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs (e7)",
+     "image": "img/2304x1296_180_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "180 msgs · 2304×1296 · texture — WARN",
+   "note": "e7 · d 9.62 · 50,722 B · 177 msgs · card SSIM 0.939 (pjpg 0.935) · texture SSIM 0.863 · acutance 0.91 (pjpg 1.04) · ΔE vs RAW 1.02 · ΔE card 1.46 (pjpg 2.69) · Zero 18.7 s · 63 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/2304x1296_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 177 msgs (e7)",
+     "image": "img/2304x1296_180_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "250 msgs · 1600×900 · card + checker — PASS",
+   "note": "e7 · d 2.35 · 69,182 B · 241 msgs · card SSIM 0.982 (pjpg 0.935) · texture SSIM 0.983 · acutance 1.01 (pjpg 1.04) · ΔE vs RAW 0.24 · ΔE card 1.33 (pjpg 2.69) · Zero 9.3 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/1600x900_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 241 msgs (e7)",
+     "image": "img/1600x900_250_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "250 msgs · 1600×900 · texture — PASS",
+   "note": "e7 · d 2.35 · 69,182 B · 241 msgs · card SSIM 0.982 (pjpg 0.935) · texture SSIM 0.983 · acutance 1.01 (pjpg 1.04) · ΔE vs RAW 0.24 · ΔE card 1.33 (pjpg 2.69) · Zero 9.3 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/1600x900_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 241 msgs (e7)",
+     "image": "img/1600x900_250_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "250 msgs · 2304×1296 · card + checker — PASS",
+   "note": "e7 · d 6.38 · 71,191 B · 248 msgs · card SSIM 0.954 (pjpg 0.935) · texture SSIM 0.891 · acutance 1.05 (pjpg 1.04) · ΔE vs RAW 0.54 · ΔE card 1.44 (pjpg 2.69) · Zero 19.2 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/2304x1296_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 248 msgs (e7)",
+     "image": "img/2304x1296_250_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "250 msgs · 2304×1296 · texture — PASS",
+   "note": "e7 · d 6.38 · 71,191 B · 248 msgs · card SSIM 0.954 (pjpg 0.935) · texture SSIM 0.891 · acutance 1.05 (pjpg 1.04) · ΔE vs RAW 0.54 · ΔE card 1.44 (pjpg 2.69) · Zero 19.2 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/2304x1296_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 248 msgs (e7)",
+     "image": "img/2304x1296_250_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "250 msgs · 3072×1728 · card + checker — WARN",
+   "note": "e7 · d 10.34 · 70,370 B · 245 msgs · card SSIM 0.936 (pjpg 0.935) · texture SSIM 0.846 · acutance 0.90 (pjpg 1.04) · ΔE vs RAW 0.86 · ΔE card 2.00 (pjpg 2.69) · Zero 32.6 s · 113 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/3072x1728_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 245 msgs (e7)",
+     "image": "img/3072x1728_250_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "250 msgs · 3072×1728 · texture — WARN",
+   "note": "e7 · d 10.34 · 70,370 B · 245 msgs · card SSIM 0.936 (pjpg 0.935) · texture SSIM 0.846 · acutance 0.90 (pjpg 1.04) · ΔE vs RAW 0.86 · ΔE card 2.00 (pjpg 2.69) · Zero 32.6 s · 113 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/3072x1728_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 245 msgs (e7)",
+     "image": "img/3072x1728_250_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "500 msgs · 1600×900 · card + checker — PASS",
+   "note": "e7 · d 0.90 · 138,649 B · 482 msgs · card SSIM 0.992 (pjpg 0.935) · texture SSIM 0.993 · acutance 1.00 (pjpg 1.04) · ΔE vs RAW 0.13 · ΔE card 1.19 (pjpg 2.69) · Zero 9.4 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/1600x900_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 482 msgs (e7)",
+     "image": "img/1600x900_500_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "500 msgs · 1600×900 · texture — PASS",
+   "note": "e7 · d 0.90 · 138,649 B · 482 msgs · card SSIM 0.992 (pjpg 0.935) · texture SSIM 0.993 · acutance 1.00 (pjpg 1.04) · ΔE vs RAW 0.13 · ΔE card 1.19 (pjpg 2.69) · Zero 9.4 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/1600x900_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 482 msgs (e7)",
+     "image": "img/1600x900_500_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "500 msgs · 2304×1296 · card + checker — PASS",
+   "note": "e7 · d 2.82 · 139,831 B · 486 msgs · card SSIM 0.978 (pjpg 0.935) · texture SSIM 0.947 · acutance 0.99 (pjpg 1.04) · ΔE vs RAW 0.31 · ΔE card 1.54 (pjpg 2.69) · Zero 18.5 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/2304x1296_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 486 msgs (e7)",
+     "image": "img/2304x1296_500_e7_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "500 msgs · 2304×1296 · texture — PASS",
+   "note": "e7 · d 2.82 · 139,831 B · 486 msgs · card SSIM 0.978 (pjpg 0.935) · texture SSIM 0.947 · acutance 0.99 (pjpg 1.04) · ΔE vs RAW 0.31 · ΔE card 1.54 (pjpg 2.69) · Zero 18.5 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/2304x1296_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 486 msgs (e7)",
+     "image": "img/2304x1296_500_e7_tex.webp"
+    }
+   ]
+  },
+  {
+   "title": "500 msgs · 3072×1728 · card + checker — PASS",
+   "note": "e5 · d 4.79 · 140,926 B · 490 msgs · card SSIM 0.964 (pjpg 0.935) · texture SSIM 0.914 · acutance 1.03 (pjpg 1.04) · ΔE vs RAW 0.44 · ΔE card 1.68 (pjpg 2.69) · Zero 28.1 s · 113 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/3072x1728_ref_card.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 490 msgs (e5)",
+     "image": "img/3072x1728_500_e5_card.webp"
+    }
+   ]
+  },
+  {
+   "title": "500 msgs · 3072×1728 · texture — PASS",
+   "note": "e5 · d 4.79 · 140,926 B · 490 msgs · card SSIM 0.964 (pjpg 0.935) · texture SSIM 0.914 · acutance 1.03 (pjpg 1.04) · ΔE vs RAW 0.44 · ΔE card 1.68 (pjpg 2.69) · Zero 28.1 s · 113 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
+   "before": "img/3072x1728_ref_tex.webp",
+   "before_label": "RAW reference",
+   "pixelated": true,
+   "afters": [
+    {
+     "label": "nrjxl 490 msgs (e5)",
+     "image": "img/3072x1728_500_e5_tex.webp"
+    }
+   ]
+  }
+ ],
+ "notes": [
+  "Whole-crop views: 1600×900, 2304×1296 and 3072×1728 at every budget that fits, downscaled inline and full resolution in full screen. Zoomed views: the sliders show 1600×900, 2304×1296 and the largest Zero-feasible / passing ROI per budget (180: 1600×900, 2304×1296; 250: 1600×900, 2304×1296, 3072×1728; 500: 1600×900, 2304×1296, 3072×1728). Every cell's numbers are in the table.",
+  "Slider: left = RAW reference, right = nrjxl decoded back to raw; both rendered by one function (bilinear demosaic, the camera's locked WB gains, clipped at sensor white, the RAW's own card matrix, sRGB). Nothing is upsampled on this sheet.",
+  "Distances come from the Step C byte-target search (≤ 3 encodes, no quality floor here), with an exact bisection when the search ends without a fit below d 15.",
+  "ΔE reliability: 10 of 13 card colour patches usable (glare / noise); RAW ΔE varies 1.17–1.42 across identical frames, so ΔE differences under ~0.3 are noise. Tag acutance uses 2 tags of ~32 px.",
+  "Zero cost is measured on frame 0 at frame 0's distance (encode time barely depends on distance). Full frame: the production guard stops cjxl (rfb=mem).",
+  "The 195-message point from Step A sits in levers.csv (not repeated here)."
+ ],
+ "footer": "Data: compression_study/presets/runs/sweep_20261003T203525Z (grid.csv, grid_pjpg.csv, pi_grid.txt). Encoder: bm_cam_legacy #120 (bd6f38c); identical bytes on Mac and Pi."
+}

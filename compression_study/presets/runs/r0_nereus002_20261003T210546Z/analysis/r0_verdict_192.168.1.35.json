@@ -1,0 +1,32 @@
+{
+ "host": "192.168.1.35",
+ "R0.1": {
+  "verdict": "PASS",
+  "raw_ok": "10/10",
+  "cma_free_min_kb_raw": 57152,
+  "cma_free_min_kb_plain": 97444,
+  "dmesg_errors": []
+ },
+ "R0.2": {
+  "verdict": "PASS",
+  "median_raw_s": 3.50094,
+  "median_plain_s": 3.2306299999999997,
+  "delta_s": 0.2703100000000003
+ },
+ "R0.3": {
+  "verdict": "PASS",
+  "presets": {
+   "1600x900": true,
+   "2304x1296": true
+  },
+  "largest_passing_preset": "2304x1296"
+ },
+ "R0.4": {
+  "verdict": "PASS",
+  "env": [
+   "cjxl: /usr/bin/cjxl cjxl v0.11.2 [NEON_WITHOUT_AES]",
+   "numpy 2.2.4"
+  ],
+  "memory_guard_kind": "mem"
+ }
+}

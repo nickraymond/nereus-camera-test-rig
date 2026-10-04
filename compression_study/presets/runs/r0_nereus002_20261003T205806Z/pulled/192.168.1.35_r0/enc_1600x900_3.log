@@ -1,0 +1,3 @@
+[RAW] host=nereus002 dng=keep.dng crop=[1504, 846, 1600, 900] cfg={'format': 'pjpg', 'distances': [3.8], 'encode_max_s': 120, 'keep_crop': False, 'effort': 5, 'source': 'default'}
+[RAW] rung d=3.8: 49972 B, 174 msgs, over_cap=False, budget_fit=True, 6.8 s, peak_rss=38244 KiB
+[RAW] wrote enc_1600x900_3/image_compressed.nrjxl (49972 B, d=3.8, att=1, 6.824 s)

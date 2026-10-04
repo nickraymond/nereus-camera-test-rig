@@ -1,0 +1,552 @@
+<meta charset="utf-8">
+<title>ROI × budget grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+.fig img{display:block;width:100%;height:auto;border:1px solid var(--rule);border-radius:6px;background:#fff}
+.fig header p,.tbl header p{color:var(--ink2);margin:2px 0 8px;max-width:80ch}
+.tscroll{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--panel)}
+.tbl table{border-collapse:collapse;width:100%;font-size:.85rem}
+.tbl th,.tbl td{padding:6px 9px;border-bottom:1px solid var(--rule);text-align:left;white-space:nowrap}
+.tbl th{color:var(--ink2);font-weight:600}
+.tbl td{font-variant-numeric:tabular-nums}
+:root{--bg:#f4f6f7;--panel:#ffffff;--ink:#121820;--ink2:#46525e;--rule:#d8dee4;
+  --accent:#0f6f7c;--chip:#e7eef0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0f1418;
+  --panel:#161d22;--ink:#e6ecf0;--ink2:#b4c0c9;--rule:#2a343c;--accent:#4fb3bf;--chip:#1e2a31}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0f1418;--panel:#161d22;--ink:#e6ecf0;--ink2:#b4c0c9;
+  --rule:#2a343c;--accent:#4fb3bf;--chip:#1e2a31}
+
+body{background:var(--bg);color:var(--ink);font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  margin:0;padding-inline:16px;padding-block:24px 64px}
+main{max-width:1200px;margin:0 auto;display:grid;gap:36px}
+h1{font-size:1.9rem;line-height:1.15;margin:2px 0 6px;font-weight:600;text-wrap:balance}
+h2{font-size:1.15rem;margin:0;font-weight:600;text-wrap:balance}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:.74rem;color:var(--accent);margin:0}
+.lede{color:var(--ink2);max-width:72ch;margin:0}
+.hint{color:var(--ink2);font-size:.85rem;margin:12px 0 0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:16px}
+.facts div{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:10px 12px}
+.facts b{display:block;font:500 1.2rem "IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.facts span{color:var(--ink2);font-size:.85rem}
+.cmp header p{color:var(--ink2);margin:2px 0 8px;max-width:80ch}
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.opt{font:inherit;font-size:.85rem;border:1px solid var(--rule);background:var(--chip);color:var(--ink);
+  border-radius:999px;padding:4px 12px;cursor:pointer}
+.opt.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.opt:focus-visible,.stage:focus-visible,.fsbar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.stage{position:relative;width:100%;max-width:100%;overflow:hidden;border-radius:6px;border:1px solid var(--rule);
+  background:#000;user-select:none;-webkit-user-select:none;touch-action:pan-y;cursor:ew-resize}
+.stage img{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.stage.pix img{image-rendering:pixelated}
+.beforewrap{position:absolute;inset:0;clip-path:inset(0 50% 0 0);pointer-events:none}
+.handle{position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:#fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none}
+.handle span{position:absolute;top:50%;left:50%;width:32px;height:32px;margin:-16px 0 0 -16px;border-radius:50%;
+  background:#fff;color:#222;display:grid;place-items:center;font-size:16px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.tagl,.tagr{position:absolute;top:8px;font-size:.78rem;background:rgba(0,0,0,.62);color:#fff;padding:2px 8px;
+  border-radius:4px;pointer-events:none;max-width:45%}
+.tagl{left:8px}.tagr{right:8px;text-align:right}
+.fsbtn{position:absolute;right:8px;bottom:8px;font-size:.78rem;border-radius:4px;pointer-events:none;
+  background:rgba(0,0,0,.62);color:#fff;padding:3px 9px}
+.notes ul{color:var(--ink2);max-width:80ch;display:grid;gap:6px;padding-left:20px}
+footer{color:var(--ink2);font-size:.8rem;max-width:90ch;border-top:1px solid var(--rule);padding-top:12px}
+/* full-screen viewer (always dark: judging images) */
+#fs{position:fixed;inset:0;z-index:50;background:#0b0e10;color:#e6ecf0;display:grid;grid-template-rows:auto 1fr auto}
+#fs[hidden]{display:none}
+.fsbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+  border-bottom:1px solid #2a343c}
+.fsbar h2{font-size:1rem;margin-right:auto}
+.fsbar .opts{margin:0}
+.fsbar .opt{background:#1e2a31;border-color:#2a343c;color:#e6ecf0}
+.fsbar .opt.on{background:#4fb3bf;border-color:#4fb3bf;color:#071014}
+.zoom{display:flex;gap:4px;align-items:center}
+.zoom button,.fsclose{font:inherit;font-size:.85rem;border:1px solid #2a343c;background:#1e2a31;color:#e6ecf0;
+  border-radius:4px;padding:3px 9px;cursor:pointer}
+.zoom button.on{background:#4fb3bf;border-color:#4fb3bf;color:#071014}
+.zl{font:500 .8rem "IBM Plex Mono",ui-monospace,monospace;color:#b4c0c9;min-width:5.5em;text-align:right}
+.fsview{position:relative;overflow:hidden;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.fsview.panning{cursor:grabbing}
+.world{position:absolute;left:0;top:0}
+.world img{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.world.pix img{image-rendering:pixelated}
+.fbw{position:absolute;inset:0;pointer-events:none}
+.fhandle{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.4);cursor:ew-resize}
+.fhandle span{position:absolute;top:50%;left:50%;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;
+  background:#fff;color:#222;display:grid;place-items:center;font-size:17px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.fsview .tagl,.fsview .tagr{top:10px}
+.fsload{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);font-size:.8rem;
+  background:rgba(0,0,0,.7);padding:3px 10px;border-radius:4px}
+.fshelp{margin:0;padding:6px 12px calc(6px + env(safe-area-inset-bottom, 0px));font-size:.78rem;color:#b4c0c9;
+  border-top:1px solid #2a343c}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<main>
+<header>
+<p class="eyebrow">Nereus Vision · IMX708 on nereus002 · 2026-10-03 · card ≈ 1.5 m · 3 locked frames</p>
+<h1>ROI × budget grid</h1>
+<p class="lede">Largest ROI at or above today&#x27;s quality that the Pi Zero can encode — 180 msgs: 1600×900 (e7, d 3.65, card SSIM 0.972 vs 0.935) — Zero 9.7 s · 41 MiB · 250 msgs: 2304×1296 (e7, d 6.38, card SSIM 0.954 vs 0.935) — Zero 19.2 s · 63 MiB · 500 msgs: 3072×1728 (e5, d 4.79, card SSIM 0.964 vs 0.935) — Zero 28.1 s · 113 MiB</p>
+<div class="facts"><div><b>1600×900</b><span>largest ROI ≥ today&#x27;s quality at 180 msgs</span></div><div><b>2304×1296</b><span>largest ROI ≥ today&#x27;s quality at 250 msgs</span></div><div><b>3072×1728</b><span>largest ROI ≥ today&#x27;s quality at 500 msgs</span></div><div><b>SSIM 0.935</b><span>today&#x27;s pjpg on the card area (the bar)</span></div></div>
+<p class="hint">Drag across an image to compare. Click it (or press Enter) to open it full screen,
+where you can zoom to 1:1 and beyond and pan around.</p>
+</header>
+<section class="fig"><header><h2>Detail heat map</h2><p>Best setting per cell, among e5 / e7 runs the Zero can encode: better verdict first, then a Zero cost within 30 s / 150 MiB, then higher card SSIM. Medians of 3 frames. Texture SSIM (tex) is on each ROI&#x27;s most detailed 480×270 window away from the card.</p></header><img src="index_img/s0_figure.png" alt="Detail heat map" style="max-width:min(100%,940px)"></section><section class="fig"><header><h2>Pi Zero cost heat map</h2><p>Production rc_raw_jxl CLI on nereus002 (bm #120 bd6f38c), frame 0, an extra 700 MiB address-space cap and nice 10; recorder_web / workbench / field_power_log kept running.</p></header><img src="index_img/s1_figure.png" alt="Pi Zero cost heat map" style="max-width:min(100%,940px)"></section><section class="fig"><header><h2>The full frame with the seven ROIs</h2><p>Frame 0, 4608×2592 RAW rendered like the sliders, DOWNSCALED 2× to 2304×1296 for display (a static picture; the crops below open at full resolution).</p></header><img src="index_img/s2_figure.jpg" alt="The full frame with the seven ROIs" style="max-width:min(100%,2304px)"></section><section class="tbl"><header><h2>Every cell, both efforts (medians of 3 frames)</h2><p>✓ = the setting shown in the heat map. ΔE vs RAW = the 10 usable card patches with no fit (the clean compression number). ΔE card = vs the card truth after a 3×3 fit on the same 10 patches (flattering; the RAW itself scores 1.17–1.42). Today&#x27;s pjpg: card SSIM 0.935, ΔE card 2.69, acutance 1.04.</p></header><div class="tscroll"><table><thead><tr><th>ROI</th><th>msgs</th><th>effort</th><th>shown</th><th>distance</th><th>bytes</th><th>msgs used</th><th>card SSIM</th><th>texture SSIM</th><th>acutance</th><th>ΔE vs RAW</th><th>ΔE card</th><th>Zero</th><th>detail</th><th>colour</th></tr></thead><tbody><tr><td>800×450</td><td>180</td><td>e5</td><td></td><td>1.07</td><td>50,144</td><td>175</td><td>0.991</td><td>0.990</td><td>1.00</td><td>0.15</td><td>1.28</td><td>3.7 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>180</td><td>e7</td><td>✓</td><td>0.98</td><td>49,937</td><td>174</td><td>0.992</td><td>0.991</td><td>1.00</td><td>0.14</td><td>1.22</td><td>3.6 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>250</td><td>e5</td><td></td><td>0.61</td><td>70,867</td><td>247</td><td>0.995</td><td>0.995</td><td>1.00</td><td>0.10</td><td>1.17</td><td>3.2 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>250</td><td>e7</td><td>✓</td><td>0.58</td><td>69,965</td><td>243</td><td>0.995</td><td>0.995</td><td>1.00</td><td>0.10</td><td>1.16</td><td>3.8 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>500</td><td>e5</td><td>✓</td><td>0.18</td><td>136,108</td><td>473</td><td>0.998</td><td>0.999</td><td>1.00</td><td>0.03</td><td>1.25</td><td>3.2 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>500</td><td>e7</td><td></td><td>0.18</td><td>135,545</td><td>471</td><td>0.998</td><td>0.999</td><td>1.00</td><td>0.03</td><td>1.26</td><td>4.1 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>180</td><td>e5</td><td></td><td>2.28</td><td>51,321</td><td>179</td><td>0.983</td><td>0.979</td><td>1.01</td><td>0.19</td><td>1.24</td><td>5.3 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>180</td><td>e7</td><td>✓</td><td>2.09</td><td>50,728</td><td>177</td><td>0.984</td><td>0.981</td><td>1.03</td><td>0.22</td><td>1.24</td><td>6.0 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>250</td><td>e5</td><td></td><td>1.43</td><td>70,732</td><td>246</td><td>0.989</td><td>0.987</td><td>1.00</td><td>0.15</td><td>1.15</td><td>5.3 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>250</td><td>e7</td><td>✓</td><td>1.30</td><td>69,441</td><td>242</td><td>0.989</td><td>0.988</td><td>1.00</td><td>0.17</td><td>1.22</td><td>6.2 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>500</td><td>e5</td><td></td><td>0.53</td><td>138,924</td><td>483</td><td>0.995</td><td>0.996</td><td>1.00</td><td>0.08</td><td>1.19</td><td>5.5 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>500</td><td>e7</td><td>✓</td><td>0.49</td><td>137,533</td><td>478</td><td>0.996</td><td>0.996</td><td>1.00</td><td>0.08</td><td>1.21</td><td>6.2 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>180</td><td>e5</td><td></td><td>3.87</td><td>50,540</td><td>176</td><td>0.970</td><td>0.968</td><td>1.00</td><td>0.34</td><td>1.28</td><td>8.6 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>180</td><td>e7</td><td>✓</td><td>3.65</td><td>50,098</td><td>174</td><td>0.972</td><td>0.971</td><td>1.02</td><td>0.35</td><td>1.46</td><td>9.7 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>250</td><td>e5</td><td></td><td>2.56</td><td>69,575</td><td>242</td><td>0.980</td><td>0.981</td><td>1.01</td><td>0.28</td><td>1.40</td><td>8.5 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>250</td><td>e7</td><td>✓</td><td>2.35</td><td>69,182</td><td>241</td><td>0.982</td><td>0.983</td><td>1.01</td><td>0.24</td><td>1.33</td><td>9.3 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>500</td><td>e5</td><td></td><td>1.00</td><td>138,450</td><td>481</td><td>0.992</td><td>0.992</td><td>1.00</td><td>0.14</td><td>1.21</td><td>8.6 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>500</td><td>e7</td><td>✓</td><td>0.90</td><td>138,649</td><td>482</td><td>0.992</td><td>0.993</td><td>1.00</td><td>0.13</td><td>1.19</td><td>9.4 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>180</td><td>e5</td><td></td><td>6.75</td><td>49,312</td><td>172</td><td>0.952</td><td>0.952</td><td>1.06</td><td>0.56</td><td>1.91</td><td>12.5 s · 47 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2000×1124</td><td>180</td><td>e7</td><td>✓</td><td>6.17</td><td>50,146</td><td>175</td><td>0.956</td><td>0.955</td><td>1.08</td><td>0.47</td><td>1.58</td><td>14.4 s · 47 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2000×1124</td><td>250</td><td>e5</td><td></td><td>4.48</td><td>67,691</td><td>236</td><td>0.966</td><td>0.966</td><td>1.04</td><td>0.49</td><td>1.42</td><td>12.5 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>250</td><td>e7</td><td>✓</td><td>4.02</td><td>69,754</td><td>243</td><td>0.969</td><td>0.969</td><td>1.00</td><td>0.41</td><td>1.04</td><td>14.5 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>500</td><td>e5</td><td></td><td>1.88</td><td>140,530</td><td>488</td><td>0.985</td><td>0.984</td><td>1.01</td><td>0.19</td><td>1.37</td><td>12.7 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>500</td><td>e7</td><td>✓</td><td>1.65</td><td>138,821</td><td>483</td><td>0.987</td><td>0.986</td><td>1.00</td><td>0.16</td><td>1.25</td><td>14.1 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>180</td><td>e5</td><td></td><td>10.30</td><td>50,287</td><td>175</td><td>0.936</td><td>0.858</td><td>0.90</td><td>0.99</td><td>1.67</td><td>15.9 s · 63 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2304×1296</td><td>180</td><td>e7</td><td>✓</td><td>9.62</td><td>50,722</td><td>177</td><td>0.939</td><td>0.863</td><td>0.91</td><td>1.02</td><td>1.46</td><td>18.7 s · 63 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2304×1296</td><td>250</td><td>e5</td><td></td><td>6.93</td><td>69,508</td><td>242</td><td>0.951</td><td>0.885</td><td>1.03</td><td>0.74</td><td>1.82</td><td>16.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>250</td><td>e7</td><td>✓</td><td>6.38</td><td>71,191</td><td>248</td><td>0.954</td><td>0.891</td><td>1.05</td><td>0.54</td><td>1.44</td><td>19.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>500</td><td>e5</td><td></td><td>3.07</td><td>139,332</td><td>484</td><td>0.977</td><td>0.941</td><td>1.00</td><td>0.32</td><td>1.42</td><td>16.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>500</td><td>e7</td><td>✓</td><td>2.82</td><td>139,831</td><td>486</td><td>0.978</td><td>0.947</td><td>0.99</td><td>0.31</td><td>1.54</td><td>18.5 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>3072×1728</td><td>180</td><td>e5</td><td></td><td>no fit at d 15</td><td>54,315</td><td>189</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>3072×1728</td><td>180</td><td>e7</td><td></td><td>no fit at d 15</td><td>51,846</td><td>181</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>3072×1728</td><td>250</td><td>e5</td><td></td><td>10.99</td><td>70,153</td><td>244</td><td>0.934</td><td>0.839</td><td>0.86</td><td>1.19</td><td>2.03</td><td>27.9 s · 113 MiB</td><td>FAIL</td><td>PASS</td></tr><tr><td>3072×1728</td><td>250</td><td>e7</td><td>✓</td><td>10.34</td><td>70,370</td><td>245</td><td>0.936</td><td>0.846</td><td>0.90</td><td>0.86</td><td>2.00</td><td>32.6 s · 113 MiB (WARN)</td><td>WARN</td><td>PASS</td></tr><tr><td>3072×1728</td><td>500</td><td>e5</td><td>✓</td><td>4.79</td><td>140,926</td><td>490</td><td>0.964</td><td>0.914</td><td>1.03</td><td>0.44</td><td>1.68</td><td>28.1 s · 113 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>3072×1728</td><td>500</td><td>e7</td><td></td><td>4.47</td><td>142,012</td><td>494</td><td>0.966</td><td>0.920</td><td>1.02</td><td>0.54</td><td>1.53</td><td>34.0 s · 113 MiB (WARN)</td><td>PASS</td><td>PASS</td></tr><tr><td>4608×2592</td><td>180</td><td>e5</td><td></td><td>no fit at d 15</td><td>76,764</td><td>267</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>180</td><td>e7</td><td></td><td>no fit at d 15</td><td>73,838</td><td>257</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>250</td><td>e5</td><td></td><td>no fit at d 15</td><td>76,764</td><td>267</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>250</td><td>e7</td><td></td><td>no fit at d 15</td><td>73,838</td><td>257</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>500</td><td>e5</td><td></td><td>7.10</td><td>141,475</td><td>492</td><td>0.951</td><td>0.875</td><td>1.02</td><td>0.59</td><td>1.74</td><td>guard stops cjxl (rfb=mem)</td><td>PASS</td><td>PASS</td></tr><tr><td>4608×2592</td><td>500</td><td>e7</td><td>✓</td><td>6.76</td><td>139,934</td><td>486</td><td>0.952</td><td>0.879</td><td>1.03</td><td>0.60</td><td>1.57</td><td>guard stops cjxl (rfb=mem)</td><td>PASS</td><td>PASS</td></tr></tbody></table></div></section><section class="cmp" data-title="Whole crop · 1600×900 — RAW vs nrjxl at each budget">
+<header><h2>Whole crop · 1600×900 — RAW vs nrjxl at each budget</h2><p>The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop&#x27;s full resolution, then 1:1 and beyond.</p></header>
+<div class="opts" role="group" aria-label="Choose the after image"><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s4_after0_view.jpg" data-full="index_img/s4_after0.webp" data-label="180 msgs · e7 d 3.65 · 50.1 kB · PASS">180 msgs · e7 d 3.65 · 50.1 kB · PASS</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s4_after1_view.jpg" data-full="index_img/s4_after1.webp" data-label="250 msgs · e7 d 2.34 · 69.2 kB · PASS">250 msgs · e7 d 2.34 · 69.2 kB · PASS</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s4_after2_view.jpg" data-full="index_img/s4_after2.webp" data-label="500 msgs · e7 d 0.90 · 138.6 kB · PASS">500 msgs · e7 d 0.90 · 138.6 kB · PASS</button></div>
+<div class="stage" style="aspect-ratio:1400/788;max-width:1400px"
+     data-full="index_img/s4_before.webp" data-w="1600" data-h="900" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s4_after0_view.jpg" alt="180 msgs · e7 d 3.65 · 50.1 kB · PASS" draggable="false">
+  <div class="beforewrap"><img src="index_img/s4_before_view.jpg" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">180 msgs · e7 d 3.65 · 50.1 kB · PASS</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 1600×900 full resolution</span>
+</div></section><section class="cmp" data-title="Whole crop · 2304×1296 — RAW vs nrjxl at each budget">
+<header><h2>Whole crop · 2304×1296 — RAW vs nrjxl at each budget</h2><p>The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop&#x27;s full resolution, then 1:1 and beyond.</p></header>
+<div class="opts" role="group" aria-label="Choose the after image"><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s5_after0_view.jpg" data-full="index_img/s5_after0.webp" data-label="180 msgs · e7 d 9.62 · 50.8 kB · WARN">180 msgs · e7 d 9.62 · 50.8 kB · WARN</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s5_after1_view.jpg" data-full="index_img/s5_after1.webp" data-label="250 msgs · e7 d 6.38 · 71.2 kB · PASS">250 msgs · e7 d 6.38 · 71.2 kB · PASS</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s5_after2_view.jpg" data-full="index_img/s5_after2.webp" data-label="500 msgs · e7 d 2.82 · 139.8 kB · PASS">500 msgs · e7 d 2.82 · 139.8 kB · PASS</button></div>
+<div class="stage" style="aspect-ratio:1400/788;max-width:1400px"
+     data-full="index_img/s5_before.webp" data-w="2304" data-h="1296" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s5_after0_view.jpg" alt="180 msgs · e7 d 9.62 · 50.8 kB · WARN" draggable="false">
+  <div class="beforewrap"><img src="index_img/s5_before_view.jpg" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">180 msgs · e7 d 9.62 · 50.8 kB · WARN</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 2304×1296 full resolution</span>
+</div></section><section class="cmp" data-title="Whole crop · 3072×1728 — RAW vs nrjxl at each budget">
+<header><h2>Whole crop · 3072×1728 — RAW vs nrjxl at each budget</h2><p>The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop&#x27;s full resolution, then 1:1 and beyond. Not shown: 180 msgs (does not fit).</p></header>
+<div class="opts" role="group" aria-label="Choose the after image"><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s6_after0_view.jpg" data-full="index_img/s6_after0.webp" data-label="250 msgs · e7 d 10.34 · 70.7 kB · WARN">250 msgs · e7 d 10.34 · 70.7 kB · WARN</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s6_after1_view.jpg" data-full="index_img/s6_after1.webp" data-label="500 msgs · e5 d 4.80 · 141.0 kB · PASS">500 msgs · e5 d 4.80 · 141.0 kB · PASS</button></div>
+<div class="stage" style="aspect-ratio:1400/788;max-width:1400px"
+     data-full="index_img/s6_before.webp" data-w="3072" data-h="1728" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s6_after0_view.jpg" alt="250 msgs · e7 d 10.34 · 70.7 kB · WARN" draggable="false">
+  <div class="beforewrap"><img src="index_img/s6_before_view.jpg" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">250 msgs · e7 d 10.34 · 70.7 kB · WARN</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 3072×1728 full resolution</span>
+</div></section><section class="cmp" data-title="180 msgs · 1600×900 · card + checker — PASS" data-pix="1">
+<header><h2>180 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s7_after0.webp" data-full="index_img/s7_after0.webp" data-label="nrjxl 174 msgs (e7)">nrjxl 174 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s7_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s7_after0.webp" alt="nrjxl 174 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s7_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 174 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="180 msgs · 1600×900 · texture — PASS" data-pix="1">
+<header><h2>180 msgs · 1600×900 · texture — PASS</h2><p>e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s8_after0.webp" data-full="index_img/s8_after0.webp" data-label="nrjxl 174 msgs (e7)">nrjxl 174 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s8_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s8_after0.webp" alt="nrjxl 174 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s8_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 174 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="180 msgs · 2304×1296 · card + checker — WARN" data-pix="1">
+<header><h2>180 msgs · 2304×1296 · card + checker — WARN</h2><p>e7 · d 9.62 · 50,722 B · 177 msgs · card SSIM 0.939 (pjpg 0.935) · texture SSIM 0.863 · acutance 0.91 (pjpg 1.04) · ΔE vs RAW 1.02 · ΔE card 1.46 (pjpg 2.69) · Zero 18.7 s · 63 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s9_after0.webp" data-full="index_img/s9_after0.webp" data-label="nrjxl 177 msgs (e7)">nrjxl 177 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s9_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s9_after0.webp" alt="nrjxl 177 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s9_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 177 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="180 msgs · 2304×1296 · texture — WARN" data-pix="1">
+<header><h2>180 msgs · 2304×1296 · texture — WARN</h2><p>e7 · d 9.62 · 50,722 B · 177 msgs · card SSIM 0.939 (pjpg 0.935) · texture SSIM 0.863 · acutance 0.91 (pjpg 1.04) · ΔE vs RAW 1.02 · ΔE card 1.46 (pjpg 2.69) · Zero 18.7 s · 63 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s10_after0.webp" data-full="index_img/s10_after0.webp" data-label="nrjxl 177 msgs (e7)">nrjxl 177 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s10_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s10_after0.webp" alt="nrjxl 177 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s10_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 177 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="250 msgs · 1600×900 · card + checker — PASS" data-pix="1">
+<header><h2>250 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 2.35 · 69,182 B · 241 msgs · card SSIM 0.982 (pjpg 0.935) · texture SSIM 0.983 · acutance 1.01 (pjpg 1.04) · ΔE vs RAW 0.24 · ΔE card 1.33 (pjpg 2.69) · Zero 9.3 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s11_after0.webp" data-full="index_img/s11_after0.webp" data-label="nrjxl 241 msgs (e7)">nrjxl 241 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s11_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s11_after0.webp" alt="nrjxl 241 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s11_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 241 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="250 msgs · 1600×900 · texture — PASS" data-pix="1">
+<header><h2>250 msgs · 1600×900 · texture — PASS</h2><p>e7 · d 2.35 · 69,182 B · 241 msgs · card SSIM 0.982 (pjpg 0.935) · texture SSIM 0.983 · acutance 1.01 (pjpg 1.04) · ΔE vs RAW 0.24 · ΔE card 1.33 (pjpg 2.69) · Zero 9.3 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s12_after0.webp" data-full="index_img/s12_after0.webp" data-label="nrjxl 241 msgs (e7)">nrjxl 241 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s12_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s12_after0.webp" alt="nrjxl 241 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s12_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 241 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="250 msgs · 2304×1296 · card + checker — PASS" data-pix="1">
+<header><h2>250 msgs · 2304×1296 · card + checker — PASS</h2><p>e7 · d 6.38 · 71,191 B · 248 msgs · card SSIM 0.954 (pjpg 0.935) · texture SSIM 0.891 · acutance 1.05 (pjpg 1.04) · ΔE vs RAW 0.54 · ΔE card 1.44 (pjpg 2.69) · Zero 19.2 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s13_after0.webp" data-full="index_img/s13_after0.webp" data-label="nrjxl 248 msgs (e7)">nrjxl 248 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s13_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s13_after0.webp" alt="nrjxl 248 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s13_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 248 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="250 msgs · 2304×1296 · texture — PASS" data-pix="1">
+<header><h2>250 msgs · 2304×1296 · texture — PASS</h2><p>e7 · d 6.38 · 71,191 B · 248 msgs · card SSIM 0.954 (pjpg 0.935) · texture SSIM 0.891 · acutance 1.05 (pjpg 1.04) · ΔE vs RAW 0.54 · ΔE card 1.44 (pjpg 2.69) · Zero 19.2 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s14_after0.webp" data-full="index_img/s14_after0.webp" data-label="nrjxl 248 msgs (e7)">nrjxl 248 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s14_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s14_after0.webp" alt="nrjxl 248 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s14_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 248 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="250 msgs · 3072×1728 · card + checker — WARN" data-pix="1">
+<header><h2>250 msgs · 3072×1728 · card + checker — WARN</h2><p>e7 · d 10.34 · 70,370 B · 245 msgs · card SSIM 0.936 (pjpg 0.935) · texture SSIM 0.846 · acutance 0.90 (pjpg 1.04) · ΔE vs RAW 0.86 · ΔE card 2.00 (pjpg 2.69) · Zero 32.6 s · 113 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s15_after0.webp" data-full="index_img/s15_after0.webp" data-label="nrjxl 245 msgs (e7)">nrjxl 245 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s15_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s15_after0.webp" alt="nrjxl 245 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s15_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 245 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="250 msgs · 3072×1728 · texture — WARN" data-pix="1">
+<header><h2>250 msgs · 3072×1728 · texture — WARN</h2><p>e7 · d 10.34 · 70,370 B · 245 msgs · card SSIM 0.936 (pjpg 0.935) · texture SSIM 0.846 · acutance 0.90 (pjpg 1.04) · ΔE vs RAW 0.86 · ΔE card 2.00 (pjpg 2.69) · Zero 32.6 s · 113 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s16_after0.webp" data-full="index_img/s16_after0.webp" data-label="nrjxl 245 msgs (e7)">nrjxl 245 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s16_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s16_after0.webp" alt="nrjxl 245 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s16_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 245 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="500 msgs · 1600×900 · card + checker — PASS" data-pix="1">
+<header><h2>500 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 0.90 · 138,649 B · 482 msgs · card SSIM 0.992 (pjpg 0.935) · texture SSIM 0.993 · acutance 1.00 (pjpg 1.04) · ΔE vs RAW 0.13 · ΔE card 1.19 (pjpg 2.69) · Zero 9.4 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s17_after0.webp" data-full="index_img/s17_after0.webp" data-label="nrjxl 482 msgs (e7)">nrjxl 482 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s17_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s17_after0.webp" alt="nrjxl 482 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s17_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 482 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="500 msgs · 1600×900 · texture — PASS" data-pix="1">
+<header><h2>500 msgs · 1600×900 · texture — PASS</h2><p>e7 · d 0.90 · 138,649 B · 482 msgs · card SSIM 0.992 (pjpg 0.935) · texture SSIM 0.993 · acutance 1.00 (pjpg 1.04) · ΔE vs RAW 0.13 · ΔE card 1.19 (pjpg 2.69) · Zero 9.4 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s18_after0.webp" data-full="index_img/s18_after0.webp" data-label="nrjxl 482 msgs (e7)">nrjxl 482 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s18_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s18_after0.webp" alt="nrjxl 482 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s18_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 482 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="500 msgs · 2304×1296 · card + checker — PASS" data-pix="1">
+<header><h2>500 msgs · 2304×1296 · card + checker — PASS</h2><p>e7 · d 2.82 · 139,831 B · 486 msgs · card SSIM 0.978 (pjpg 0.935) · texture SSIM 0.947 · acutance 0.99 (pjpg 1.04) · ΔE vs RAW 0.31 · ΔE card 1.54 (pjpg 2.69) · Zero 18.5 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s19_after0.webp" data-full="index_img/s19_after0.webp" data-label="nrjxl 486 msgs (e7)">nrjxl 486 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s19_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s19_after0.webp" alt="nrjxl 486 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s19_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 486 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="500 msgs · 2304×1296 · texture — PASS" data-pix="1">
+<header><h2>500 msgs · 2304×1296 · texture — PASS</h2><p>e7 · d 2.82 · 139,831 B · 486 msgs · card SSIM 0.978 (pjpg 0.935) · texture SSIM 0.947 · acutance 0.99 (pjpg 1.04) · ΔE vs RAW 0.31 · ΔE card 1.54 (pjpg 2.69) · Zero 18.5 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s20_after0.webp" data-full="index_img/s20_after0.webp" data-label="nrjxl 486 msgs (e7)">nrjxl 486 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s20_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s20_after0.webp" alt="nrjxl 486 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s20_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 486 msgs (e7)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section><section class="cmp" data-title="500 msgs · 3072×1728 · card + checker — PASS" data-pix="1">
+<header><h2>500 msgs · 3072×1728 · card + checker — PASS</h2><p>e5 · d 4.79 · 140,926 B · 490 msgs · card SSIM 0.964 (pjpg 0.935) · texture SSIM 0.914 · acutance 1.03 (pjpg 1.04) · ΔE vs RAW 0.44 · ΔE card 1.68 (pjpg 2.69) · Zero 28.1 s · 113 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s21_after0.webp" data-full="index_img/s21_after0.webp" data-label="nrjxl 490 msgs (e5)">nrjxl 490 msgs (e5)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s21_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s21_after0.webp" alt="nrjxl 490 msgs (e5)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s21_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 490 msgs (e5)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
+</div></section><section class="cmp" data-title="500 msgs · 3072×1728 · texture — PASS" data-pix="1">
+<header><h2>500 msgs · 3072×1728 · texture — PASS</h2><p>e5 · d 4.79 · 140,926 B · 490 msgs · card SSIM 0.964 (pjpg 0.935) · texture SSIM 0.914 · acutance 1.03 (pjpg 1.04) · ΔE vs RAW 0.44 · ΔE card 1.68 (pjpg 2.69) · Zero 28.1 s · 113 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s22_after0.webp" data-full="index_img/s22_after0.webp" data-label="nrjxl 490 msgs (e5)">nrjxl 490 msgs (e5)</button></div>
+<div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
+     data-full="index_img/s22_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s22_after0.webp" alt="nrjxl 490 msgs (e5)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s22_before.webp" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">nrjxl 490 msgs (e5)</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
+</div></section>
+<section class="notes"><h2>What this shows</h2><ul><li>Whole-crop views: 1600×900, 2304×1296 and 3072×1728 at every budget that fits, downscaled inline and full resolution in full screen. Zoomed views: the sliders show 1600×900, 2304×1296 and the largest Zero-feasible / passing ROI per budget (180: 1600×900, 2304×1296; 250: 1600×900, 2304×1296, 3072×1728; 500: 1600×900, 2304×1296, 3072×1728). Every cell&#x27;s numbers are in the table.</li><li>Slider: left = RAW reference, right = nrjxl decoded back to raw; both rendered by one function (bilinear demosaic, the camera&#x27;s locked WB gains, clipped at sensor white, the RAW&#x27;s own card matrix, sRGB). Nothing is upsampled on this sheet.</li><li>Distances come from the Step C byte-target search (≤ 3 encodes, no quality floor here), with an exact bisection when the search ends without a fit below d 15.</li><li>ΔE reliability: 10 of 13 card colour patches usable (glare / noise); RAW ΔE varies 1.17–1.42 across identical frames, so ΔE differences under ~0.3 are noise. Tag acutance uses 2 tags of ~32 px.</li><li>Zero cost is measured on frame 0 at frame 0&#x27;s distance (encode time barely depends on distance). Full frame: the production guard stops cjxl (rfb=mem).</li><li>The 195-message point from Step A sits in levers.csv (not repeated here).</li></ul></section>
+<footer>Data: compression_study/presets/runs/sweep_20261003T203525Z (grid.csv, grid_pjpg.csv, pi_grid.txt). Encoder: bm_cam_legacy #120 (bd6f38c); identical bytes on Mac and Pi.</footer>
+</main>
+<div id="fs" hidden role="dialog" aria-modal="true" aria-label="Full-screen comparison">
+<div class="fsbar"><h2 id="fstitle"></h2><div class="opts" id="fsopts" role="group" aria-label="Choose the after image"></div>
+<div class="zoom" role="group" aria-label="Zoom"><button type="button" data-z="fit">Fit</button><button type="button" data-z="1">1:1</button><button type="button" data-z="2">2×</button><button type="button" data-z="4">4×</button><button type="button" data-z="8">8×</button><span class="zl" id="fszl" aria-live="polite"></span></div>
+<button type="button" class="fsclose" id="fsclose">✕ Close</button></div>
+<div class="fsview" id="fsview"><div class="world" id="fsworld"><img id="fsa" alt="" draggable="false"><div class="fbw" id="fsbw"><img id="fsb" alt="" draggable="false"></div></div>
+<div class="fhandle" id="fshandle" aria-hidden="true"><span>⟷</span></div>
+<span class="tagl" id="fstagl"></span><span class="tagr" id="fstagr"></span><span class="fsload" id="fsload" hidden>Loading full resolution…</span></div>
+<p class="fshelp">Drag the divider to compare · drag the image to pan · scroll or pinch to zoom (pixels stay sharp from 1:1) · double-click: 1:1 ↔ fit · arrows move the divider · Esc closes</p>
+</div>
+<script>
+(() => {
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// ---------------------------------------------------------------- inline sliders
+document.querySelectorAll('.cmp').forEach(c => {
+  const st = c.querySelector('.stage'), w = c.querySelector('.beforewrap'),
+        h = c.querySelector('.handle'), a = c.querySelector('img.after'), t = c.querySelector('.tagr');
+  c.set = v => { c.v = clamp(v, 0, 100); w.style.clipPath = 'inset(0 ' + (100 - c.v) + '% 0 0)';
+                 h.style.left = c.v + '%'; st.setAttribute('aria-valuenow', Math.round(c.v)); };
+  c.choose = b => {
+    c.querySelectorAll('.opt').forEach(x => { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
+    b.classList.add('on'); b.setAttribute('aria-pressed', 'true');
+    a.src = b.dataset.src; a.alt = b.dataset.label; t.textContent = b.dataset.label;
+  };
+  c.set(50);
+  c.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => c.choose(b)));
+  // a horizontal drag moves the divider; a click (no drag) opens full screen
+  let down = null;
+  const at = e => { const r = st.getBoundingClientRect(); return (e.clientX - r.left) / r.width * 100; };
+  st.addEventListener('pointerdown', e => {
+    if (e.button === 0) down = {x: e.clientX, y: e.clientY, moved: false, id: e.pointerId};
+  });
+  st.addEventListener('pointermove', e => {
+    if (!down || e.pointerId !== down.id) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    if (!down.moved && Math.abs(dx) > 5 && Math.abs(dx) > Math.abs(dy)) {
+      down.moved = true; try { st.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+    if (down.moved) c.set(at(e));
+    else if (Math.abs(dy) > 8) down = null;   // vertical: the page is scrolling
+  });
+  st.addEventListener('pointerup', e => {
+    if (down && !down.moved && e.pointerId === down.id) openFs(c);
+    down = null;
+  });
+  st.addEventListener('pointercancel', () => { down = null; });
+  st.addEventListener('keydown', e => {
+    const step = e.shiftKey ? 10 : 2;
+    if (e.key === 'ArrowLeft') { c.set(c.v - step); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { c.set(c.v + step); e.preventDefault(); }
+    else if (e.key === 'Home') { c.set(0); e.preventDefault(); }
+    else if (e.key === 'End') { c.set(100); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') { openFs(c); e.preventDefault(); }
+  });
+});
+
+// ---------------------------------------------------------------- full-screen viewer
+const fs = document.getElementById('fs'), view = document.getElementById('fsview'),
+      world = document.getElementById('fsworld'), ia = document.getElementById('fsa'),
+      ib = document.getElementById('fsb'), bw = document.getElementById('fsbw'),
+      hd = document.getElementById('fshandle'), zl = document.getElementById('fszl'),
+      opts = document.getElementById('fsopts'), load = document.getElementById('fsload');
+let S = null;   // {c, W, H, s (screen px per image px), tx, ty, f (divider: fraction of the image width), pix}
+let pending = 0;
+
+function fitScale() { return Math.min(view.clientWidth / S.W, view.clientHeight / S.H); }
+function clampPan() {
+  const vw = view.clientWidth, vh = view.clientHeight, w = S.W * S.s, h = S.H * S.s;
+  S.tx = w <= vw ? (vw - w) / 2 : clamp(S.tx, vw - w, 0);
+  S.ty = h <= vh ? (vh - h) / 2 : clamp(S.ty, vh - h, 0);
+}
+function apply() {
+  clampPan();
+  const w = S.W * S.s, h = S.H * S.s, vw = view.clientWidth;
+  world.style.width = w + 'px'; world.style.height = h + 'px';
+  world.style.transform = 'translate(' + S.tx + 'px,' + S.ty + 'px)';
+  world.classList.toggle('pix', S.pix || S.s >= 0.999);
+  // the divider stays at the same point of the image; pull it back on screen if needed
+  let x = S.tx + S.f * w;
+  if (x < 0 || x > vw) { x = clamp(x, 0, vw); S.f = clamp((x - S.tx) / w, 0, 1); }
+  hd.style.left = x + 'px';
+  bw.style.clipPath = 'inset(0 ' + Math.max(0, w - S.f * w) + 'px 0 0)';
+  zl.textContent = S.s >= 0.999 ? S.s.toFixed(S.s < 10 ? 2 : 1) + '× px' : Math.round(S.s * 100) + ' %';
+  const fit = fitScale();
+  document.querySelectorAll('.zoom button').forEach(b => {
+    const z = b.dataset.z === 'fit' ? fit : +b.dataset.z;
+    b.classList.toggle('on', Math.abs(z - S.s) < 1e-3);
+  });
+}
+function zoomTo(ns, px, py) {
+  if (px === undefined) { px = view.clientWidth / 2; py = view.clientHeight / 2; }
+  ns = clamp(ns, Math.min(fitScale(), 1) * 0.5, 32);
+  const ix = (px - S.tx) / S.s, iy = (py - S.ty) / S.s;
+  S.s = ns; S.tx = px - ix * ns; S.ty = py - iy * ns; apply();
+}
+function swap(img, preview, full) {   // the preview at once, the full-resolution file when loaded
+  img.src = preview; img.dataset.want = full || '';
+  if (!full || full === preview) return;
+  pending++; load.hidden = false;
+  const tmp = new Image();
+  tmp.onload = () => {
+    if (img.dataset.want === full) img.src = full;
+    if (--pending <= 0) { pending = 0; load.hidden = true; }
+  };
+  tmp.onerror = () => { load.textContent = 'Full resolution not available — showing the preview'; };
+  tmp.src = full;
+}
+function setAfter(j) {
+  const b = S.btns[j];
+  opts.querySelectorAll('.opt').forEach((x, k) => {
+    x.classList.toggle('on', k === j); x.setAttribute('aria-pressed', k === j ? 'true' : 'false'); });
+  document.getElementById('fstagr').textContent = b.dataset.label;
+  ia.alt = b.dataset.label; S.after = j;
+  swap(ia, b.dataset.src, b.dataset.full);
+}
+let lastFocus = null, wasFs = false;
+function openFs(c) {
+  lastFocus = document.activeElement;
+  const st = c.querySelector('.stage'), btns = [...c.querySelectorAll('.opt')];
+  S = {c, btns, W: +st.dataset.w, H: +st.dataset.h, s: 1, tx: 0, ty: 0, f: c.v / 100,
+       pix: !!c.dataset.pix, after: Math.max(0, btns.findIndex(b => b.classList.contains('on')))};
+  document.getElementById('fstitle').textContent = c.dataset.title;
+  document.getElementById('fstagl').textContent = c.querySelector('.tagl').textContent;
+  opts.innerHTML = '';
+  if (btns.length > 1) btns.forEach((b, j) => {
+    const x = b.cloneNode(true); x.addEventListener('click', () => setAfter(j)); opts.appendChild(x);
+  });
+  pending = 0; load.textContent = 'Loading full resolution…'; load.hidden = true;
+  fs.hidden = false; document.documentElement.style.overflow = 'hidden';
+  const bImg = c.querySelector('.beforewrap img');
+  ib.alt = bImg.alt;
+  swap(ib, bImg.src, st.dataset.full);
+  setAfter(S.after);
+  S.s = fitScale(); apply();
+  wasFs = false;
+  if (fs.requestFullscreen) fs.requestFullscreen().then(() => {
+    wasFs = true; requestAnimationFrame(() => { if (S) { S.s = fitScale(); apply(); } });
+  }).catch(() => {});   // not allowed (e.g. in a frame): the overlay already covers the window
+  document.getElementById('fsclose').focus();
+}
+function closeFs() {
+  if (!S) return;
+  const c = S.c;
+  if (S.btns.length > 1) c.choose(S.btns[S.after]);
+  c.set(S.f * 100);
+  S = null; fs.hidden = true; document.documentElement.style.overflow = '';
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (lastFocus) lastFocus.focus();
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && wasFs && S) closeFs(); });
+document.getElementById('fsclose').addEventListener('click', closeFs);
+document.querySelectorAll('.zoom button').forEach(b => b.addEventListener('click', () => {
+  zoomTo(b.dataset.z === 'fit' ? fitScale() : +b.dataset.z);
+}));
+window.addEventListener('resize', () => { if (S) apply(); });
+document.addEventListener('keydown', e => {   // document-level: a click on the image moves focus to <body>
+  if (!S) return;
+  if (e.key === 'Escape') { closeFs(); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const w = S.W * S.s, px = (e.shiftKey ? 0.1 : 0.02) * Math.min(w, view.clientWidth);
+    S.f = clamp(S.f + (e.key === 'ArrowLeft' ? -px : px) / w, 0, 1); apply(); e.preventDefault();
+  }
+  else if (e.key === '+' || e.key === '=') { zoomTo(S.s * 1.5); e.preventDefault(); }
+  else if (e.key === '-' || e.key === '_') { zoomTo(S.s / 1.5); e.preventDefault(); }
+  else if (e.key === '0') { zoomTo(fitScale()); e.preventDefault(); }
+  else if (e.key.length === 1 && '1248'.includes(e.key)) { zoomTo(+e.key); e.preventDefault(); }
+  else if (e.key === 'Tab') {   // keep focus inside the dialog
+    const f = [...fs.querySelectorAll('button')], i = f.indexOf(document.activeElement);
+    f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); e.preventDefault();
+  }
+});
+// pointers: on/near the divider (or when the image fits) = move it; elsewhere = pan; 2 fingers = zoom
+const P = new Map(); let mode = null, pinch = null;
+const local = e => { const r = view.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+view.addEventListener('pointerdown', e => {
+  if (!S) return;
+  try { view.setPointerCapture(e.pointerId); } catch (_) {}
+  const p = local(e); P.set(e.pointerId, p);
+  if (P.size === 2) {
+    const [a, b] = [...P.values()];
+    pinch = {d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, s: S.s}; mode = 'pinch'; return;
+  }
+  const fits = S.W * S.s <= view.clientWidth + 1 && S.H * S.s <= view.clientHeight + 1;
+  mode = (Math.abs(p[0] - parseFloat(hd.style.left)) < 22 || fits) ? 'divider' : 'pan';
+  if (mode === 'divider') { S.f = clamp((p[0] - S.tx) / (S.W * S.s), 0, 1); apply(); }
+  else view.classList.add('panning');
+});
+view.addEventListener('pointermove', e => {
+  if (!S || !P.has(e.pointerId)) return;
+  const [x, y] = local(e), [px, py] = P.get(e.pointerId); P.set(e.pointerId, [x, y]);
+  if (mode === 'pinch' && P.size === 2) {
+    const [a, b] = [...P.values()];
+    zoomTo(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+  } else if (mode === 'divider') { S.f = clamp((x - S.tx) / (S.W * S.s), 0, 1); apply(); }
+  else if (mode === 'pan') { S.tx += x - px; S.ty += y - py; apply(); }
+});
+const up = e => { P.delete(e.pointerId); if (P.size < 2) pinch = null;
+                  if (!P.size) { mode = null; view.classList.remove('panning'); } };
+view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+view.addEventListener('wheel', e => {
+  if (!S) return; e.preventDefault();
+  const [x, y] = local(e); zoomTo(S.s * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), x, y);
+}, {passive: false});
+view.addEventListener('dblclick', e => {
+  if (!S) return; const [x, y] = local(e);
+  zoomTo(S.s < 0.999 ? 1 : fitScale(), x, y);
+});
+})();
+</script>

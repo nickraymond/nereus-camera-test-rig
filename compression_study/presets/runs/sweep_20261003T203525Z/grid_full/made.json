@@ -1,0 +1,50 @@
+{
+ "1600x900@180": {
+  "effort": 7,
+  "distance": 3.653,
+  "bytes": 50056,
+  "messages": 174
+ },
+ "1600x900@250": {
+  "effort": 7,
+  "distance": 2.338,
+  "bytes": 69191,
+  "messages": 241
+ },
+ "1600x900@500": {
+  "effort": 7,
+  "distance": 0.903,
+  "bytes": 138599,
+  "messages": 482
+ },
+ "2304x1296@180": {
+  "effort": 7,
+  "distance": 9.624,
+  "bytes": 50768,
+  "messages": 177
+ },
+ "2304x1296@250": {
+  "effort": 7,
+  "distance": 6.383,
+  "bytes": 71191,
+  "messages": 248
+ },
+ "2304x1296@500": {
+  "effort": 7,
+  "distance": 2.821,
+  "bytes": 139845,
+  "messages": 486
+ },
+ "3072x1728@250": {
+  "effort": 7,
+  "distance": 10.335,
+  "bytes": 70741,
+  "messages": 246
+ },
+ "3072x1728@500": {
+  "effort": 5,
+  "distance": 4.796,
+  "bytes": 140993,
+  "messages": 490
+ }
+}

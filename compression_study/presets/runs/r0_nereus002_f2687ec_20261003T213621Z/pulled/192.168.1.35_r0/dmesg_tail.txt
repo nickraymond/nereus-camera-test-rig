@@ -1,0 +1,60 @@
+[365923.179103] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366049.890879] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366050.372179] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366085.482895] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366085.748548] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366142.050741] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366144.177476] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366381.922554] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366381.928264] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366577.506387] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366578.477004] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366632.034447] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366632.378796] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366649.442558] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366649.681079] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[366923.622311] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[366923.956491] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367016.550354] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367016.577584] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367052.898336] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367055.789516] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367101.542297] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367102.878785] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367114.082344] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367114.247513] ieee80211 phy0: brcmf_cfg80211_get_station: GET STA INFO failed, -110
+[367143.522323] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367144.508281] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367191.674333] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367191.838699] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367302.755091] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367302.831267] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367332.962317] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367334.745772] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367669.608601] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367670.370701] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[367941.475581] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[367943.757460] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[368015.460372] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[368016.403205] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[368093.544399] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[368093.988017] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+[376564.956101] usb 1-1.3: USB disconnect, device number 6
+[376565.258797] usb 1-1.3: new high-speed USB device number 7 using dwc_otg
+[376565.447519] usb 1-1.3: New USB device found, idVendor=37c5, idProduct=9206, bcdDevice= 1.02
+[376565.447561] usb 1-1.3: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[376565.447578] usb 1-1.3: Product: OpenMV Camera (DFU Mode)
+[376565.447595] usb 1-1.3: Manufacturer: OpenMV
+[376565.447609] usb 1-1.3: SerialNumber: 003237473543500400230002
+[376567.005137] usb 1-1.3: USB disconnect, device number 7
+[376567.434819] usb 1-1.3: new high-speed USB device number 8 using dwc_otg
+[376567.627525] usb 1-1.3: New USB device found, idVendor=37c5, idProduct=1206, bcdDevice= 1.00
+[376567.627564] usb 1-1.3: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[376567.627583] usb 1-1.3: Product: Pyboard Virtual Comm Port in FS Mode
+[376567.627599] usb 1-1.3: Manufacturer: MicroPython
+[376567.627614] usb 1-1.3: SerialNumber: 020023000450433547373200
+[376567.645559] cdc_acm 1-1.3:1.0: ttyACM0: USB ACM device
+[376567.646618] usb-storage 1-1.3:1.2: USB Mass Storage device detected
+[376567.650130] scsi host0: usb-storage 1-1.3:1.2
+[392105.352176] brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+[392105.549218] ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110

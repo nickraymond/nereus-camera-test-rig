@@ -1,0 +1,139 @@
+{
+ "utc": "20261003T203525Z",
+ "host": "nereus002",
+ "rpicam": [
+  "rpicam-apps build: v1.12.0 12-05-2026 (11:49:26)"
+ ],
+ "mode": "4608:2592",
+ "gain_requested": 1.0,
+ "gain_applied": 1.122807,
+ "meter": {
+  "ExposureTime": 48190,
+  "AnalogueGain": 2.0,
+  "DigitalGain": 1.00006,
+  "ColourGains": [
+   1.971549,
+   2.123435
+  ],
+  "LensPosition": 0.240753,
+  "Lux": 171.9534
+ },
+ "locked_exposure_us_at_stop0": 85838,
+ "shots": [
+  {
+   "name": "stop_+0_r0",
+   "stop": 0.0,
+   "repeat": 0,
+   "requested": {
+    "ExposureTime": 85838,
+    "AnalogueGain": 1.122807,
+    "ColourGains": [
+     1.971549,
+     2.123435
+    ],
+    "LensPosition": 0.240753
+   },
+   "dng_bytes": 24029068,
+   "readback": {
+    "ExposureTime": 85837,
+    "AnalogueGain": 1.122807,
+    "ColourGains": [
+     1.9715,
+     2.1234
+    ],
+    "LensPosition": 0.2408,
+    "DigitalGain": 1.000001,
+    "Lux": 172.629974,
+    "SensorTemperature": 34.0
+   },
+   "checks": {
+    "jpeg_exists": true,
+    "dng_exists": true,
+    "dng_size_fits_mode": true,
+    "readback_ExposureTime": true,
+    "readback_AnalogueGain": true,
+    "readback_ColourGains": true,
+    "readback_LensPosition": true
+   },
+   "passed": true
+  },
+  {
+   "name": "stop_+0_r1",
+   "stop": 0.0,
+   "repeat": 1,
+   "requested": {
+    "ExposureTime": 85838,
+    "AnalogueGain": 1.122807,
+    "ColourGains": [
+     1.971549,
+     2.123435
+    ],
+    "LensPosition": 0.240753
+   },
+   "dng_bytes": 24029068,
+   "readback": {
+    "ExposureTime": 85837,
+    "AnalogueGain": 1.122807,
+    "ColourGains": [
+     1.9715,
+     2.1234
+    ],
+    "LensPosition": 0.2408,
+    "DigitalGain": 1.000001,
+    "Lux": 172.282227,
+    "SensorTemperature": 34.0
+   },
+   "checks": {
+    "jpeg_exists": true,
+    "dng_exists": true,
+    "dng_size_fits_mode": true,
+    "readback_ExposureTime": true,
+    "readback_AnalogueGain": true,
+    "readback_ColourGains": true,
+    "readback_LensPosition": true
+   },
+   "passed": true
+  },
+  {
+   "name": "stop_+0_r2",
+   "stop": 0.0,
+   "repeat": 2,
+   "requested": {
+    "ExposureTime": 85838,
+    "AnalogueGain": 1.122807,
+    "ColourGains": [
+     1.971549,
+     2.123435
+    ],
+    "LensPosition": 0.240753
+   },
+   "dng_bytes": 24029068,
+   "readback": {
+    "ExposureTime": 85837,
+    "AnalogueGain": 1.122807,
+    "ColourGains": [
+     1.9715,
+     2.1234
+    ],
+    "LensPosition": 0.2408,
+    "DigitalGain": 1.000001,
+    "Lux": 172.215271,
+    "SensorTemperature": 36.0
+   },
+   "checks": {
+    "jpeg_exists": true,
+    "dng_exists": true,
+    "dng_size_fits_mode": true,
+    "readback_ExposureTime": true,
+    "readback_AnalogueGain": true,
+    "readback_ColourGains": true,
+    "readback_LensPosition": true
+   },
+   "passed": true
+  }
+ ],
+ "card": null,
+ "target": 0.8,
+ "card_metering": [],
+ "passed": true
+}

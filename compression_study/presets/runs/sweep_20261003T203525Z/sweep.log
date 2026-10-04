@@ -1,0 +1,25 @@
+usable card colour patches: 10 of 13 → ['cream', 'tan', 'ochre', 'orange', 'brown', 'coral_pink', 'yellow', 'green', 'cyan', 'blue']
+[r0] pjpg q80 52198 B 182 msgs core SSIM 0.935 ΔE 2.65 (RAW 1.42) acu 1.05 tags 2/2
+[r0] 800x450    d= 1.047  51059 B 178 msgs core SSIM 0.991/0.935 roi SSIM 0.991 ΔE 1.30/2.65 (RAW 1.42) vsRAW 0.11 acu 1.00/1.05 → PASS
+[r0] 1200x676   d= 2.247  51613 B 180 msgs core SSIM 0.983/0.935 roi SSIM 0.984 ΔE 1.29/2.65 (RAW 1.42) vsRAW 0.20 acu 1.02/1.05 → PASS
+[r0] 1600x900   d= 3.811  51122 B 178 msgs core SSIM 0.970/0.935 roi SSIM 0.975 ΔE 1.42/2.65 (RAW 1.42) vsRAW 0.25 acu 1.00/1.05 → PASS
+[r0] 2000x1124  d= 6.340  51671 B 180 msgs core SSIM 0.954/0.935 roi SSIM 0.960 ΔE 1.20/2.65 (RAW 1.42) vsRAW 0.47 acu 1.08/1.05 → FAIL
+[r0] 2304x1296  d=10.141  50863 B 177 msgs core SSIM 0.937/0.935 roi SSIM 0.940 ΔE 1.92/2.65 (RAW 1.42) vsRAW 1.03 acu 0.90/1.05 → FAIL
+[r0] 3072x1728  does not fit 180 msgs at d 15 → 54328 B 189 msgs
+[r0] 4608x2592  does not fit 180 msgs at d 15 → 76753 B 267 msgs
+[r1] pjpg q80 52214 B 182 msgs core SSIM 0.935 ΔE 2.68 (RAW 1.17) acu 1.03 tags 2/2
+[r1] 800x450    d= 1.047  50913 B 177 msgs core SSIM 0.991/0.935 roi SSIM 0.991 ΔE 1.21/2.68 (RAW 1.17) vsRAW 0.16 acu 1.00/1.03 → PASS
+[r1] 1200x676   d= 2.291  50814 B 177 msgs core SSIM 0.982/0.935 roi SSIM 0.984 ΔE 1.23/2.68 (RAW 1.17) vsRAW 0.27 acu 1.01/1.03 → PASS
+[r1] 1600x900   d= 3.811  51146 B 178 msgs core SSIM 0.970/0.935 roi SSIM 0.975 ΔE 1.25/2.68 (RAW 1.17) vsRAW 0.43 acu 1.00/1.03 → PASS
+[r1] 2000x1124  d= 6.340  51634 B 180 msgs core SSIM 0.955/0.935 roi SSIM 0.960 ΔE 1.40/2.68 (RAW 1.17) vsRAW 0.43 acu 1.08/1.03 → FAIL
+[r1] 2304x1296  d=10.141  50932 B 177 msgs core SSIM 0.937/0.935 roi SSIM 0.940 ΔE 1.62/2.68 (RAW 1.17) vsRAW 1.09 acu 0.88/1.03 → FAIL
+[r1] 3072x1728  does not fit 180 msgs at d 15 → 54315 B 189 msgs
+[r1] 4608x2592  does not fit 180 msgs at d 15 → 76764 B 267 msgs
+[r2] pjpg q80 52229 B 182 msgs core SSIM 0.935 ΔE 2.69 (RAW 1.21) acu 1.04 tags 2/2
+[r2] 800x450    d= 1.047  50845 B 177 msgs core SSIM 0.991/0.935 roi SSIM 0.991 ΔE 1.15/2.69 (RAW 1.21) vsRAW 0.15 acu 0.99/1.04 → PASS
+[r2] 1200x676   d= 2.291  50811 B 177 msgs core SSIM 0.982/0.935 roi SSIM 0.984 ΔE 1.27/2.69 (RAW 1.21) vsRAW 0.21 acu 1.02/1.04 → PASS
+[r2] 1600x900   d= 3.811  51128 B 178 msgs core SSIM 0.971/0.935 roi SSIM 0.975 ΔE 1.28/2.69 (RAW 1.21) vsRAW 0.38 acu 1.01/1.04 → PASS
+[r2] 2000x1124  d= 6.340  51702 B 180 msgs core SSIM 0.955/0.935 roi SSIM 0.960 ΔE 1.37/2.69 (RAW 1.21) vsRAW 0.35 acu 1.08/1.04 → FAIL
+[r2] 2304x1296  d=10.141  50871 B 177 msgs core SSIM 0.937/0.935 roi SSIM 0.940 ΔE 1.99/2.69 (RAW 1.21) vsRAW 0.99 acu 0.91/1.04 → FAIL
+[r2] 3072x1728  does not fit 180 msgs at d 15 → 54268 B 189 msgs
+[r2] 4608x2592  does not fit 180 msgs at d 15 → 77355 B 269 msgs
