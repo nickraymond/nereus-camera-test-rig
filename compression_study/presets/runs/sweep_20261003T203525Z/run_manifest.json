@@ -242,6 +242,39 @@
     "grid_slides/800x450_ref_card.webp": "84b6f769899dbcfc063e9efdd89af8949970356e9e4d44246fc8a5ee873d5bf7",
     "grid_slides/800x450_ref_tex.webp": "a07a4d9144e6fb18ec9540d962b7fc04ee517ae3baa1a646f9179e96310ea427"
    }
+  },
+  "v2_full_views": {
+   "date_utc": "2026-10-03",
+   "ask": "Nick via EM: a self-contained file to keep + the whole decoded crops and the full frame with ROI rectangles",
+   "steps": [
+    "python -m compression_study.presets.roi_grid_full --run <this> --prod <BM_Devel_Pi> → grid_full/ (lossless WebP, frame 0, bytes re-checked against grid.csv)",
+    "python -m compression_study.presets.roi_grid_sheet --run <this>",
+    "build_report.py grid_sheet/spec.json grid_sheet/index.html --split → artifact v2 (same URL)",
+    "build_report.py grid_sheet/spec.json _single.html; python -m compression_study.presets.dedupe_inline _single.html grid_sheet/nereus002_roi_budget_sheet_20261003.html"
+   ],
+   "offline_file": {
+    "not_in_git": "42 MB, too big for git",
+    "sha256": "563927a2c7751ea81964806169ad1eea60e4f6d16df3876a97e05e49dbfeacd3",
+    "bytes": 42357150,
+    "locations": [
+     "/Users/nickbuemond/Downloads/nereus002_roi_budget_sheet_20261003.html",
+     "Mac worktree: compression_study/presets/runs/sweep_20261003T203525Z/grid_sheet/nereus002_roi_budget_sheet_20261003.html"
+    ]
+   },
+   "grid_full_not_in_git": {
+    "grid_full/1600x900_180_e7.webp": "d48a615a04567e618621fb3446d617348cd0413b5fbfc41b2c5d30838fdea7e5",
+    "grid_full/1600x900_250_e7.webp": "f87bfd1d5a0f42b0b199973eeba95cedf8b93571e7676fb743555b1306bbb2fc",
+    "grid_full/1600x900_500_e7.webp": "bff6a901e667f5d8ccfd7a2f09376233104d775ff6bfe485413375107f0789b4",
+    "grid_full/1600x900_ref.webp": "b6b627f2a0215379a162075460e1588a2b9ea3f7b0a2b0ca317e89f9a2097e3a",
+    "grid_full/2304x1296_180_e7.webp": "e90c7fbdb82017a6ff39705dfaaa92ab4a4a89d30534fc69f3c70abc28430a2e",
+    "grid_full/2304x1296_250_e7.webp": "3c4dc1294a117c92acc85f0a28a48a59f29ba1b71864532ba823cf630a92da0b",
+    "grid_full/2304x1296_500_e7.webp": "b57d5571d65a64b8fdf8e7125a9fd0028c74a236d4c7e0586b7b60fc81edea2f",
+    "grid_full/2304x1296_ref.webp": "44a5cbab89c3f2b7bb09a726633abb0606e5d68110062fc356a41a83108b74c9",
+    "grid_full/3072x1728_250_e7.webp": "68d4aef935519b43a21f0e04536dce1ebbc843deb4fc0c6a5bc9b71870ff8dd2",
+    "grid_full/3072x1728_500_e5.webp": "c34bfba696a4eefcbd3c970154a9d33efdb7a7896d77a1327ad9b671ff921ede",
+    "grid_full/3072x1728_ref.webp": "3861457e8e39d60c5f94a8ea9bcce4faa3928479cf9d39758f09f304268cc907",
+    "grid_full/frame_rois.jpg": "0530513f464dce8bd6522ff32c7febe4410a6a0768b115baf7c487bb75032975"
+   }
   }
  }
 }

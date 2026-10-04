@@ -201,6 +201,37 @@ def main(argv=None) -> int:
          "table": {"columns": ["ROI", "msgs", "effort", "shown", "distance", "bytes", "msgs used",
                                "card SSIM", "texture SSIM", "acutance", "ΔE vs RAW", "ΔE card",
                                "Zero", "detail", "colour"], "rows": table}}]
+    full_dir = run / "grid_full"
+    if full_dir.exists():  # roi_grid_full.py: whole decoded crops + the framed full frame
+        made = json.loads((full_dir / "made.json").read_text())
+        shutil.copy2(full_dir / "frame_rois.jpg", img / "frame_rois.jpg")
+        sections.insert(2, {
+            "title": "The full frame with the seven ROIs",
+            "figure": "img/frame_rois.jpg",
+            "note": "Frame 0, 4608×2592 RAW rendered like the sliders, DOWNSCALED 2× to 2304×1296 for "
+                    "display (a static picture; the crops below open at full resolution)."})
+        for r_ in ("1600x900", "2304x1296", "3072x1728"):
+            afters = []
+            for b in BUDGETS:
+                m = made.get(f"{r_}@{b}")
+                if not m:
+                    continue
+                src = f"{r_}_{b}_e{m['effort']}.webp"
+                shutil.copy2(full_dir / src, img / src)
+                sb = summary[(r_, b)]
+                afters.append({"label": f"{b} msgs · e{m['effort']} d {m['distance']:.2f} · "
+                                        f"{m['bytes'] / 1000:.1f} kB · {sb.get('verdict', 'n/a')}",
+                               "image": f"img/{src}"})
+            shutil.copy2(full_dir / f"{r_}_ref.webp", img / f"{r_}_ref.webp")
+            missing = [str(b) for b in BUDGETS if f"{r_}@{b}" not in made]
+            sections.append({
+                "title": f"Whole crop · {r_.replace('x', '×')} — RAW vs nrjxl at each budget",
+                "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline "
+                        "view is DOWNSCALED to fit the page; click (or Enter) for full screen at the "
+                        "crop's full resolution, then 1:1 and beyond."
+                        + (f" Not shown: {', '.join(missing)} msgs (does not fit)." if missing else ""),
+                "before": f"img/{r_}_ref.webp", "before_label": "RAW reference",
+                "afters": afters})
     files_src = run / "grid_slides"
     for b in BUDGETS:
         for r_ in picks[b]:
@@ -236,7 +267,8 @@ def main(argv=None) -> int:
                  + [{"value": f"SSIM {p_ssim:.3f}", "label": "today's pjpg on the card area (the bar)"}],
         "sections": sections,
         "notes": [
-            "Too heavy to show every ROI: the sliders show 1600×900, 2304×1296 and the largest "
+            "Whole-crop views: 1600×900, 2304×1296 and 3072×1728 at every budget that fits, downscaled "
+            "inline and full resolution in full screen. Zoomed views: the sliders show 1600×900, 2304×1296 and the largest "
             f"Zero-feasible / passing ROI per budget ({shown}). Every cell's numbers are in the table.",
             "Slider: left = RAW reference, right = nrjxl decoded back to raw; both rendered by one "
             "function (bilinear demosaic, the camera's locked WB gains, clipped at sensor white, the "

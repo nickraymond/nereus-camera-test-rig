@@ -91,216 +91,255 @@ footer{color:var(--ink2);font-size:.8rem;max-width:90ch;border-top:1px solid var
 <p class="hint">Drag across an image to compare. Click it (or press Enter) to open it full screen,
 where you can zoom to 1:1 and beyond and pan around.</p>
 </header>
-<section class="fig"><header><h2>Detail heat map</h2><p>Best setting per cell, among e5 / e7 runs the Zero can encode: better verdict first, then a Zero cost within 30 s / 150 MiB, then higher card SSIM. Medians of 3 frames. Texture SSIM (tex) is on each ROI&#x27;s most detailed 480×270 window away from the card.</p></header><img src="index_img/s0_figure.png" alt="Detail heat map" style="max-width:min(100%,940px)"></section><section class="fig"><header><h2>Pi Zero cost heat map</h2><p>Production rc_raw_jxl CLI on nereus002 (bm #120 bd6f38c), frame 0, an extra 700 MiB address-space cap and nice 10; recorder_web / workbench / field_power_log kept running.</p></header><img src="index_img/s1_figure.png" alt="Pi Zero cost heat map" style="max-width:min(100%,940px)"></section><section class="tbl"><header><h2>Every cell, both efforts (medians of 3 frames)</h2><p>✓ = the setting shown in the heat map. ΔE vs RAW = the 10 usable card patches with no fit (the clean compression number). ΔE card = vs the card truth after a 3×3 fit on the same 10 patches (flattering; the RAW itself scores 1.17–1.42). Today&#x27;s pjpg: card SSIM 0.935, ΔE card 2.69, acutance 1.04.</p></header><div class="tscroll"><table><thead><tr><th>ROI</th><th>msgs</th><th>effort</th><th>shown</th><th>distance</th><th>bytes</th><th>msgs used</th><th>card SSIM</th><th>texture SSIM</th><th>acutance</th><th>ΔE vs RAW</th><th>ΔE card</th><th>Zero</th><th>detail</th><th>colour</th></tr></thead><tbody><tr><td>800×450</td><td>180</td><td>e5</td><td></td><td>1.07</td><td>50,144</td><td>175</td><td>0.991</td><td>0.990</td><td>1.00</td><td>0.15</td><td>1.28</td><td>3.7 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>180</td><td>e7</td><td>✓</td><td>0.98</td><td>49,937</td><td>174</td><td>0.992</td><td>0.991</td><td>1.00</td><td>0.14</td><td>1.22</td><td>3.6 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>250</td><td>e5</td><td></td><td>0.61</td><td>70,867</td><td>247</td><td>0.995</td><td>0.995</td><td>1.00</td><td>0.10</td><td>1.17</td><td>3.2 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>250</td><td>e7</td><td>✓</td><td>0.58</td><td>69,965</td><td>243</td><td>0.995</td><td>0.995</td><td>1.00</td><td>0.10</td><td>1.16</td><td>3.8 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>500</td><td>e5</td><td>✓</td><td>0.18</td><td>136,108</td><td>473</td><td>0.998</td><td>0.999</td><td>1.00</td><td>0.03</td><td>1.25</td><td>3.2 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>500</td><td>e7</td><td></td><td>0.18</td><td>135,545</td><td>471</td><td>0.998</td><td>0.999</td><td>1.00</td><td>0.03</td><td>1.26</td><td>4.1 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>180</td><td>e5</td><td></td><td>2.28</td><td>51,321</td><td>179</td><td>0.983</td><td>0.979</td><td>1.01</td><td>0.19</td><td>1.24</td><td>5.3 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>180</td><td>e7</td><td>✓</td><td>2.09</td><td>50,728</td><td>177</td><td>0.984</td><td>0.981</td><td>1.03</td><td>0.22</td><td>1.24</td><td>6.0 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>250</td><td>e5</td><td></td><td>1.43</td><td>70,732</td><td>246</td><td>0.989</td><td>0.987</td><td>1.00</td><td>0.15</td><td>1.15</td><td>5.3 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>250</td><td>e7</td><td>✓</td><td>1.30</td><td>69,441</td><td>242</td><td>0.989</td><td>0.988</td><td>1.00</td><td>0.17</td><td>1.22</td><td>6.2 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>500</td><td>e5</td><td></td><td>0.53</td><td>138,924</td><td>483</td><td>0.995</td><td>0.996</td><td>1.00</td><td>0.08</td><td>1.19</td><td>5.5 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>500</td><td>e7</td><td>✓</td><td>0.49</td><td>137,533</td><td>478</td><td>0.996</td><td>0.996</td><td>1.00</td><td>0.08</td><td>1.21</td><td>6.2 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>180</td><td>e5</td><td></td><td>3.87</td><td>50,540</td><td>176</td><td>0.970</td><td>0.968</td><td>1.00</td><td>0.34</td><td>1.28</td><td>8.6 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>180</td><td>e7</td><td>✓</td><td>3.65</td><td>50,098</td><td>174</td><td>0.972</td><td>0.971</td><td>1.02</td><td>0.35</td><td>1.46</td><td>9.7 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>250</td><td>e5</td><td></td><td>2.56</td><td>69,575</td><td>242</td><td>0.980</td><td>0.981</td><td>1.01</td><td>0.28</td><td>1.40</td><td>8.5 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>250</td><td>e7</td><td>✓</td><td>2.35</td><td>69,182</td><td>241</td><td>0.982</td><td>0.983</td><td>1.01</td><td>0.24</td><td>1.33</td><td>9.3 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>500</td><td>e5</td><td></td><td>1.00</td><td>138,450</td><td>481</td><td>0.992</td><td>0.992</td><td>1.00</td><td>0.14</td><td>1.21</td><td>8.6 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>500</td><td>e7</td><td>✓</td><td>0.90</td><td>138,649</td><td>482</td><td>0.992</td><td>0.993</td><td>1.00</td><td>0.13</td><td>1.19</td><td>9.4 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>180</td><td>e5</td><td></td><td>6.75</td><td>49,312</td><td>172</td><td>0.952</td><td>0.952</td><td>1.06</td><td>0.56</td><td>1.91</td><td>12.5 s · 47 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2000×1124</td><td>180</td><td>e7</td><td>✓</td><td>6.17</td><td>50,146</td><td>175</td><td>0.956</td><td>0.955</td><td>1.08</td><td>0.47</td><td>1.58</td><td>14.4 s · 47 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2000×1124</td><td>250</td><td>e5</td><td></td><td>4.48</td><td>67,691</td><td>236</td><td>0.966</td><td>0.966</td><td>1.04</td><td>0.49</td><td>1.42</td><td>12.5 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>250</td><td>e7</td><td>✓</td><td>4.02</td><td>69,754</td><td>243</td><td>0.969</td><td>0.969</td><td>1.00</td><td>0.41</td><td>1.04</td><td>14.5 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>500</td><td>e5</td><td></td><td>1.88</td><td>140,530</td><td>488</td><td>0.985</td><td>0.984</td><td>1.01</td><td>0.19</td><td>1.37</td><td>12.7 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>500</td><td>e7</td><td>✓</td><td>1.65</td><td>138,821</td><td>483</td><td>0.987</td><td>0.986</td><td>1.00</td><td>0.16</td><td>1.25</td><td>14.1 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>180</td><td>e5</td><td></td><td>10.30</td><td>50,287</td><td>175</td><td>0.936</td><td>0.858</td><td>0.90</td><td>0.99</td><td>1.67</td><td>15.9 s · 63 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2304×1296</td><td>180</td><td>e7</td><td>✓</td><td>9.62</td><td>50,722</td><td>177</td><td>0.939</td><td>0.863</td><td>0.91</td><td>1.02</td><td>1.46</td><td>18.7 s · 63 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2304×1296</td><td>250</td><td>e5</td><td></td><td>6.93</td><td>69,508</td><td>242</td><td>0.951</td><td>0.885</td><td>1.03</td><td>0.74</td><td>1.82</td><td>16.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>250</td><td>e7</td><td>✓</td><td>6.38</td><td>71,191</td><td>248</td><td>0.954</td><td>0.891</td><td>1.05</td><td>0.54</td><td>1.44</td><td>19.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>500</td><td>e5</td><td></td><td>3.07</td><td>139,332</td><td>484</td><td>0.977</td><td>0.941</td><td>1.00</td><td>0.32</td><td>1.42</td><td>16.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>500</td><td>e7</td><td>✓</td><td>2.82</td><td>139,831</td><td>486</td><td>0.978</td><td>0.947</td><td>0.99</td><td>0.31</td><td>1.54</td><td>18.5 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>3072×1728</td><td>180</td><td>e5</td><td></td><td>no fit at d 15</td><td>54,315</td><td>189</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>3072×1728</td><td>180</td><td>e7</td><td></td><td>no fit at d 15</td><td>51,846</td><td>181</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>3072×1728</td><td>250</td><td>e5</td><td></td><td>10.99</td><td>70,153</td><td>244</td><td>0.934</td><td>0.839</td><td>0.86</td><td>1.19</td><td>2.03</td><td>27.9 s · 113 MiB</td><td>FAIL</td><td>PASS</td></tr><tr><td>3072×1728</td><td>250</td><td>e7</td><td>✓</td><td>10.34</td><td>70,370</td><td>245</td><td>0.936</td><td>0.846</td><td>0.90</td><td>0.86</td><td>2.00</td><td>32.6 s · 113 MiB (WARN)</td><td>WARN</td><td>PASS</td></tr><tr><td>3072×1728</td><td>500</td><td>e5</td><td>✓</td><td>4.79</td><td>140,926</td><td>490</td><td>0.964</td><td>0.914</td><td>1.03</td><td>0.44</td><td>1.68</td><td>28.1 s · 113 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>3072×1728</td><td>500</td><td>e7</td><td></td><td>4.47</td><td>142,012</td><td>494</td><td>0.966</td><td>0.920</td><td>1.02</td><td>0.54</td><td>1.53</td><td>34.0 s · 113 MiB (WARN)</td><td>PASS</td><td>PASS</td></tr><tr><td>4608×2592</td><td>180</td><td>e5</td><td></td><td>no fit at d 15</td><td>76,764</td><td>267</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>180</td><td>e7</td><td></td><td>no fit at d 15</td><td>73,838</td><td>257</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>250</td><td>e5</td><td></td><td>no fit at d 15</td><td>76,764</td><td>267</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>250</td><td>e7</td><td></td><td>no fit at d 15</td><td>73,838</td><td>257</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>500</td><td>e5</td><td></td><td>7.10</td><td>141,475</td><td>492</td><td>0.951</td><td>0.875</td><td>1.02</td><td>0.59</td><td>1.74</td><td>guard stops cjxl (rfb=mem)</td><td>PASS</td><td>PASS</td></tr><tr><td>4608×2592</td><td>500</td><td>e7</td><td>✓</td><td>6.76</td><td>139,934</td><td>486</td><td>0.952</td><td>0.879</td><td>1.03</td><td>0.60</td><td>1.57</td><td>guard stops cjxl (rfb=mem)</td><td>PASS</td><td>PASS</td></tr></tbody></table></div></section><section class="cmp" data-title="180 msgs · 1600×900 · card + checker — PASS" data-pix="1">
-<header><h2>180 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s3_after0.webp" data-full="index_img/s3_after0.webp" data-label="nrjxl 174 msgs (e7)">nrjxl 174 msgs (e7)</button></div>
-<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s3_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+<section class="fig"><header><h2>Detail heat map</h2><p>Best setting per cell, among e5 / e7 runs the Zero can encode: better verdict first, then a Zero cost within 30 s / 150 MiB, then higher card SSIM. Medians of 3 frames. Texture SSIM (tex) is on each ROI&#x27;s most detailed 480×270 window away from the card.</p></header><img src="index_img/s0_figure.png" alt="Detail heat map" style="max-width:min(100%,940px)"></section><section class="fig"><header><h2>Pi Zero cost heat map</h2><p>Production rc_raw_jxl CLI on nereus002 (bm #120 bd6f38c), frame 0, an extra 700 MiB address-space cap and nice 10; recorder_web / workbench / field_power_log kept running.</p></header><img src="index_img/s1_figure.png" alt="Pi Zero cost heat map" style="max-width:min(100%,940px)"></section><section class="fig"><header><h2>The full frame with the seven ROIs</h2><p>Frame 0, 4608×2592 RAW rendered like the sliders, DOWNSCALED 2× to 2304×1296 for display (a static picture; the crops below open at full resolution).</p></header><img src="index_img/s2_figure.jpg" alt="The full frame with the seven ROIs" style="max-width:min(100%,2304px)"></section><section class="tbl"><header><h2>Every cell, both efforts (medians of 3 frames)</h2><p>✓ = the setting shown in the heat map. ΔE vs RAW = the 10 usable card patches with no fit (the clean compression number). ΔE card = vs the card truth after a 3×3 fit on the same 10 patches (flattering; the RAW itself scores 1.17–1.42). Today&#x27;s pjpg: card SSIM 0.935, ΔE card 2.69, acutance 1.04.</p></header><div class="tscroll"><table><thead><tr><th>ROI</th><th>msgs</th><th>effort</th><th>shown</th><th>distance</th><th>bytes</th><th>msgs used</th><th>card SSIM</th><th>texture SSIM</th><th>acutance</th><th>ΔE vs RAW</th><th>ΔE card</th><th>Zero</th><th>detail</th><th>colour</th></tr></thead><tbody><tr><td>800×450</td><td>180</td><td>e5</td><td></td><td>1.07</td><td>50,144</td><td>175</td><td>0.991</td><td>0.990</td><td>1.00</td><td>0.15</td><td>1.28</td><td>3.7 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>180</td><td>e7</td><td>✓</td><td>0.98</td><td>49,937</td><td>174</td><td>0.992</td><td>0.991</td><td>1.00</td><td>0.14</td><td>1.22</td><td>3.6 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>250</td><td>e5</td><td></td><td>0.61</td><td>70,867</td><td>247</td><td>0.995</td><td>0.995</td><td>1.00</td><td>0.10</td><td>1.17</td><td>3.2 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>250</td><td>e7</td><td>✓</td><td>0.58</td><td>69,965</td><td>243</td><td>0.995</td><td>0.995</td><td>1.00</td><td>0.10</td><td>1.16</td><td>3.8 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>500</td><td>e5</td><td>✓</td><td>0.18</td><td>136,108</td><td>473</td><td>0.998</td><td>0.999</td><td>1.00</td><td>0.03</td><td>1.25</td><td>3.2 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>800×450</td><td>500</td><td>e7</td><td></td><td>0.18</td><td>135,545</td><td>471</td><td>0.998</td><td>0.999</td><td>1.00</td><td>0.03</td><td>1.26</td><td>4.1 s · 32 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>180</td><td>e5</td><td></td><td>2.28</td><td>51,321</td><td>179</td><td>0.983</td><td>0.979</td><td>1.01</td><td>0.19</td><td>1.24</td><td>5.3 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>180</td><td>e7</td><td>✓</td><td>2.09</td><td>50,728</td><td>177</td><td>0.984</td><td>0.981</td><td>1.03</td><td>0.22</td><td>1.24</td><td>6.0 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>250</td><td>e5</td><td></td><td>1.43</td><td>70,732</td><td>246</td><td>0.989</td><td>0.987</td><td>1.00</td><td>0.15</td><td>1.15</td><td>5.3 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>250</td><td>e7</td><td>✓</td><td>1.30</td><td>69,441</td><td>242</td><td>0.989</td><td>0.988</td><td>1.00</td><td>0.17</td><td>1.22</td><td>6.2 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>500</td><td>e5</td><td></td><td>0.53</td><td>138,924</td><td>483</td><td>0.995</td><td>0.996</td><td>1.00</td><td>0.08</td><td>1.19</td><td>5.5 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1200×676</td><td>500</td><td>e7</td><td>✓</td><td>0.49</td><td>137,533</td><td>478</td><td>0.996</td><td>0.996</td><td>1.00</td><td>0.08</td><td>1.21</td><td>6.2 s · 36 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>180</td><td>e5</td><td></td><td>3.87</td><td>50,540</td><td>176</td><td>0.970</td><td>0.968</td><td>1.00</td><td>0.34</td><td>1.28</td><td>8.6 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>180</td><td>e7</td><td>✓</td><td>3.65</td><td>50,098</td><td>174</td><td>0.972</td><td>0.971</td><td>1.02</td><td>0.35</td><td>1.46</td><td>9.7 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>250</td><td>e5</td><td></td><td>2.56</td><td>69,575</td><td>242</td><td>0.980</td><td>0.981</td><td>1.01</td><td>0.28</td><td>1.40</td><td>8.5 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>250</td><td>e7</td><td>✓</td><td>2.35</td><td>69,182</td><td>241</td><td>0.982</td><td>0.983</td><td>1.01</td><td>0.24</td><td>1.33</td><td>9.3 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>500</td><td>e5</td><td></td><td>1.00</td><td>138,450</td><td>481</td><td>0.992</td><td>0.992</td><td>1.00</td><td>0.14</td><td>1.21</td><td>8.6 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>1600×900</td><td>500</td><td>e7</td><td>✓</td><td>0.90</td><td>138,649</td><td>482</td><td>0.992</td><td>0.993</td><td>1.00</td><td>0.13</td><td>1.19</td><td>9.4 s · 41 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>180</td><td>e5</td><td></td><td>6.75</td><td>49,312</td><td>172</td><td>0.952</td><td>0.952</td><td>1.06</td><td>0.56</td><td>1.91</td><td>12.5 s · 47 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2000×1124</td><td>180</td><td>e7</td><td>✓</td><td>6.17</td><td>50,146</td><td>175</td><td>0.956</td><td>0.955</td><td>1.08</td><td>0.47</td><td>1.58</td><td>14.4 s · 47 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2000×1124</td><td>250</td><td>e5</td><td></td><td>4.48</td><td>67,691</td><td>236</td><td>0.966</td><td>0.966</td><td>1.04</td><td>0.49</td><td>1.42</td><td>12.5 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>250</td><td>e7</td><td>✓</td><td>4.02</td><td>69,754</td><td>243</td><td>0.969</td><td>0.969</td><td>1.00</td><td>0.41</td><td>1.04</td><td>14.5 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>500</td><td>e5</td><td></td><td>1.88</td><td>140,530</td><td>488</td><td>0.985</td><td>0.984</td><td>1.01</td><td>0.19</td><td>1.37</td><td>12.7 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2000×1124</td><td>500</td><td>e7</td><td>✓</td><td>1.65</td><td>138,821</td><td>483</td><td>0.987</td><td>0.986</td><td>1.00</td><td>0.16</td><td>1.25</td><td>14.1 s · 47 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>180</td><td>e5</td><td></td><td>10.30</td><td>50,287</td><td>175</td><td>0.936</td><td>0.858</td><td>0.90</td><td>0.99</td><td>1.67</td><td>15.9 s · 63 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2304×1296</td><td>180</td><td>e7</td><td>✓</td><td>9.62</td><td>50,722</td><td>177</td><td>0.939</td><td>0.863</td><td>0.91</td><td>1.02</td><td>1.46</td><td>18.7 s · 63 MiB</td><td>WARN</td><td>PASS</td></tr><tr><td>2304×1296</td><td>250</td><td>e5</td><td></td><td>6.93</td><td>69,508</td><td>242</td><td>0.951</td><td>0.885</td><td>1.03</td><td>0.74</td><td>1.82</td><td>16.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>250</td><td>e7</td><td>✓</td><td>6.38</td><td>71,191</td><td>248</td><td>0.954</td><td>0.891</td><td>1.05</td><td>0.54</td><td>1.44</td><td>19.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>500</td><td>e5</td><td></td><td>3.07</td><td>139,332</td><td>484</td><td>0.977</td><td>0.941</td><td>1.00</td><td>0.32</td><td>1.42</td><td>16.2 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>2304×1296</td><td>500</td><td>e7</td><td>✓</td><td>2.82</td><td>139,831</td><td>486</td><td>0.978</td><td>0.947</td><td>0.99</td><td>0.31</td><td>1.54</td><td>18.5 s · 63 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>3072×1728</td><td>180</td><td>e5</td><td></td><td>no fit at d 15</td><td>54,315</td><td>189</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>3072×1728</td><td>180</td><td>e7</td><td></td><td>no fit at d 15</td><td>51,846</td><td>181</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>3072×1728</td><td>250</td><td>e5</td><td></td><td>10.99</td><td>70,153</td><td>244</td><td>0.934</td><td>0.839</td><td>0.86</td><td>1.19</td><td>2.03</td><td>27.9 s · 113 MiB</td><td>FAIL</td><td>PASS</td></tr><tr><td>3072×1728</td><td>250</td><td>e7</td><td>✓</td><td>10.34</td><td>70,370</td><td>245</td><td>0.936</td><td>0.846</td><td>0.90</td><td>0.86</td><td>2.00</td><td>32.6 s · 113 MiB (WARN)</td><td>WARN</td><td>PASS</td></tr><tr><td>3072×1728</td><td>500</td><td>e5</td><td>✓</td><td>4.79</td><td>140,926</td><td>490</td><td>0.964</td><td>0.914</td><td>1.03</td><td>0.44</td><td>1.68</td><td>28.1 s · 113 MiB</td><td>PASS</td><td>PASS</td></tr><tr><td>3072×1728</td><td>500</td><td>e7</td><td></td><td>4.47</td><td>142,012</td><td>494</td><td>0.966</td><td>0.920</td><td>1.02</td><td>0.54</td><td>1.53</td><td>34.0 s · 113 MiB (WARN)</td><td>PASS</td><td>PASS</td></tr><tr><td>4608×2592</td><td>180</td><td>e5</td><td></td><td>no fit at d 15</td><td>76,764</td><td>267</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>180</td><td>e7</td><td></td><td>no fit at d 15</td><td>73,838</td><td>257</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>250</td><td>e5</td><td></td><td>no fit at d 15</td><td>76,764</td><td>267</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>250</td><td>e7</td><td></td><td>no fit at d 15</td><td>73,838</td><td>257</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>not run</td><td>—</td><td>—</td></tr><tr><td>4608×2592</td><td>500</td><td>e5</td><td></td><td>7.10</td><td>141,475</td><td>492</td><td>0.951</td><td>0.875</td><td>1.02</td><td>0.59</td><td>1.74</td><td>guard stops cjxl (rfb=mem)</td><td>PASS</td><td>PASS</td></tr><tr><td>4608×2592</td><td>500</td><td>e7</td><td>✓</td><td>6.76</td><td>139,934</td><td>486</td><td>0.952</td><td>0.879</td><td>1.03</td><td>0.60</td><td>1.57</td><td>guard stops cjxl (rfb=mem)</td><td>PASS</td><td>PASS</td></tr></tbody></table></div></section><section class="cmp" data-title="Whole crop · 1600×900 — RAW vs nrjxl at each budget">
+<header><h2>Whole crop · 1600×900 — RAW vs nrjxl at each budget</h2><p>The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop&#x27;s full resolution, then 1:1 and beyond.</p></header>
+<div class="opts" role="group" aria-label="Choose the after image"><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s4_after0_view.jpg" data-full="index_img/s4_after0.webp" data-label="180 msgs · e7 d 3.65 · 50.1 kB · PASS">180 msgs · e7 d 3.65 · 50.1 kB · PASS</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s4_after1_view.jpg" data-full="index_img/s4_after1.webp" data-label="250 msgs · e7 d 2.34 · 69.2 kB · PASS">250 msgs · e7 d 2.34 · 69.2 kB · PASS</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s4_after2_view.jpg" data-full="index_img/s4_after2.webp" data-label="500 msgs · e7 d 0.90 · 138.6 kB · PASS">500 msgs · e7 d 0.90 · 138.6 kB · PASS</button></div>
+<div class="stage" style="aspect-ratio:1400/788;max-width:1400px"
+     data-full="index_img/s4_before.webp" data-w="1600" data-h="900" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s3_after0.webp" alt="nrjxl 174 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s3_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s4_after0_view.jpg" alt="180 msgs · e7 d 3.65 · 50.1 kB · PASS" draggable="false">
+  <div class="beforewrap"><img src="index_img/s4_before_view.jpg" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">180 msgs · e7 d 3.65 · 50.1 kB · PASS</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 1600×900 full resolution</span>
+</div></section><section class="cmp" data-title="Whole crop · 2304×1296 — RAW vs nrjxl at each budget">
+<header><h2>Whole crop · 2304×1296 — RAW vs nrjxl at each budget</h2><p>The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop&#x27;s full resolution, then 1:1 and beyond.</p></header>
+<div class="opts" role="group" aria-label="Choose the after image"><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s5_after0_view.jpg" data-full="index_img/s5_after0.webp" data-label="180 msgs · e7 d 9.62 · 50.8 kB · WARN">180 msgs · e7 d 9.62 · 50.8 kB · WARN</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s5_after1_view.jpg" data-full="index_img/s5_after1.webp" data-label="250 msgs · e7 d 6.38 · 71.2 kB · PASS">250 msgs · e7 d 6.38 · 71.2 kB · PASS</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s5_after2_view.jpg" data-full="index_img/s5_after2.webp" data-label="500 msgs · e7 d 2.82 · 139.8 kB · PASS">500 msgs · e7 d 2.82 · 139.8 kB · PASS</button></div>
+<div class="stage" style="aspect-ratio:1400/788;max-width:1400px"
+     data-full="index_img/s5_before.webp" data-w="2304" data-h="1296" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s5_after0_view.jpg" alt="180 msgs · e7 d 9.62 · 50.8 kB · WARN" draggable="false">
+  <div class="beforewrap"><img src="index_img/s5_before_view.jpg" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">180 msgs · e7 d 9.62 · 50.8 kB · WARN</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 2304×1296 full resolution</span>
+</div></section><section class="cmp" data-title="Whole crop · 3072×1728 — RAW vs nrjxl at each budget">
+<header><h2>Whole crop · 3072×1728 — RAW vs nrjxl at each budget</h2><p>The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop&#x27;s full resolution, then 1:1 and beyond. Not shown: 180 msgs (does not fit).</p></header>
+<div class="opts" role="group" aria-label="Choose the after image"><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s6_after0_view.jpg" data-full="index_img/s6_after0.webp" data-label="250 msgs · e7 d 10.34 · 70.7 kB · WARN">250 msgs · e7 d 10.34 · 70.7 kB · WARN</button><button type="button" class="opt" aria-pressed="false" data-src="index_img/s6_after1_view.jpg" data-full="index_img/s6_after1.webp" data-label="500 msgs · e5 d 4.80 · 141.0 kB · PASS">500 msgs · e5 d 4.80 · 141.0 kB · PASS</button></div>
+<div class="stage" style="aspect-ratio:1400/788;max-width:1400px"
+     data-full="index_img/s6_before.webp" data-w="3072" data-h="1728" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s6_after0_view.jpg" alt="250 msgs · e7 d 10.34 · 70.7 kB · WARN" draggable="false">
+  <div class="beforewrap"><img src="index_img/s6_before_view.jpg" alt="RAW reference" draggable="false"></div>
+  <div class="handle" aria-hidden="true"><span>⟷</span></div>
+  <span class="tagl">RAW reference</span>
+  <span class="tagr">250 msgs · e7 d 10.34 · 70.7 kB · WARN</span>
+  <span class="fsbtn" aria-hidden="true">⤢ Full screen · 3072×1728 full resolution</span>
+</div></section><section class="cmp" data-title="180 msgs · 1600×900 · card + checker — PASS" data-pix="1">
+<header><h2>180 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s7_after0.webp" data-full="index_img/s7_after0.webp" data-label="nrjxl 174 msgs (e7)">nrjxl 174 msgs (e7)</button></div>
+<div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
+     data-full="index_img/s7_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
+     aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
+  <img class="after" src="index_img/s7_after0.webp" alt="nrjxl 174 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s7_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 174 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="180 msgs · 1600×900 · texture — PASS" data-pix="1">
 <header><h2>180 msgs · 1600×900 · texture — PASS</h2><p>e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s4_after0.webp" data-full="index_img/s4_after0.webp" data-label="nrjxl 174 msgs (e7)">nrjxl 174 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s8_after0.webp" data-full="index_img/s8_after0.webp" data-label="nrjxl 174 msgs (e7)">nrjxl 174 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s4_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s8_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s4_after0.webp" alt="nrjxl 174 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s4_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s8_after0.webp" alt="nrjxl 174 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s8_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 174 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="180 msgs · 2304×1296 · card + checker — WARN" data-pix="1">
 <header><h2>180 msgs · 2304×1296 · card + checker — WARN</h2><p>e7 · d 9.62 · 50,722 B · 177 msgs · card SSIM 0.939 (pjpg 0.935) · texture SSIM 0.863 · acutance 0.91 (pjpg 1.04) · ΔE vs RAW 1.02 · ΔE card 1.46 (pjpg 2.69) · Zero 18.7 s · 63 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s5_after0.webp" data-full="index_img/s5_after0.webp" data-label="nrjxl 177 msgs (e7)">nrjxl 177 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s9_after0.webp" data-full="index_img/s9_after0.webp" data-label="nrjxl 177 msgs (e7)">nrjxl 177 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s5_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s9_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s5_after0.webp" alt="nrjxl 177 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s5_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s9_after0.webp" alt="nrjxl 177 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s9_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 177 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="180 msgs · 2304×1296 · texture — WARN" data-pix="1">
 <header><h2>180 msgs · 2304×1296 · texture — WARN</h2><p>e7 · d 9.62 · 50,722 B · 177 msgs · card SSIM 0.939 (pjpg 0.935) · texture SSIM 0.863 · acutance 0.91 (pjpg 1.04) · ΔE vs RAW 1.02 · ΔE card 1.46 (pjpg 2.69) · Zero 18.7 s · 63 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s6_after0.webp" data-full="index_img/s6_after0.webp" data-label="nrjxl 177 msgs (e7)">nrjxl 177 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s10_after0.webp" data-full="index_img/s10_after0.webp" data-label="nrjxl 177 msgs (e7)">nrjxl 177 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s6_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s10_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s6_after0.webp" alt="nrjxl 177 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s6_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s10_after0.webp" alt="nrjxl 177 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s10_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 177 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="250 msgs · 1600×900 · card + checker — PASS" data-pix="1">
 <header><h2>250 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 2.35 · 69,182 B · 241 msgs · card SSIM 0.982 (pjpg 0.935) · texture SSIM 0.983 · acutance 1.01 (pjpg 1.04) · ΔE vs RAW 0.24 · ΔE card 1.33 (pjpg 2.69) · Zero 9.3 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s7_after0.webp" data-full="index_img/s7_after0.webp" data-label="nrjxl 241 msgs (e7)">nrjxl 241 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s11_after0.webp" data-full="index_img/s11_after0.webp" data-label="nrjxl 241 msgs (e7)">nrjxl 241 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s7_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s11_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s7_after0.webp" alt="nrjxl 241 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s7_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s11_after0.webp" alt="nrjxl 241 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s11_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 241 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="250 msgs · 1600×900 · texture — PASS" data-pix="1">
 <header><h2>250 msgs · 1600×900 · texture — PASS</h2><p>e7 · d 2.35 · 69,182 B · 241 msgs · card SSIM 0.982 (pjpg 0.935) · texture SSIM 0.983 · acutance 1.01 (pjpg 1.04) · ΔE vs RAW 0.24 · ΔE card 1.33 (pjpg 2.69) · Zero 9.3 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s8_after0.webp" data-full="index_img/s8_after0.webp" data-label="nrjxl 241 msgs (e7)">nrjxl 241 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s12_after0.webp" data-full="index_img/s12_after0.webp" data-label="nrjxl 241 msgs (e7)">nrjxl 241 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s8_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s12_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s8_after0.webp" alt="nrjxl 241 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s8_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s12_after0.webp" alt="nrjxl 241 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s12_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 241 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="250 msgs · 2304×1296 · card + checker — PASS" data-pix="1">
 <header><h2>250 msgs · 2304×1296 · card + checker — PASS</h2><p>e7 · d 6.38 · 71,191 B · 248 msgs · card SSIM 0.954 (pjpg 0.935) · texture SSIM 0.891 · acutance 1.05 (pjpg 1.04) · ΔE vs RAW 0.54 · ΔE card 1.44 (pjpg 2.69) · Zero 19.2 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s9_after0.webp" data-full="index_img/s9_after0.webp" data-label="nrjxl 248 msgs (e7)">nrjxl 248 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s13_after0.webp" data-full="index_img/s13_after0.webp" data-label="nrjxl 248 msgs (e7)">nrjxl 248 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s9_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s13_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s9_after0.webp" alt="nrjxl 248 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s9_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s13_after0.webp" alt="nrjxl 248 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s13_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 248 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="250 msgs · 2304×1296 · texture — PASS" data-pix="1">
 <header><h2>250 msgs · 2304×1296 · texture — PASS</h2><p>e7 · d 6.38 · 71,191 B · 248 msgs · card SSIM 0.954 (pjpg 0.935) · texture SSIM 0.891 · acutance 1.05 (pjpg 1.04) · ΔE vs RAW 0.54 · ΔE card 1.44 (pjpg 2.69) · Zero 19.2 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s10_after0.webp" data-full="index_img/s10_after0.webp" data-label="nrjxl 248 msgs (e7)">nrjxl 248 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s14_after0.webp" data-full="index_img/s14_after0.webp" data-label="nrjxl 248 msgs (e7)">nrjxl 248 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s10_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s14_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s10_after0.webp" alt="nrjxl 248 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s10_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s14_after0.webp" alt="nrjxl 248 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s14_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 248 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="250 msgs · 3072×1728 · card + checker — WARN" data-pix="1">
 <header><h2>250 msgs · 3072×1728 · card + checker — WARN</h2><p>e7 · d 10.34 · 70,370 B · 245 msgs · card SSIM 0.936 (pjpg 0.935) · texture SSIM 0.846 · acutance 0.90 (pjpg 1.04) · ΔE vs RAW 0.86 · ΔE card 2.00 (pjpg 2.69) · Zero 32.6 s · 113 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s11_after0.webp" data-full="index_img/s11_after0.webp" data-label="nrjxl 245 msgs (e7)">nrjxl 245 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s15_after0.webp" data-full="index_img/s15_after0.webp" data-label="nrjxl 245 msgs (e7)">nrjxl 245 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s11_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s15_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s11_after0.webp" alt="nrjxl 245 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s11_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s15_after0.webp" alt="nrjxl 245 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s15_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 245 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="250 msgs · 3072×1728 · texture — WARN" data-pix="1">
 <header><h2>250 msgs · 3072×1728 · texture — WARN</h2><p>e7 · d 10.34 · 70,370 B · 245 msgs · card SSIM 0.936 (pjpg 0.935) · texture SSIM 0.846 · acutance 0.90 (pjpg 1.04) · ΔE vs RAW 0.86 · ΔE card 2.00 (pjpg 2.69) · Zero 32.6 s · 113 MiB · detail WARN · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s12_after0.webp" data-full="index_img/s12_after0.webp" data-label="nrjxl 245 msgs (e7)">nrjxl 245 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s16_after0.webp" data-full="index_img/s16_after0.webp" data-label="nrjxl 245 msgs (e7)">nrjxl 245 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s12_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s16_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s12_after0.webp" alt="nrjxl 245 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s12_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s16_after0.webp" alt="nrjxl 245 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s16_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 245 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="500 msgs · 1600×900 · card + checker — PASS" data-pix="1">
 <header><h2>500 msgs · 1600×900 · card + checker — PASS</h2><p>e7 · d 0.90 · 138,649 B · 482 msgs · card SSIM 0.992 (pjpg 0.935) · texture SSIM 0.993 · acutance 1.00 (pjpg 1.04) · ΔE vs RAW 0.13 · ΔE card 1.19 (pjpg 2.69) · Zero 9.4 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s13_after0.webp" data-full="index_img/s13_after0.webp" data-label="nrjxl 482 msgs (e7)">nrjxl 482 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s17_after0.webp" data-full="index_img/s17_after0.webp" data-label="nrjxl 482 msgs (e7)">nrjxl 482 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s13_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s17_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s13_after0.webp" alt="nrjxl 482 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s13_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s17_after0.webp" alt="nrjxl 482 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s17_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 482 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="500 msgs · 1600×900 · texture — PASS" data-pix="1">
 <header><h2>500 msgs · 1600×900 · texture — PASS</h2><p>e7 · d 0.90 · 138,649 B · 482 msgs · card SSIM 0.992 (pjpg 0.935) · texture SSIM 0.993 · acutance 1.00 (pjpg 1.04) · ΔE vs RAW 0.13 · ΔE card 1.19 (pjpg 2.69) · Zero 9.4 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s14_after0.webp" data-full="index_img/s14_after0.webp" data-label="nrjxl 482 msgs (e7)">nrjxl 482 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s18_after0.webp" data-full="index_img/s18_after0.webp" data-label="nrjxl 482 msgs (e7)">nrjxl 482 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s14_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s18_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s14_after0.webp" alt="nrjxl 482 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s14_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s18_after0.webp" alt="nrjxl 482 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s18_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 482 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="500 msgs · 2304×1296 · card + checker — PASS" data-pix="1">
 <header><h2>500 msgs · 2304×1296 · card + checker — PASS</h2><p>e7 · d 2.82 · 139,831 B · 486 msgs · card SSIM 0.978 (pjpg 0.935) · texture SSIM 0.947 · acutance 0.99 (pjpg 1.04) · ΔE vs RAW 0.31 · ΔE card 1.54 (pjpg 2.69) · Zero 18.5 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s15_after0.webp" data-full="index_img/s15_after0.webp" data-label="nrjxl 486 msgs (e7)">nrjxl 486 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s19_after0.webp" data-full="index_img/s19_after0.webp" data-label="nrjxl 486 msgs (e7)">nrjxl 486 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s15_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s19_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s15_after0.webp" alt="nrjxl 486 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s15_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s19_after0.webp" alt="nrjxl 486 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s19_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 486 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="500 msgs · 2304×1296 · texture — PASS" data-pix="1">
 <header><h2>500 msgs · 2304×1296 · texture — PASS</h2><p>e7 · d 2.82 · 139,831 B · 486 msgs · card SSIM 0.978 (pjpg 0.935) · texture SSIM 0.947 · acutance 0.99 (pjpg 1.04) · ΔE vs RAW 0.31 · ΔE card 1.54 (pjpg 2.69) · Zero 18.5 s · 63 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s16_after0.webp" data-full="index_img/s16_after0.webp" data-label="nrjxl 486 msgs (e7)">nrjxl 486 msgs (e7)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s20_after0.webp" data-full="index_img/s20_after0.webp" data-label="nrjxl 486 msgs (e7)">nrjxl 486 msgs (e7)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s16_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s20_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s16_after0.webp" alt="nrjxl 486 msgs (e7)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s16_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s20_after0.webp" alt="nrjxl 486 msgs (e7)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s20_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 486 msgs (e7)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section><section class="cmp" data-title="500 msgs · 3072×1728 · card + checker — PASS" data-pix="1">
 <header><h2>500 msgs · 3072×1728 · card + checker — PASS</h2><p>e5 · d 4.79 · 140,926 B · 490 msgs · card SSIM 0.964 (pjpg 0.935) · texture SSIM 0.914 · acutance 1.03 (pjpg 1.04) · ΔE vs RAW 0.44 · ΔE card 1.68 (pjpg 2.69) · Zero 28.1 s · 113 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s17_after0.webp" data-full="index_img/s17_after0.webp" data-label="nrjxl 490 msgs (e5)">nrjxl 490 msgs (e5)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s21_after0.webp" data-full="index_img/s21_after0.webp" data-label="nrjxl 490 msgs (e5)">nrjxl 490 msgs (e5)</button></div>
 <div class="stage pix" style="aspect-ratio:540/350;max-width:540px"
-     data-full="index_img/s17_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
+     data-full="index_img/s21_before.webp" data-w="540" data-h="350" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s17_after0.webp" alt="nrjxl 490 msgs (e5)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s17_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s21_after0.webp" alt="nrjxl 490 msgs (e5)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s21_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 490 msgs (e5)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 540×350</span>
 </div></section><section class="cmp" data-title="500 msgs · 3072×1728 · texture — PASS" data-pix="1">
 <header><h2>500 msgs · 3072×1728 · texture — PASS</h2><p>e5 · d 4.79 · 140,926 B · 490 msgs · card SSIM 0.964 (pjpg 0.935) · texture SSIM 0.914 · acutance 1.03 (pjpg 1.04) · ΔE vs RAW 0.44 · ΔE card 1.68 (pjpg 2.69) · Zero 28.1 s · 113 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.</p></header>
-<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s18_after0.webp" data-full="index_img/s18_after0.webp" data-label="nrjxl 490 msgs (e5)">nrjxl 490 msgs (e5)</button></div>
+<div class="opts" hidden><button type="button" class="opt on" aria-pressed="true" data-src="index_img/s22_after0.webp" data-full="index_img/s22_after0.webp" data-label="nrjxl 490 msgs (e5)">nrjxl 490 msgs (e5)</button></div>
 <div class="stage pix" style="aspect-ratio:480/270;max-width:480px"
-     data-full="index_img/s18_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
+     data-full="index_img/s22_before.webp" data-w="480" data-h="270" tabindex="0" role="slider"
      aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"
      aria-label="Compare before and after. Arrow keys move the divider; Enter opens full screen with zoom.">
-  <img class="after" src="index_img/s18_after0.webp" alt="nrjxl 490 msgs (e5)" draggable="false">
-  <div class="beforewrap"><img src="index_img/s18_before.webp" alt="RAW reference" draggable="false"></div>
+  <img class="after" src="index_img/s22_after0.webp" alt="nrjxl 490 msgs (e5)" draggable="false">
+  <div class="beforewrap"><img src="index_img/s22_before.webp" alt="RAW reference" draggable="false"></div>
   <div class="handle" aria-hidden="true"><span>⟷</span></div>
   <span class="tagl">RAW reference</span>
   <span class="tagr">nrjxl 490 msgs (e5)</span>
   <span class="fsbtn" aria-hidden="true">⤢ Full screen · 480×270</span>
 </div></section>
-<section class="notes"><h2>What this shows</h2><ul><li>Too heavy to show every ROI: the sliders show 1600×900, 2304×1296 and the largest Zero-feasible / passing ROI per budget (180: 1600×900, 2304×1296; 250: 1600×900, 2304×1296, 3072×1728; 500: 1600×900, 2304×1296, 3072×1728). Every cell&#x27;s numbers are in the table.</li><li>Slider: left = RAW reference, right = nrjxl decoded back to raw; both rendered by one function (bilinear demosaic, the camera&#x27;s locked WB gains, clipped at sensor white, the RAW&#x27;s own card matrix, sRGB). Nothing is upsampled on this sheet.</li><li>Distances come from the Step C byte-target search (≤ 3 encodes, no quality floor here), with an exact bisection when the search ends without a fit below d 15.</li><li>ΔE reliability: 10 of 13 card colour patches usable (glare / noise); RAW ΔE varies 1.17–1.42 across identical frames, so ΔE differences under ~0.3 are noise. Tag acutance uses 2 tags of ~32 px.</li><li>Zero cost is measured on frame 0 at frame 0&#x27;s distance (encode time barely depends on distance). Full frame: the production guard stops cjxl (rfb=mem).</li><li>The 195-message point from Step A sits in levers.csv (not repeated here).</li></ul></section>
+<section class="notes"><h2>What this shows</h2><ul><li>Whole-crop views: 1600×900, 2304×1296 and 3072×1728 at every budget that fits, downscaled inline and full resolution in full screen. Zoomed views: the sliders show 1600×900, 2304×1296 and the largest Zero-feasible / passing ROI per budget (180: 1600×900, 2304×1296; 250: 1600×900, 2304×1296, 3072×1728; 500: 1600×900, 2304×1296, 3072×1728). Every cell&#x27;s numbers are in the table.</li><li>Slider: left = RAW reference, right = nrjxl decoded back to raw; both rendered by one function (bilinear demosaic, the camera&#x27;s locked WB gains, clipped at sensor white, the RAW&#x27;s own card matrix, sRGB). Nothing is upsampled on this sheet.</li><li>Distances come from the Step C byte-target search (≤ 3 encodes, no quality floor here), with an exact bisection when the search ends without a fit below d 15.</li><li>ΔE reliability: 10 of 13 card colour patches usable (glare / noise); RAW ΔE varies 1.17–1.42 across identical frames, so ΔE differences under ~0.3 are noise. Tag acutance uses 2 tags of ~32 px.</li><li>Zero cost is measured on frame 0 at frame 0&#x27;s distance (encode time barely depends on distance). Full frame: the production guard stops cjxl (rfb=mem).</li><li>The 195-message point from Step A sits in levers.csv (not repeated here).</li></ul></section>
 <footer>Data: compression_study/presets/runs/sweep_20261003T203525Z (grid.csv, grid_pjpg.csv, pi_grid.txt). Encoder: bm_cam_legacy #120 (bd6f38c); identical bytes on Mac and Pi.</footer>
 </main>
 <div id="fs" hidden role="dialog" aria-modal="true" aria-label="Full-screen comparison">

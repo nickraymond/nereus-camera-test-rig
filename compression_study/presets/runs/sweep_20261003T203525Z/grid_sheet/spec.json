@@ -32,6 +32,11 @@
    "note": "Production rc_raw_jxl CLI on nereus002 (bm #120 bd6f38c), frame 0, an extra 700 MiB address-space cap and nice 10; recorder_web / workbench / field_power_log kept running."
   },
   {
+   "title": "The full frame with the seven ROIs",
+   "figure": "img/frame_rois.jpg",
+   "note": "Frame 0, 4608×2592 RAW rendered like the sliders, DOWNSCALED 2× to 2304×1296 for display (a static picture; the crops below open at full resolution)."
+  },
+  {
    "title": "Every cell, both efforts (medians of 3 frames)",
    "note": "✓ = the setting shown in the heat map. ΔE vs RAW = the 10 usable card patches with no fit (the clean compression number). ΔE card = vs the card truth after a 3×3 fit on the same 10 patches (flattering; the RAW itself scores 1.17–1.42). Today's pjpg: card SSIM 0.935, ΔE card 2.69, acutance 1.04.",
    "table": {
@@ -771,6 +776,62 @@
    }
   },
   {
+   "title": "Whole crop · 1600×900 — RAW vs nrjxl at each budget",
+   "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop's full resolution, then 1:1 and beyond.",
+   "before": "img/1600x900_ref.webp",
+   "before_label": "RAW reference",
+   "afters": [
+    {
+     "label": "180 msgs · e7 d 3.65 · 50.1 kB · PASS",
+     "image": "img/1600x900_180_e7.webp"
+    },
+    {
+     "label": "250 msgs · e7 d 2.34 · 69.2 kB · PASS",
+     "image": "img/1600x900_250_e7.webp"
+    },
+    {
+     "label": "500 msgs · e7 d 0.90 · 138.6 kB · PASS",
+     "image": "img/1600x900_500_e7.webp"
+    }
+   ]
+  },
+  {
+   "title": "Whole crop · 2304×1296 — RAW vs nrjxl at each budget",
+   "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop's full resolution, then 1:1 and beyond.",
+   "before": "img/2304x1296_ref.webp",
+   "before_label": "RAW reference",
+   "afters": [
+    {
+     "label": "180 msgs · e7 d 9.62 · 50.8 kB · WARN",
+     "image": "img/2304x1296_180_e7.webp"
+    },
+    {
+     "label": "250 msgs · e7 d 6.38 · 71.2 kB · PASS",
+     "image": "img/2304x1296_250_e7.webp"
+    },
+    {
+     "label": "500 msgs · e7 d 2.82 · 139.8 kB · PASS",
+     "image": "img/2304x1296_500_e7.webp"
+    }
+   ]
+  },
+  {
+   "title": "Whole crop · 3072×1728 — RAW vs nrjxl at each budget",
+   "note": "The entire decoded ROI, frame 0. Pick the budget with the chips. The inline view is DOWNSCALED to fit the page; click (or Enter) for full screen at the crop's full resolution, then 1:1 and beyond. Not shown: 180 msgs (does not fit).",
+   "before": "img/3072x1728_ref.webp",
+   "before_label": "RAW reference",
+   "afters": [
+    {
+     "label": "250 msgs · e7 d 10.34 · 70.7 kB · WARN",
+     "image": "img/3072x1728_250_e7.webp"
+    },
+    {
+     "label": "500 msgs · e5 d 4.80 · 141.0 kB · PASS",
+     "image": "img/3072x1728_500_e5.webp"
+    }
+   ]
+  },
+  {
    "title": "180 msgs · 1600×900 · card + checker — PASS",
    "note": "e7 · d 3.65 · 50,098 B · 174 msgs · card SSIM 0.972 (pjpg 0.935) · texture SSIM 0.971 · acutance 1.02 (pjpg 1.04) · ΔE vs RAW 0.35 · ΔE card 1.46 (pjpg 2.69) · Zero 9.7 s · 41 MiB · detail PASS · colour PASS. Native pixels; full screen zooms to 1:1 and beyond.",
    "before": "img/1600x900_ref_card.webp",
@@ -980,7 +1041,7 @@
   }
  ],
  "notes": [
-  "Too heavy to show every ROI: the sliders show 1600×900, 2304×1296 and the largest Zero-feasible / passing ROI per budget (180: 1600×900, 2304×1296; 250: 1600×900, 2304×1296, 3072×1728; 500: 1600×900, 2304×1296, 3072×1728). Every cell's numbers are in the table.",
+  "Whole-crop views: 1600×900, 2304×1296 and 3072×1728 at every budget that fits, downscaled inline and full resolution in full screen. Zoomed views: the sliders show 1600×900, 2304×1296 and the largest Zero-feasible / passing ROI per budget (180: 1600×900, 2304×1296; 250: 1600×900, 2304×1296, 3072×1728; 500: 1600×900, 2304×1296, 3072×1728). Every cell's numbers are in the table.",
   "Slider: left = RAW reference, right = nrjxl decoded back to raw; both rendered by one function (bilinear demosaic, the camera's locked WB gains, clipped at sensor white, the RAW's own card matrix, sRGB). Nothing is upsampled on this sheet.",
   "Distances come from the Step C byte-target search (≤ 3 encodes, no quality floor here), with an exact bisection when the search ends without a fit below d 15.",
   "ΔE reliability: 10 of 13 card colour patches usable (glare / noise); RAW ΔE varies 1.17–1.42 across identical frames, so ΔE differences under ~0.3 are noise. Tag acutance uses 2 tags of ~32 px.",
