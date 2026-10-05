@@ -47,11 +47,13 @@ from nereus_camera_test_rig.color.raw_meter import (  # noqa: E402
     card_levels,
     card_reference,
     exposure_for_target,
+    gain_priority,
 )
 from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 
 SERIALS = {"n6": "020023000450433547373200", "ae3": "0829c14000000000"}  # nereus002
 MIN_GAIN_DB = 3.152157  # PAG7936 floor on both boards: 0 dB reads back as this (OQ-21)
+MAX_GAIN_DB = 24.0  # ASSUMPTION: the highest gain seen on these boards (AE stills, 24.08 dB)
 MAX_METER_SHOTS = 3
 # Gain moves in sensor steps (read back on the N6, 2026-09-28: asked 3.676 -> 3.522 dB, 4.18 ->
 # 4.22 dB), so its check only catches gross errors; the card-on-target check judges the result.
@@ -78,6 +80,9 @@ def main() -> int:
     ap.add_argument("--stops", type=float, nargs="+", default=[],
                     help="after the locked shot: a series at locked exposure x 2^stop")
     ap.add_argument("--repeat", type=int, default=1, help="frames per --stops entry")
+    ap.add_argument("--max-exposure-us", type=int, default=0,
+                    help="gain priority (Nick's ISO-100 rule): keep the gain floor and lengthen "
+                         "the exposure up to this cap, then raise gain (0 = no cap)")
     args = ap.parse_args()
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -107,6 +112,16 @@ def main() -> int:
         else:
             raise RuntimeError(f"card still clipped after {MAX_METER_SHOTS} meter shots")
 
+        if args.max_exposure_us and settings["exposure_us"] > args.max_exposure_us:
+            # Lowest gain first, exposure up to the motion cap, then gain (Nick, 2026-10-05).
+            gp = gain_priority(settings["exposure_us"], args.max_exposure_us,
+                               10 ** (MIN_GAIN_DB / 20), 10 ** (MAX_GAIN_DB / 20))
+            summary["gain_priority"] = {**gp, "gain_db": round(20 * math.log10(gp["gain"]), 3)}
+            print(f"exposure {settings['exposure_us']} us > cap {args.max_exposure_us} us: "
+                  f"exposure at the cap, gain {MIN_GAIN_DB:.2f} -> "
+                  f"{summary['gain_priority']['gain_db']:.2f} dB")
+            settings = {**settings, "exposure_us": gp["exposure_us"],
+                        "gain_db": summary["gain_priority"]["gain_db"]}
         side = shot(cam, out / "locked.bayer", settings)
         if side["exposure_us"] < (1 - TOL_EXPOSURE) * settings["exposure_us"]:
             # Still clamped (past the board's ~2 s frame-time limit, or a service without the
@@ -116,7 +131,7 @@ def main() -> int:
             print(f"exposure clamped at {side['exposure_us']} us (asked "
                   f"{settings['exposure_us']}): +{deficit_db:.2f} dB gain instead")
             settings = {**settings, "exposure_us": side["exposure_us"],
-                        "gain_db": round(MIN_GAIN_DB + deficit_db, 3)}
+                        "gain_db": round(settings["gain_db"] + deficit_db, 3)}
             side = shot(cam, out / "locked.bayer", settings)
         ref = card_reference(card_levels(read_openmv_bayer(out / "locked.bayer"), card))
         series = []

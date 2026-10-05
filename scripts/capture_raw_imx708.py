@@ -49,6 +49,7 @@ DNG_HEADER_MAX = 2_000_000  # tags + embedded thumbnail, bytes
 
 
 MAX_CARD_PROBES = 3
+MAX_GAIN = 16.0  # IMX708 analogue gain ceiling (libcamera AnalogueGain range 1.0-16.0)
 TOL_TARGET = 0.15  # card-on-target check at stop 0, relative
 
 
@@ -100,6 +101,9 @@ def main(argv=None) -> int:
     ap.add_argument("--repeat", type=int, default=1,
                     help="frames per stop (S4 noise / repeatability); >1 names them stop_<s>_r<n>")
     ap.add_argument("--gain", type=float, default=1.0, help="locked analogue gain")
+    ap.add_argument("--max-shutter-us", type=int, default=0,
+                    help="gain priority (Nick's ISO-100 rule): keep the lowest gain and lengthen "
+                         "the shutter up to this cap, then raise gain (0 = no cap)")
     ap.add_argument("--mode", default="4608:2592", help="sensor mode W:H (full res default)")
     ap.add_argument("--meter-ms", type=int, default=2000, help="metering shot settle time")
     ap.add_argument("--shot-ms", type=int, default=1000, help="locked shot settle time")
@@ -166,6 +170,16 @@ def main(argv=None) -> int:
         raise SystemExit(f"FAIL: card still clipped after {MAX_CARD_PROBES} probes")
     if not close(args.gain, gain, "AnalogueGain"):
         print(f"-- gain {args.gain:g} not available: the sensor applies {gain:g}; using it")
+    gain_priority = None
+    if args.max_shutter_us and exposure_us > args.max_shutter_us:
+        # Lowest gain first, shutter up to the motion cap, then gain (Nick, 2026-10-05).
+        need = gain * exposure_us / args.max_shutter_us
+        gain_priority = {"wanted_us": round(exposure_us), "cap_us": args.max_shutter_us,
+                         "gain_floor": gain, "gain_needed": round(need, 4),
+                         "gain_clamped": need > MAX_GAIN}
+        print(f"-- shutter {exposure_us:.0f} us > cap {args.max_shutter_us} us: shutter at the "
+              f"cap, gain {gain:.4f} -> {min(need, MAX_GAIN):.4f}")
+        exposure_us, gain = float(args.max_shutter_us), min(need, MAX_GAIN)
 
     shots, ok_all = [], True
     series = [(stop, n) for stop in args.stops for n in range(args.repeat)]
@@ -207,7 +221,9 @@ def main(argv=None) -> int:
                "mode": args.mode, "gain_requested": args.gain, "gain_applied": gain,
                "meter": {k: m.get(k) for k in ("ExposureTime", "AnalogueGain", "DigitalGain",
                                                "ColourGains", "LensPosition", "Lux")},
-               "locked_exposure_us_at_stop0": round(exposure_us), "shots": shots,
+               "locked_exposure_us_at_stop0": round(exposure_us), "locked_gain": gain,
+               "max_shutter_us": args.max_shutter_us or None, "gain_priority": gain_priority,
+               "shots": shots,
                "card": str(args.card) if args.card else None, "target": args.target,
                "card_metering": card_metering,
                "passed": ok_all}

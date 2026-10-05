@@ -61,3 +61,9 @@ def test_load_lock_rejects_other_json(tmp_path):
     p.write_text("{}")
     with pytest.raises(ValueError):
         load_lock(p)
+
+
+def test_imx708_override_prefers_the_gain_priority_gain():
+    s = {**IMX_SUMMARY, "locked_exposure_us_at_stop0": 16667, "locked_gain": 5.79}
+    assert imx708_override(s)["camera_controls"]["exposure"] == {"shutter_us": 16667,
+                                                                 "analogue_gain": 5.79}

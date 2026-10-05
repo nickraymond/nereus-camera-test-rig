@@ -66,6 +66,9 @@ def build_parser() -> argparse.ArgumentParser:
                          help="brightest card channel as a fraction of full scale")
     p_meter.add_argument("--cameras", default=None,
                          help="comma-separated camera subset (default: all enabled)")
+    p_meter.add_argument("--max-shutter-us", type=int, default=16667,
+                         help="gain priority: lowest gain, shutter up to this cap (default 1/60 s),"
+                              " then gain; 0 = no cap")
     p_meter.set_defaults(func=_cmd_meter)
 
     return parser
@@ -193,7 +196,8 @@ def _cmd_meter(args: argparse.Namespace) -> int:
         cams = {c: cams[c] for c in want}
     try:
         lock = meter_cameras(cams, Path(args.out), card=Path(args.card) if args.card else
-                             DEFAULT_CARD, target=args.target)
+                             DEFAULT_CARD, target=args.target,
+                             max_shutter_us=args.max_shutter_us)
     except FileExistsError:
         print(f"[nereus-rig] {args.out} exists: metering never overwrites", file=sys.stderr)
         return 2

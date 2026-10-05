@@ -4,7 +4,10 @@
 bright and unclipped at every depth, so one metering step per depth locks exposure / gain for
 all three cameras, and every capture set at that depth reuses the lock.
 
-Metering reuses the two proven recipes unchanged (CLAUDE.md §3), each in its own process:
+Exposure rule (Nick, 2026-10-05, "ISO 100"): the lowest analogue gain first, the shutter
+lengthened up to a motion cap (default 1/60 s), and only then more gain — so the red channel
+under water is not lifted with gain noise. Metering reuses the two proven recipes (CLAUDE.md
+§3), each in its own process, with that cap passed in:
 
 * IMX708: ``scripts/capture_raw_imx708.py --card … --stops 0`` — meter, probe RAW, card on the
   DNG, exposure scaled so the card's brightest channel lands on ``target``; locks shutter,
@@ -33,6 +36,7 @@ from typing import Any, Optional
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CARD = ROOT / "configs" / "cards" / "nereus_v1.yaml"
 DEFAULT_TARGET = 0.80
+DEFAULT_MAX_SHUTTER_US = 16667  # 1/60 s: Nick's motion limit example for the gain-priority rule
 METER_TIMEOUT_S = 300
 
 
@@ -53,7 +57,8 @@ def imx708_override(summary: dict[str, Any]) -> dict[str, Any]:
     red, blue = (float(v) for v in meter["ColourGains"])
     controls: dict[str, Any] = {
         "exposure": {"shutter_us": int(summary["locked_exposure_us_at_stop0"]),
-                     "analogue_gain": float(summary["gain_applied"])},
+                     "analogue_gain": float(summary.get("locked_gain")
+                                            or summary["gain_applied"])},
         "white_balance": {"red_gain": red, "blue_gain": blue},
     }
     if meter.get("LensPosition") is not None:
@@ -77,16 +82,20 @@ def _card_level(summary: dict[str, Any]) -> Optional[float]:
 
 
 def _meter_command(name: str, camera_cfg: dict[str, Any], out: Path, card: Path,
-                   target: float, python: str) -> tuple[list[str], Path]:
-    """(command, folder whose capture_raw.json to read) for one camera."""
+                   target: float, python: str, max_shutter_us: int = 0
+                   ) -> tuple[list[str], Path]:
+    """(command, folder whose capture_raw.json to read) for one camera. ``max_shutter_us``
+    turns on the gain-priority rule (lowest gain, shutter up to the cap, then gain)."""
     driver = camera_cfg.get("driver")
     if driver == "imx708":
         return ([python, str(ROOT / "scripts" / "capture_raw_imx708.py"), "--card", str(card),
-                 "--target", str(target), "--stops", "0", "--out", str(out)], out)
+                 "--target", str(target), "--stops", "0", "--out", str(out),
+                 "--max-shutter-us", str(int(max_shutter_us or 0))], out)
     if driver == "openmv_usb":
         cmd = [python, str(ROOT / "scripts" / "capture_raw_openmv.py"),
                "--board", str(camera_cfg["board"]), "--card", str(card),
-               "--target", str(target), "--out", str(out)]
+               "--target", str(target), "--out", str(out),
+               "--max-exposure-us", str(int(max_shutter_us or 0))]
         if camera_cfg.get("serial_number"):
             cmd += ["--serial", str(camera_cfg["serial_number"])]
         return cmd, out
@@ -100,6 +109,7 @@ def _find_summary(folder: Path) -> Optional[Path]:
 
 def meter_cameras(cameras_cfg: dict[str, dict[str, Any]], out_dir: Path, *,
                   card: Path = DEFAULT_CARD, target: float = DEFAULT_TARGET,
+                  max_shutter_us: int = DEFAULT_MAX_SHUTTER_US,
                   python: str = sys.executable, timeout_s: float = METER_TIMEOUT_S,
                   log=print) -> dict[str, Any]:
     """Meter every camera in ``cameras_cfg`` (name → camera config) one after the other and
@@ -109,12 +119,16 @@ def meter_cameras(cameras_cfg: dict[str, dict[str, Any]], out_dir: Path, *,
     out_dir.mkdir(parents=True, exist_ok=False)  # never overwrite a prior metering
     lock: dict[str, Any] = {
         "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "card": str(card), "target": target, "folder": str(out_dir), "cameras": {}}
+        "card": str(card), "target": target, "folder": str(out_dir),
+        "rule": ("gain priority: lowest analogue gain, shutter up to max_shutter_us, then gain"
+                 if max_shutter_us else "gain floor, shutter only (no cap)"),
+        "max_shutter_us": max_shutter_us or None, "cameras": {}}
     for name, cfg in cameras_cfg.items():
         entry: dict[str, Any] = {"locked": False}
         t0 = time.monotonic()
         try:
-            cmd, folder = _meter_command(name, cfg, out_dir / name, card, target, python)
+            cmd, folder = _meter_command(name, cfg, out_dir / name, card, target, python,
+                                         max_shutter_us)
             shown = " ".join(Path(c).name if c.endswith(".py") else c for c in cmd[1:])
             log(f"[meter] {name}: {shown}")
             proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
@@ -130,6 +144,7 @@ def meter_cameras(cameras_cfg: dict[str, dict[str, Any]], out_dir: Path, *,
                 entry["summary"] = str(summary_path.relative_to(out_dir))
                 entry["passed"] = bool(summary.get("passed"))
                 entry["card_level"] = _card_level(summary)
+                entry["gain_priority"] = summary.get("gain_priority")
                 if summary.get("error"):
                     entry["reason"] = summary["error"]
                 else:
