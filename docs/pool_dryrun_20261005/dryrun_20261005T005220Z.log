@@ -1,0 +1,14 @@
+storage: 73.2 GB free, 10 sets x 27.0 MB = 0.27 GB (+1.0 GB margin) -> OK
+HIL soak -> /home/pi/nereus-rig-pool/results/pool/20261005T005220Z (10 sets, 30 s apart)
+power: UPS every 2.0 s -> power.csv
+[2026-10-05T00:52:20+00:00] set 1/10: exit 0 in 42.3 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 50.464 °C · 73.17 GB free · 3.02 W avg, 3.87 W max during capture
+[2026-10-05T00:53:52+00:00] set 2/10: exit 0 in 43.6 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 50.464 °C · 73.14 GB free · 2.97 W avg, 3.83 W max during capture
+[2026-10-05T00:55:23+00:00] set 3/10: exit 0 in 43.7 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.54 °C · 73.11 GB free · 3.00 W avg, 4.04 W max during capture
+[2026-10-05T00:56:55+00:00] set 4/10: exit 0 in 43.4 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.54 °C · 73.08 GB free · 2.97 W avg, 3.69 W max during capture
+[2026-10-05T00:58:27+00:00] set 5/10: exit 0 in 44.1 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.54 °C · 73.05 GB free · 2.98 W avg, 3.79 W max during capture
+[2026-10-05T00:59:57+00:00] set 6/10: exit 0 in 44.3 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.002 °C · 73.02 GB free · 2.96 W avg, 3.63 W max during capture
+[2026-10-05T01:01:30+00:00] set 7/10: exit 0 in 43.1 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.54 °C · 72.99 GB free · 3.00 W avg, 4.06 W max during capture
+[2026-10-05T01:02:59+00:00] set 8/10: exit 0 in 43.8 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.54 °C · 72.96 GB free · 2.98 W avg, 3.81 W max during capture
+[2026-10-05T01:04:31+00:00] set 9/10: exit 0 in 44.5 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 51.54 °C · 72.93 GB free · 3.01 W avg, 3.94 W max during capture
+[2026-10-05T01:06:03+00:00] set 10/10: exit 0 in 44.7 s · imx708 ok 24.0 MB card n/a · openmv_n6 ok 1.0 MB card n/a · openmv_ae3 ok 1.0 MB card n/a · depth None m (fake) · cpu 52.078 °C · 72.9 GB free · 3.02 W avg, 3.95 W max during capture
+HIL soak done: 10 cycles in /home/pi/nereus-rig-pool/results/pool/20261005T005220Z

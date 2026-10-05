@@ -1,0 +1,524 @@
+{
+  "analyses": [],
+  "cameras": [
+    {
+      "board": null,
+      "device_id": null,
+      "driver": "imx708",
+      "firmware": null,
+      "platform": "raspberry_pi",
+      "sensor": "imx708",
+      "serial_number": null
+    },
+    {
+      "board": "n6",
+      "device_id": "openmv-n6-001",
+      "driver": "openmv_usb",
+      "firmware": "1.28.0",
+      "platform": "openmv",
+      "sensor": "PAG7936",
+      "serial_number": "020023000450433547373200"
+    },
+    {
+      "board": "ae3",
+      "device_id": "openmv-ae3-001",
+      "driver": "openmv_usb",
+      "firmware": "1.28.0",
+      "platform": "openmv",
+      "sensor": "PAG7936",
+      "serial_number": "0829c14000000000"
+    }
+  ],
+  "captures": [
+    {
+      "camera": {
+        "board": null,
+        "device_id": null,
+        "driver": "imx708",
+        "firmware": null,
+        "platform": "raspberry_pi",
+        "sensor": "imx708",
+        "serial_number": null
+      },
+      "duration_seconds": 3.372949997894466,
+      "error": null,
+      "height": 2592,
+      "image_format": "jpeg",
+      "output_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/imx708/imx708_image_20261005T005657Z.jpg",
+      "request": {
+        "kind": "image",
+        "settings": {
+          "camera_controls": {
+            "enabled": false,
+            "exposure": {
+              "analogue_gain": 1.122807,
+              "enabled": false,
+              "shutter_us": 100000
+            },
+            "focus": {
+              "enabled": false,
+              "lens_position": 0.6846,
+              "mode": "manual",
+              "range": "normal",
+              "speed": "normal"
+            },
+            "image_processing": {
+              "enabled": false
+            },
+            "white_balance": {
+              "blue_gain": 1.7648,
+              "enabled": false,
+              "mode": "auto",
+              "red_gain": 2.3697
+            }
+          },
+          "capture_backend": "auto",
+          "crop": null,
+          "raw": false,
+          "resize": null,
+          "source": {
+            "height": 2592,
+            "jpeg_quality": 95,
+            "width": 4608
+          },
+          "timeout_seconds": 30,
+          "warmup_ms": 2000
+        },
+        "timeout_seconds": null,
+        "warmup_frames": null
+      },
+      "sensor_metadata": {
+        "AfState": 0,
+        "AnalogueGain": 1.122807,
+        "ColourGains": [
+          2.3697,
+          1.7648
+        ],
+        "ColourTemperature": 5543,
+        "DigitalGain": 1.000179,
+        "ExposureTime": 99982,
+        "FocusFoM": 9787,
+        "FrameDuration": 101244,
+        "LensPosition": 0.6846,
+        "Lux": 27.226561,
+        "SensorTemperature": 33.0
+      },
+      "sha256": "d6da3aef837ef963f303a67d7007fbcdb8c19589e07b4a81a3ad3ee60c546c93",
+      "size_bytes": 1593621,
+      "status": "completed",
+      "width": 4608
+    },
+    {
+      "camera": {
+        "board": "n6",
+        "device_id": "openmv-n6-001",
+        "driver": "openmv_usb",
+        "firmware": "1.28.0",
+        "platform": "openmv",
+        "sensor": "PAG7936",
+        "serial_number": "020023000450433547373200"
+      },
+      "duration_seconds": 5.956134916981682,
+      "error": null,
+      "height": 800,
+      "image_format": "jpeg",
+      "output_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/openmv_n6/openmv_n6_image_20261005T005657Z.jpg",
+      "request": {
+        "kind": "image",
+        "settings": {
+          "board": "n6",
+          "device_id": null,
+          "exposure_us": 8000,
+          "firmware": null,
+          "gain_db": 6.0,
+          "image": {
+            "framesize": "native",
+            "jpeg_quality": 90,
+            "pixel_format": "rgb565",
+            "warmup_frames": 10
+          },
+          "raw": false,
+          "reset_before_capture": true,
+          "video": {
+            "enabled": false
+          }
+        },
+        "timeout_seconds": null,
+        "warmup_frames": null
+      },
+      "sensor_metadata": {
+        "exposure_us": 8248,
+        "framesize": "HD",
+        "gain_db": 24.0824,
+        "jpeg_quality": 90,
+        "mount_rotation_deg": 0,
+        "pixel_format": "RGB565"
+      },
+      "sha256": "5a77fa66df07dd517a99399c012f8b4d5a72aab8d9a599233a778d9c4af55925",
+      "size_bytes": 353865,
+      "status": "completed",
+      "width": 1280
+    },
+    {
+      "camera": {
+        "board": "ae3",
+        "device_id": "openmv-ae3-001",
+        "driver": "openmv_usb",
+        "firmware": "1.28.0",
+        "platform": "openmv",
+        "sensor": "PAG7936",
+        "serial_number": "0829c14000000000"
+      },
+      "duration_seconds": 4.942368254996836,
+      "error": null,
+      "height": 800,
+      "image_format": "jpeg",
+      "output_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/openmv_ae3/openmv_ae3_image_20261005T005657Z.jpg",
+      "request": {
+        "kind": "image",
+        "settings": {
+          "board": "ae3",
+          "device_id": "openmv-ae3-001",
+          "exposure_us": 12000,
+          "firmware": "1.25.0-preview",
+          "gain_db": 6.0,
+          "image": {
+            "framesize": "HD",
+            "jpeg_quality": 90,
+            "pixel_format": "RGB565",
+            "warmup_ms": 2000
+          },
+          "raw": false,
+          "reset_before_capture": true,
+          "video": {
+            "enabled": false
+          }
+        },
+        "timeout_seconds": null,
+        "warmup_frames": null
+      },
+      "sensor_metadata": {
+        "exposure_us": 16648,
+        "framesize": "HD",
+        "gain_db": 22.278868,
+        "jpeg_quality": 90,
+        "mount_rotation_deg": 0,
+        "pixel_format": "RGB565"
+      },
+      "sha256": "d7729db68244388a67ec0393d89f11fe5791d940b09ab0ab752e8c8cb8389ccb",
+      "size_bytes": 229797,
+      "status": "completed",
+      "width": 1280
+    }
+  ],
+  "environment_label": "pool",
+  "errors": [],
+  "experiment_id": "exp_20261005T005657Z_pool_raw",
+  "experiment_type": "pool_raw",
+  "exposure_lock": {
+    "cameras": {
+      "imx708": {
+        "locked": true,
+        "settings": {
+          "camera_controls": {
+            "exposure": {
+              "analogue_gain": 1.122807,
+              "shutter_us": 100000
+            },
+            "focus": {
+              "lens_position": 0.6846,
+              "mode": "manual"
+            },
+            "white_balance": {
+              "blue_gain": 1.7648,
+              "red_gain": 2.3697
+            }
+          }
+        }
+      },
+      "openmv_ae3": {
+        "locked": true,
+        "settings": {
+          "exposure_us": 12000,
+          "gain_db": 6.0
+        }
+      },
+      "openmv_n6": {
+        "locked": true,
+        "settings": {
+          "exposure_us": 8000,
+          "gain_db": 6.0
+        }
+      }
+    },
+    "card": null,
+    "created_utc": "2026-10-05T00:52:00Z",
+    "folder": "manual_lock_passthrough",
+    "note": "HAND-MADE lock for the pass-through test only (card not meterable at the 1.5 m bench framing); values are arbitrary but plausible",
+    "target": null
+  },
+  "operator_notes": "DRY RUN in air on the bench, unsealed, no housing; hand-made lock (card not meterable at 1.5 m) \u00b7 hil_soak 20261005T005220Z set 4",
+  "raw_captures": [
+    {
+      "camera": {
+        "board": null,
+        "device_id": null,
+        "driver": "imx708",
+        "firmware": null,
+        "platform": "raspberry_pi",
+        "sensor": "imx708",
+        "serial_number": null
+      },
+      "duration_seconds": 3.5578453229973093,
+      "error": null,
+      "height": 2592,
+      "image_format": "dng",
+      "output_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/imx708/imx708_raw_20261005T005657Z.dng",
+      "request": {
+        "kind": "image",
+        "settings": {
+          "camera_controls": {
+            "enabled": false,
+            "exposure": {
+              "analogue_gain": 1.122807,
+              "enabled": false,
+              "shutter_us": 100000
+            },
+            "focus": {
+              "enabled": false,
+              "lens_position": 0.6846,
+              "mode": "manual",
+              "range": "normal",
+              "speed": "normal"
+            },
+            "image_processing": {
+              "enabled": false
+            },
+            "white_balance": {
+              "blue_gain": 1.7648,
+              "enabled": false,
+              "mode": "auto",
+              "red_gain": 2.3697
+            }
+          },
+          "capture_backend": "auto",
+          "crop": null,
+          "raw": false,
+          "resize": null,
+          "source": {
+            "height": 2592,
+            "jpeg_quality": 95,
+            "width": 4608
+          },
+          "timeout_seconds": 30,
+          "warmup_ms": 2000
+        },
+        "timeout_seconds": null,
+        "warmup_frames": null
+      },
+      "sensor_metadata": {
+        "AfState": 0,
+        "AnalogueGain": 1.122807,
+        "ColourGains": [
+          2.3697,
+          1.7648
+        ],
+        "ColourTemperature": 5543,
+        "DigitalGain": 1.000179,
+        "ExposureTime": 99982,
+        "FocusFoM": 9691,
+        "FrameDuration": 101244,
+        "LensPosition": 0.6846,
+        "Lux": 27.184393,
+        "SensorTemperature": 36.0,
+        "jpeg_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/imx708/imx708_raw_20261005T005657Z.jpg"
+      },
+      "sha256": "30dd5ebdc03f260d2d0d63bd64cb712171c8f973b43ccc11d1367a70edc0de62",
+      "size_bytes": 24029068,
+      "status": "completed",
+      "width": 4608
+    },
+    {
+      "camera": {
+        "board": "n6",
+        "device_id": "openmv-n6-001",
+        "driver": "openmv_usb",
+        "firmware": "1.28.0",
+        "platform": "openmv",
+        "sensor": "PAG7936",
+        "serial_number": "020023000450433547373200"
+      },
+      "duration_seconds": 2.4481376479379833,
+      "error": null,
+      "height": 800,
+      "image_format": "bayer",
+      "output_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/openmv_n6/openmv_n6_raw_20261005T005657Z.bayer",
+      "request": {
+        "kind": "image",
+        "settings": {
+          "board": "n6",
+          "device_id": null,
+          "exposure_us": 8000,
+          "firmware": null,
+          "gain_db": 6.0,
+          "image": {
+            "framesize": "native",
+            "jpeg_quality": 90,
+            "pixel_format": "rgb565",
+            "warmup_frames": 10
+          },
+          "raw": false,
+          "reset_before_capture": true,
+          "video": {
+            "enabled": false
+          }
+        },
+        "timeout_seconds": null,
+        "warmup_frames": null
+      },
+      "sensor_metadata": {
+        "bits": 8,
+        "black_level": 0,
+        "cfa": "BGGR",
+        "exposure_us": 8000,
+        "frame_time_us": null,
+        "framesize": "HD",
+        "gain_db": 6.0206,
+        "height": 800,
+        "isp_rgb_gain_db": [
+          3.194017,
+          0.0,
+          4.217066
+        ],
+        "metered": {
+          "exposure_us": 8248,
+          "gain_db": 24.0824
+        },
+        "mount_rotation_deg": 0,
+        "requested": {
+          "exposure_us": 8000,
+          "gain_db": 6.0
+        },
+        "timing_ms": {
+          "lock_snapshot": 21,
+          "meter": 2020,
+          "send": 82,
+          "sha256": 90
+        },
+        "white_level": 255,
+        "width": 1280
+      },
+      "sha256": "c63f9ab886c41c1353dd6055691c44117d4939c945529dab1531448987940ccd",
+      "size_bytes": 1024000,
+      "status": "completed",
+      "width": 1280
+    },
+    {
+      "camera": {
+        "board": "ae3",
+        "device_id": "openmv-ae3-001",
+        "driver": "openmv_usb",
+        "firmware": "1.28.0",
+        "platform": "openmv",
+        "sensor": "PAG7936",
+        "serial_number": "0829c14000000000"
+      },
+      "duration_seconds": 2.5225626210449263,
+      "error": null,
+      "height": 800,
+      "image_format": "bayer",
+      "output_path": "/home/pi/nereus-rig-pool/results/pool/20261005T005220Z/2026-10-05/exp_20261005T005657Z_pool_raw/captures/openmv_ae3/openmv_ae3_raw_20261005T005657Z.bayer",
+      "request": {
+        "kind": "image",
+        "settings": {
+          "board": "ae3",
+          "device_id": "openmv-ae3-001",
+          "exposure_us": 12000,
+          "firmware": "1.25.0-preview",
+          "gain_db": 6.0,
+          "image": {
+            "framesize": "HD",
+            "jpeg_quality": 90,
+            "pixel_format": "RGB565",
+            "warmup_ms": 2000
+          },
+          "raw": false,
+          "reset_before_capture": true,
+          "video": {
+            "enabled": false
+          }
+        },
+        "timeout_seconds": null,
+        "warmup_frames": null
+      },
+      "sensor_metadata": {
+        "bits": 8,
+        "black_level": 0,
+        "cfa": "BGGR",
+        "exposure_us": 12000,
+        "frame_time_us": 17000,
+        "framesize": "HD",
+        "gain_db": 6.0206,
+        "height": 800,
+        "isp_rgb_gain_db": [
+          null,
+          0.0,
+          null
+        ],
+        "metered": {
+          "exposure_us": 16648,
+          "gain_db": 22.278868
+        },
+        "mount_rotation_deg": 0,
+        "requested": {
+          "exposure_us": 12000,
+          "gain_db": 6.0
+        },
+        "timing_ms": {
+          "lock_snapshot": 79,
+          "meter": 2014,
+          "send": 45,
+          "sha256": 146
+        },
+        "white_level": 255,
+        "width": 1280
+      },
+      "sha256": "1199ec710c2663c1ffa769181f1d9d1aad26a683e99fd188d126e598d3b8fd4b",
+      "size_bytes": 1024000,
+      "status": "completed",
+      "width": 1280
+    }
+  ],
+  "sensors": {
+    "depth_end": {
+      "depth_m": null,
+      "error": null,
+      "ok": true,
+      "raw": {
+        "read_seconds": 0.0
+      },
+      "source": "fake",
+      "utc": "2026-10-05T00:57:39.191762Z",
+      "water_temp_c": null
+    },
+    "depth_info": {
+      "interface": null,
+      "model": null,
+      "note": "placeholder: no depth sensor chosen yet (pool spec \u00a79)",
+      "source": "fake"
+    },
+    "depth_start": {
+      "depth_m": null,
+      "error": null,
+      "ok": true,
+      "raw": {
+        "read_seconds": 0.0
+      },
+      "source": "fake",
+      "utc": "2026-10-05T00:56:57.079088Z",
+      "water_temp_c": null
+    }
+  },
+  "timestamp": "20261005T005657Z",
+  "warnings": []
+}

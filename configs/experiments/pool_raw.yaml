@@ -32,5 +32,5 @@ exposure:                         # §5.2: meter once per depth with `nereus-rig
   target: 0.80                    # brightest card channel, fraction of full scale
 
 storage:                          # §5.5: checked before the loop starts
-  est_mb_per_set: 27              # IMX708 DNG ~24 MB + JPEGs + 2 x 1 MB Bayer (S3 demo: 26 MB)
+  est_mb_per_set: 29              # measured: 286 MB for 10 sets in the 2026-10-05 bench dry run
   margin_gb: 1.0                  # refuse to start with less than this left after the run

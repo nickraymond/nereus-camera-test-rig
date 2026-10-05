@@ -1,0 +1,16 @@
+{
+ "started_utc": "20261005T005220Z",
+ "interval_min": 5.0,
+ "hours": 12.0,
+ "config": "configs/rig.example.yaml",
+ "command": "experiment --raw --no-analysis",
+ "profile": "configs/experiments/pool_raw.yaml",
+ "sets": 10,
+ "gap_s": 30,
+ "type": "pool_raw",
+ "env": "pool",
+ "exposure_lock": "results/pool/manual_lock_passthrough/exposure_lock.json",
+ "depth": "fake",
+ "card_check": true,
+ "notes": "DRY RUN in air on the bench, unsealed, no housing; hand-made lock (card not meterable at 1.5 m)"
+}
