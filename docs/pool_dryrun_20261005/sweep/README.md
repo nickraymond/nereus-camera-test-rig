@@ -58,3 +58,11 @@ floor). Records only; the 15 RAWs per run (~130 MB) stay on nereus002 under
   - Sheet v5 at the same URL (https://claude.ai/artifact/Cf6WfxtP3s3JfnoVf2bWyy). Keepable files
     in ~/Downloads: `nereus002_exposure_sweep_20261004_v4.html`,
     `nereus002_exposure_sweep_20261004.html` (v3) and `nereus002_raw_diagnostic_20261004.html`.
+  - Pi pick fix (`run7_rescore_pi.json`). At capture the Pi's IMX708 pick was 1/30 s: it could
+    not locate the card at ~1 m on its decimated frame, and its ROI misses the white patch.
+    - New rule: when the card is located, a frame whose white or light-grey patch clips in any
+      RAW channel (≥ white − 1 % of range, > 1 % of the patch) is ineligible. The Pi also
+      searches for the card inside the ROI at near-full resolution.
+    - Re-scored on nereus002 from the stored RAWs (`scripts/rescore_sweep.py`, no new
+      captures; 86 s, 172 MB peak): IMX708 1/60 s, AE3 1/500 s, N6 1/250 s. These match the
+      Mac picks. The N6 card is not located (tags 0 and 2), so the N6 clip test is the ROI only.

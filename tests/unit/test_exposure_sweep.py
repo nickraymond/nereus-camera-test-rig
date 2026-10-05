@@ -4,7 +4,7 @@ the capture side is verified on nereus002)."""
 import numpy as np
 
 from nereus_camera_test_rig.capture.coordinator import DEFAULT_SWEEP_SHUTTERS_US, sweep_settings
-from nereus_camera_test_rig.color.exposure_sweep import pick, score_frame
+from nereus_camera_test_rig.color.exposure_sweep import _patch_clip, pick, score_frame
 from nereus_camera_test_rig.color.raw_io import RawFrame
 
 
@@ -107,3 +107,30 @@ def test_per_camera_ladder_and_repeats():
     ae3 = sweep_settings({}, o, "openmv_ae3")
     assert ae3["shutters_us"] == [250, 500] and ae3["repeats"] == 3
     assert sweep_settings({}, o, "imx708")["shutters_us"] == [4000, 8000]
+
+
+def test_clipped_white_patch_loses_even_when_the_roi_is_not_clipped():
+    """Run 7 (2026-10-05): at 1/30 s the IMX708's region was fine but the card's white patch
+    clipped; the pick must fall back to 1/60 s."""
+    rng = np.random.default_rng(1)
+    tex = np.kron(0.2 + 0.2 * (rng.random((40, 60)) > 0.5), np.ones((8, 8)))  # 320x480
+    white = np.array([[340.0, 40], [420, 40], [420, 120], [340, 120]])  # outside the ROI
+    roi = (0, 160, 300, 160)
+    frames = []
+    for shutter, scale in ((16667, 0.5), (33333, 1.0)):
+        img = tex * scale
+        img[40:120, 340:420] = min(1.0, 1.6 * scale)        # white patch: clips at 1/30 s
+        sc = score_frame(_mosaic(img), roi=roi, bright={"gray_white": white})
+        frames.append({"shutter_us": shutter, "scores": sc})
+    assert not frames[1]["scores"]["clipped"]               # the region alone would allow it
+    assert frames[1]["scores"]["white_clipped"] and not frames[0]["scores"]["white_clipped"]
+    p = pick(frames)
+    assert p["shutter_us"] == 16667 and "white/light grey clipped: [33333]" in p["reason"]
+
+
+def test_patch_clip_is_per_raw_channel():
+    m = np.full((40, 40), 500, np.uint16)
+    m[0::2, 0::2] = 1023                                    # only the R sites saturate
+    f = RawFrame(mosaic=m, cfa="RGGB", black_level=(64.0,) * 4, white_level=1023)
+    c = _patch_clip(f, np.array([[4.0, 4], [36, 4], [36, 36], [4, 36]]))
+    assert c["R"] == 1.0 and c["G"] == 0.0 and c["B"] == 0.0 and c["max"] == 1.0

@@ -1,0 +1,1328 @@
+{
+ "experiment": "exp_20261005T035837Z_pool_sweep",
+ "cameras": {
+  "imx708": {
+   "stored_pick_us": 33333,
+   "new_pick_us": 16667,
+   "seconds": 25.9,
+   "frames": [
+    {
+     "file": "imx708_raw_sweep00_20261005T035837Z.dng",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.42549654841423035,
+       "card": 0.48550742864608765
+      },
+      "fallback": "given roi",
+      "red_snr_global": 18.18,
+      "level_p995": 0.1585,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep01_20261005T035837Z.dng",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4253249168395996,
+       "card": 0.4872030019760132
+      },
+      "fallback": "given roi",
+      "red_snr_global": 18.35,
+      "level_p995": 0.1595,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep02_20261005T035837Z.dng",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4245169758796692,
+       "card": 0.48365476727485657
+      },
+      "fallback": "given roi",
+      "red_snr_global": 18.33,
+      "level_p995": 0.1593,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep03_20261005T035837Z.dng",
+     "shutter_us": 8000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.42608842253685,
+       "card": 0.48347222805023193
+      },
+      "fallback": "given roi",
+      "red_snr_global": 26.81,
+      "level_p995": 0.3186,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep04_20261005T035837Z.dng",
+     "shutter_us": 8000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.42528700828552246,
+       "card": 0.48427262902259827
+      },
+      "fallback": "given roi",
+      "red_snr_global": 26.87,
+      "level_p995": 0.3196,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep05_20261005T035837Z.dng",
+     "shutter_us": 8000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.42648249864578247,
+       "card": 0.4860747754573822
+      },
+      "fallback": "given roi",
+      "red_snr_global": 26.79,
+      "level_p995": 0.3196,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep06_20261005T035837Z.dng",
+     "shutter_us": 16667,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.42586785554885864,
+       "card": 0.48496800661087036
+      },
+      "fallback": "given roi",
+      "red_snr_global": 35.77,
+      "level_p995": 0.6656,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep07_20261005T035837Z.dng",
+     "shutter_us": 16667,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.42658790946006775,
+       "card": 0.48652327060699463
+      },
+      "fallback": "given roi",
+      "red_snr_global": 35.58,
+      "level_p995": 0.6648,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep08_20261005T035837Z.dng",
+     "shutter_us": 16667,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.427105575799942,
+       "card": 0.48376837372779846
+      },
+      "fallback": "given roi",
+      "red_snr_global": 35.42,
+      "level_p995": 0.6668,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "imx708_raw_sweep09_20261005T035837Z.dng",
+     "shutter_us": 33333,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.409927099943161,
+       "card": 0.43169277906417847
+      },
+      "fallback": "given roi",
+      "red_snr_global": 36.58,
+      "level_p995": 0.999,
+      "clip_frac": 0.00598,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.3443,
+        "B": 0.09,
+        "max": 0.3443,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "imx708_raw_sweep10_20261005T035837Z.dng",
+     "shutter_us": 33333,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4103493392467499,
+       "card": 0.4321659803390503
+      },
+      "fallback": "given roi",
+      "red_snr_global": 36.49,
+      "level_p995": 0.999,
+      "clip_frac": 0.00598,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.3491,
+        "B": 0.09,
+        "max": 0.3491,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "imx708_raw_sweep11_20261005T035837Z.dng",
+     "shutter_us": 33333,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4104193150997162,
+       "card": 0.4327183961868286
+      },
+      "fallback": "given roi",
+      "red_snr_global": 36.08,
+      "level_p995": 0.999,
+      "clip_frac": 0.006,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.3585,
+        "B": 0.085,
+        "max": 0.3585,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "imx708_raw_sweep12_20261005T035837Z.dng",
+     "shutter_us": 66667,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.3713448941707611,
+       "card": 0.5011323690414429
+      },
+      "fallback": "given roi",
+      "red_snr_global": 50.56,
+      "level_p995": 1.0,
+      "clip_frac": 0.64068,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.1674,
+        "G": 1.0,
+        "B": 0.21,
+        "max": 1.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "imx708_raw_sweep13_20261005T035837Z.dng",
+     "shutter_us": 66667,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.37181907892227173,
+       "card": 0.5005601048469543
+      },
+      "fallback": "given roi",
+      "red_snr_global": 50.55,
+      "level_p995": 1.0,
+      "clip_frac": 0.64093,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.1493,
+        "G": 1.0,
+        "B": 0.195,
+        "max": 1.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "imx708_raw_sweep14_20261005T035837Z.dng",
+     "shutter_us": 66667,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.37212496995925903,
+       "card": 0.5009739398956299
+      },
+      "fallback": "given roi",
+      "red_snr_global": 50.14,
+      "level_p995": 1.0,
+      "clip_frac": 0.64085,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.1584,
+        "G": 1.0,
+        "B": 0.205,
+        "max": 1.0,
+        "n": 841
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 829
+       }
+      },
+      "white_clipped": true
+     }
+    }
+   ],
+   "card": "card found on imx708_raw_sweep12_20261005T035837Z.dng (ROI crop), box and bright patches reused for every frame",
+   "fallback_region": [
+    1504,
+    846,
+    1600,
+    900
+   ],
+   "clip_test": "card white + light grey patches (per RAW channel) + region",
+   "pick": {
+    "index": 6,
+    "shutter_us": 16667,
+    "metric": "card",
+    "tolerance": 0.1,
+    "sharpness_rel": 0.995,
+    "reason": "longest shutter (16667 us) with card sharpness within 10% of the sharpest (100%); card white/light grey clipped: [33333, 33333, 33333, 66667, 66667, 66667]; scored region clipped: [33333, 33333, 33333, 66667, 66667, 66667]",
+    "candidates": [
+     4000,
+     4000,
+     4000,
+     8000,
+     8000,
+     8000,
+     16667,
+     16667,
+     16667
+    ]
+   }
+  },
+  "openmv_ae3": {
+   "stored_pick_us": 2000,
+   "new_pick_us": 2000,
+   "seconds": 5.6,
+   "frames": [
+    {
+     "file": "openmv_ae3_raw_sweep00_20261005T035837Z.bayer",
+     "shutter_us": 250,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4880562126636505,
+       "card": 0.5030303597450256
+      },
+      "fallback": "given roi",
+      "red_snr_global": 11.07,
+      "level_p995": 0.0569,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep01_20261005T035837Z.bayer",
+     "shutter_us": 250,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.490566223859787,
+       "card": 0.5121641159057617
+      },
+      "fallback": "given roi",
+      "red_snr_global": 11.01,
+      "level_p995": 0.0588,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep02_20261005T035837Z.bayer",
+     "shutter_us": 250,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.48388534784317017,
+       "card": 0.5117987990379333
+      },
+      "fallback": "given roi",
+      "red_snr_global": 11.59,
+      "level_p995": 0.0569,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep03_20261005T035837Z.bayer",
+     "shutter_us": 500,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.48632949590682983,
+       "card": 0.5448368787765503
+      },
+      "fallback": "given roi",
+      "red_snr_global": 17.55,
+      "level_p995": 0.1137,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep04_20261005T035837Z.bayer",
+     "shutter_us": 500,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4793578088283539,
+       "card": 0.5435921549797058
+      },
+      "fallback": "given roi",
+      "red_snr_global": 17.29,
+      "level_p995": 0.1118,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep05_20261005T035837Z.bayer",
+     "shutter_us": 500,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4788738191127777,
+       "card": 0.5499778985977173
+      },
+      "fallback": "given roi",
+      "red_snr_global": 17.41,
+      "level_p995": 0.1157,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep06_20261005T035837Z.bayer",
+     "shutter_us": 1000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4845989942550659,
+       "card": 0.5426218509674072
+      },
+      "fallback": "given roi",
+      "red_snr_global": 24.63,
+      "level_p995": 0.2294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep07_20261005T035837Z.bayer",
+     "shutter_us": 1000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.49004942178726196,
+       "card": 0.546951174736023
+      },
+      "fallback": "given roi",
+      "red_snr_global": 25.05,
+      "level_p995": 0.231,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep08_20261005T035837Z.bayer",
+     "shutter_us": 1000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4848046600818634,
+       "card": 0.5479766130447388
+      },
+      "fallback": "given roi",
+      "red_snr_global": 24.9,
+      "level_p995": 0.2294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep09_20261005T035837Z.bayer",
+     "shutter_us": 2000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4884337782859802,
+       "card": 0.5484567880630493
+      },
+      "fallback": "given roi",
+      "red_snr_global": 32.93,
+      "level_p995": 0.4578,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep10_20261005T035837Z.bayer",
+     "shutter_us": 2000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4878668487071991,
+       "card": 0.5495150089263916
+      },
+      "fallback": "given roi",
+      "red_snr_global": 32.9,
+      "level_p995": 0.4582,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep11_20261005T035837Z.bayer",
+     "shutter_us": 2000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.48895716667175293,
+       "card": 0.5487454533576965
+      },
+      "fallback": "given roi",
+      "red_snr_global": 32.48,
+      "level_p995": 0.4565,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": false
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep12_20261005T035837Z.bayer",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.4837884306907654,
+       "card": 0.5392871499061584
+      },
+      "fallback": "given roi",
+      "red_snr_global": 41.13,
+      "level_p995": 0.8408,
+      "clip_frac": 0.00662,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.381,
+        "B": 0.0,
+        "max": 0.381,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep13_20261005T035837Z.bayer",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.48377713561058044,
+       "card": 0.538969099521637
+      },
+      "fallback": "given roi",
+      "red_snr_global": 41.15,
+      "level_p995": 0.8506,
+      "clip_frac": 0.0065,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.3651,
+        "B": 0.0,
+        "max": 0.3651,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": true
+     }
+    },
+    {
+     "file": "openmv_ae3_raw_sweep14_20261005T035837Z.bayer",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "card",
+      "sharpness": {
+       "centre": 0.48329493403434753,
+       "card": 0.5383720993995667
+      },
+      "fallback": "given roi",
+      "red_snr_global": 41.09,
+      "level_p995": 0.8431,
+      "clip_frac": 0.00645,
+      "clipped": true,
+      "bright_patch_clip": {
+       "gray_white": {
+        "R": 0.0,
+        "G": 0.381,
+        "B": 0.0,
+        "max": 0.381,
+        "n": 243
+       },
+       "gray_light": {
+        "R": 0.0,
+        "G": 0.0,
+        "B": 0.0,
+        "max": 0.0,
+        "n": 243
+       }
+      },
+      "white_clipped": true
+     }
+    }
+   ],
+   "card": "card found on openmv_ae3_raw_sweep12_20261005T035837Z.bayer (full frame), box and bright patches reused for every frame",
+   "fallback_region": [
+    500,
+    250,
+    460,
+    360
+   ],
+   "clip_test": "card white + light grey patches (per RAW channel) + region",
+   "pick": {
+    "index": 9,
+    "shutter_us": 2000,
+    "metric": "card",
+    "tolerance": 0.1,
+    "sharpness_rel": 0.997,
+    "reason": "longest shutter (2000 us) with card sharpness within 10% of the sharpest (100%); card white/light grey clipped: [4000, 4000, 4000]; scored region clipped: [4000, 4000, 4000]",
+    "candidates": [
+     250,
+     250,
+     250,
+     500,
+     500,
+     500,
+     1000,
+     1000,
+     1000,
+     2000,
+     2000,
+     2000
+    ]
+   }
+  },
+  "openmv_n6": {
+   "stored_pick_us": 4000,
+   "new_pick_us": 4000,
+   "seconds": 52.7,
+   "frames": [
+    {
+     "file": "openmv_n6_raw_sweep00_20261005T035837Z.bayer",
+     "shutter_us": 250,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4706730842590332
+      },
+      "fallback": "given roi",
+      "level_p995": 0.0294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 8.16
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep01_20261005T035837Z.bayer",
+     "shutter_us": 250,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.46856337785720825
+      },
+      "fallback": "given roi",
+      "level_p995": 0.0294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 7.8
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep02_20261005T035837Z.bayer",
+     "shutter_us": 250,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.47048869729042053
+      },
+      "fallback": "given roi",
+      "level_p995": 0.0294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 8.1
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep03_20261005T035837Z.bayer",
+     "shutter_us": 500,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.46399998664855957
+      },
+      "fallback": "given roi",
+      "level_p995": 0.0627,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 14.09
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep04_20261005T035837Z.bayer",
+     "shutter_us": 500,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4593677520751953
+      },
+      "fallback": "given roi",
+      "level_p995": 0.0608,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 14.56
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep05_20261005T035837Z.bayer",
+     "shutter_us": 500,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.460134893655777
+      },
+      "fallback": "given roi",
+      "level_p995": 0.0627,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 14.68
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep06_20261005T035837Z.bayer",
+     "shutter_us": 1000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.46373608708381653
+      },
+      "fallback": "given roi",
+      "level_p995": 0.1294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 22.09
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep07_20261005T035837Z.bayer",
+     "shutter_us": 1000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.46440640091896057
+      },
+      "fallback": "given roi",
+      "level_p995": 0.1275,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 22.39
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep08_20261005T035837Z.bayer",
+     "shutter_us": 1000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4641522765159607
+      },
+      "fallback": "given roi",
+      "level_p995": 0.1294,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 21.66
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep09_20261005T035837Z.bayer",
+     "shutter_us": 2000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4620984196662903
+      },
+      "fallback": "given roi",
+      "level_p995": 0.2598,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 31.13
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep10_20261005T035837Z.bayer",
+     "shutter_us": 2000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.46241921186447144
+      },
+      "fallback": "given roi",
+      "level_p995": 0.2579,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 31.18
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep11_20261005T035837Z.bayer",
+     "shutter_us": 2000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4629214107990265
+      },
+      "fallback": "given roi",
+      "level_p995": 0.2588,
+      "clip_frac": 0.0,
+      "clipped": false,
+      "red_snr_global": 31.16
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep12_20261005T035837Z.bayer",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4629312753677368
+      },
+      "fallback": "given roi",
+      "level_p995": 0.5078,
+      "clip_frac": 2e-05,
+      "clipped": false,
+      "red_snr_global": 41.6
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep13_20261005T035837Z.bayer",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4638447165489197
+      },
+      "fallback": "given roi",
+      "level_p995": 0.5078,
+      "clip_frac": 8e-05,
+      "clipped": false,
+      "red_snr_global": 41.71
+     }
+    },
+    {
+     "file": "openmv_n6_raw_sweep14_20261005T035837Z.bayer",
+     "shutter_us": 4000,
+     "scores": {
+      "roi": "centre",
+      "sharpness": {
+       "centre": 0.4625060260295868
+      },
+      "fallback": "given roi",
+      "level_p995": 0.5069,
+      "clip_frac": 4e-05,
+      "clipped": false,
+      "red_snr_global": 42.0
+     }
+    }
+   ],
+   "card": "card not found on any frame",
+   "fallback_region": [
+    480,
+    260,
+    500,
+    380
+   ],
+   "clip_test": "region only (card not located)",
+   "pick": {
+    "index": 12,
+    "shutter_us": 4000,
+    "metric": "centre",
+    "tolerance": 0.1,
+    "sharpness_rel": 0.997,
+    "reason": "longest shutter (4000 us) with centre sharpness within 10% of the sharpest (100%); too dark to judge: [250, 250, 250]",
+    "candidates": [
+     500,
+     500,
+     500,
+     1000,
+     1000,
+     1000,
+     2000,
+     2000,
+     2000,
+     4000,
+     4000,
+     4000
+    ]
+   }
+  }
+ }
+}

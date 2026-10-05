@@ -89,8 +89,15 @@ def chart(c: dict) -> str:
     return "".join(p)
 
 
-def main(exp: str, colour: str, out: str, mode: str = "split") -> int:
+def main(exp: str, colour: str, out: str, mode: str = "split", rescore: str = "") -> int:
     exp_dir, c = Path(exp), json.loads(Path(colour).read_text())
+    # the Pi's pick re-run on the stored RAWs with the white-patch clip rule (rescore_sweep.py)
+    rs = json.loads(Path(rescore).read_text())["cameras"] if rescore else {}
+
+    def repick(cam):
+        r = rs.get(cam) or {}
+        return f"{frac(r['new_pick_us'])} — {e(r['pick']['reason'])} [{e(r['clip_test'])}]" if r \
+            else "not re-scored"
     sink = Sink(Path(out).parent, mode == "embed")
     e = html.escape
     rec = json.loads((exp_dir / "experiment.json").read_text())
@@ -115,7 +122,9 @@ def main(exp: str, colour: str, out: str, mode: str = "split") -> int:
         fit = b.get("card_fit", {})
         cct = b.get("cct") or {}
         rows = [("pick (Mac, card area)", f"{frac(b['shutter_us'])} — {e(cc['mac_pick']['reason'])}"),
-                ("Pi pick", e(str((cc.get('pi_pick') or {}).get('shutter_us'))) + " µs"),
+                ("Pi pick at capture (old rule)",
+                 e(str((cc.get('pi_pick') or {}).get('shutter_us'))) + " µs"),
+                ("Pi pick, re-scored on the Pi (white-patch rule)", repick(cam)),
                 ("card located", f"{e(cc['method'])} on {e(cc['located_on'])}; tags {cc['tags_found']}"),
                 ("patches used", f"{b.get('n')} (median {cc['patch_px']} binned px each)"),
                 ("ΔE uncorrected", (f"median {unc['median']} · mean {unc['mean']} · max {unc['max']} — "
@@ -229,7 +238,7 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.8
 {''.join(strips)}
 <section><h2>Notes</h2><ul>
 <li>Every RAW is kept on nereus002 (experiment {e(c['experiment'])}); this run took 45 of 45 frames (the previous run had one N6 USB short read, 1 of 15).</li>
-<li>The Pi's own sweep scoring uses the ROIs above (it cannot locate the card at this distance on decimated frames). OpenMV picks match the Mac's card-area picks: N6 {e(str((c['cameras']['openmv_n6'].get('pi_pick') or {}).get('shutter_us')))} µs, AE3 {e(str((c['cameras']['openmv_ae3'].get('pi_pick') or {}).get('shutter_us')))} µs. The IMX708's Pi pick ({e(str((c['cameras']['imx708'].get('pi_pick') or {}).get('shutter_us')))} µs) is one step longer than the Mac's: at 1/30 s the card's white patch clips, which the MEDIUM ROI alone does not see.</li>
+<li>Pi pick fixed (2026-10-05): when the card is located, a frame whose white or light-grey patch clips in any RAW channel (≥ saturation − 1 %, > 1 % of the patch) is ineligible; only when the card is not located does the pick fall back to the ROI. The Pi now also searches for the card inside the camera's ROI at near-full resolution, so it finds the IMX708 card at ~1 m. Re-scored on the Pi from the stored RAWs (no new captures): IMX708 {frac(rs['imx708']['new_pick_us']) if rs else '?'} (was 1/30 s; 1/30 and 1/15 s clip the white patch), AE3 {frac(rs['openmv_ae3']['new_pick_us']) if rs else '?'}, N6 {frac(rs['openmv_n6']['new_pick_us']) if rs else '?'} (card not located on the N6 — tags 0 and 2 don't decode — so its clip test is the ROI only). All three now equal the Mac's card-area picks.</li>
 <li>Operator notes in experiment.json: “{e(rec.get('operator_notes', ''))}”.</li></ul></section>
 </main>'''
     Path(out).write_text(page, encoding="utf-8")
@@ -241,4 +250,4 @@ dl{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.8
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(*sys.argv[1:5]))
+    raise SystemExit(main(*sys.argv[1:6]))
