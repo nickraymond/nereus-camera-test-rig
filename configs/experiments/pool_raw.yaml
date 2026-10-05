@@ -1,0 +1,36 @@
+# Experiment profile: pool_raw — pool test, docs/SPEC_pool_codec_test.md §5.3 (Nick, 2026-10-01).
+# Raw-only capture on the Pi (the Pi Zero only captures; compression, decoding and colour
+# correction run on the Mac afterwards, §7). Consumed by scripts/hil_soak.py:
+#
+#   .venv/bin/python -m nereus_camera_test_rig.cli --config configs/rig.yaml meter \
+#       --out results/pool/<date>/lock_<depth>          # once per depth (§6 step 2)
+#   .venv/bin/python scripts/hil_soak.py run --profile configs/experiments/pool_raw.yaml \
+#       --exposure-lock results/pool/<date>/lock_<depth>/exposure_lock.json \
+#       --notes "depth=6ft distance=0.5m sun=cloud clarity=good"
+#
+# One major variable per depth block (CLAUDE.md §10): exposure is locked per depth, the card
+# stays at ~0.5 m, denoise + lens shading stay ON (sensor defaults, Nick).
+
+experiment:
+  type: "pool_raw"
+  environment_label: "pool"
+  notes_template: "depth=<ft> distance=<m> sun=<sun|cloud|dusk> clarity=<…> surface=<…>"
+
+capture:
+  raw: true                       # experiment --raw: IMX708 DNG + JPEG, OpenMV 8-bit Bayer
+  analysis: false                 # --no-analysis: the Pi Zero only captures (§5.3)
+  cameras: ["imx708", "openmv_n6", "openmv_ae3"]
+
+loop:                             # §5.4 / §4: 10 sets per depth, ~30 s apart
+  sets: 10
+  gap_s: 30                       # wait between the end of one set and the start of the next
+  card_check: true                # card brightness per camera per set (color.card_check)
+  depth: "fake"                   # depth reader (§5.1): "fake" until Nick picks the sensor
+
+exposure:                         # §5.2: meter once per depth with `nereus-rig meter`
+  card: "configs/cards/nereus_v1.yaml"
+  target: 0.80                    # brightest card channel, fraction of full scale
+
+storage:                          # §5.5: checked before the loop starts
+  est_mb_per_set: 27              # IMX708 DNG ~24 MB + JPEGs + 2 x 1 MB Bayer (S3 demo: 26 MB)
+  margin_gb: 1.0                  # refuse to start with less than this left after the run
