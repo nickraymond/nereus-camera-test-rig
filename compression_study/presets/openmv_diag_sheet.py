@@ -11,6 +11,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from compression_study.presets.keepable import LIGHTBOX, Sink
+
 ROWS = {"openmv_n6": "OpenMV N6", "openmv_ae3": "OpenMV AE3", "imx708": "IMX708 (reference)"}
 GEOM = {  # resolution; f in px: IMX708 nominal (2.75 mm / 1.4 um); OpenMV derived from the
           # measured tag size at the IMX708's 1.21 m distance estimate (same mount)
@@ -30,8 +32,10 @@ def b64(path: Path, fmt=None, max_w=None) -> str:
     return f"data:image/{fmt.lower()};base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-def main(diag_dir: str, out: str, colour_phase_json: str) -> int:
+def main(diag_dir: str, out: str, colour_phase_json: str, embed: str = "split") -> int:
+    """``embed``: "embed" = one self-contained file (keepable); "split" = images in out's img/."""
     d = Path(diag_dir)
+    sink = Sink(Path(out).parent, embed == "embed")
     r = json.loads((d / "diag.json").read_text())
     rb = json.loads(colour_phase_json)
     e = html.escape
@@ -84,11 +88,11 @@ def main(diag_dir: str, out: str, colour_phase_json: str) -> int:
                       for n, ok, d_ in checks)
         secs.append(f'''<section><h2>{title}</h2>
 <p class=muted>Frame {e(c['frame'])} ({'card located' if c['card_located'] else 'card NOT located'}); clipped % per channel (R/G/B sites) {c['clip_pct']}.</p>
-<div class=pair><figure><img src="{b64(d / f'{cam}_raw.png', 'JPEG', 1280)}" alt="{title} RAW render"><figcaption>RAW → bilinear demosaic, grey-world WB, gamma 2.2{' (downscaled to 1280 px)' if cam == 'imx708' else ' (native 1280×800)'}</figcaption></figure>
-<figure><img src="{b64(d / f'{cam}_jpeg.jpg', 'JPEG', 1280)}" alt="{title} board JPEG"><figcaption>{'the IMX708 still JPEG (auto, ISP), downscaled' if cam == 'imx708' else "the board's own JPEG (ISP, auto exposure), same set, ~1 min earlier"}</figcaption></figure></div>
-<div class=pair><figure><img class=pix src="{b64(d / f'{cam}_crop.png')}" alt="1:1 crop"><figcaption>1:1 crop at the card (pixels enlarged 2×)</figcaption></figure>
-<figure><img src="{b64(d / f'{cam}_hist.png')}" alt="histogram"><figcaption>histogram of the RAW sites (log count)</figcaption></figure></div>
-<figure><img src="{b64(d / f'{cam}_phases.png')}" alt="four CFA phases"><figcaption>the same crop under the 4 CFA phases</figcaption></figure>
+<div class=pair><figure>{sink.img(d / f'{cam}_raw.png', f'{title} RAW render, full resolution', 1280)}<figcaption>RAW → bilinear demosaic, grey-world WB, gamma 2.2, full resolution ({'4608×2592; inline preview downscaled' if cam == 'imx708' else '1280×800'}). Click to enlarge and zoom.</figcaption></figure>
+<figure>{sink.img(d / f'{cam}_jpeg.jpg', f'{title} board JPEG', 1280)}<figcaption>{'the IMX708 still JPEG (auto, ISP), as recorded' if cam == 'imx708' else "the board's own JPEG (ISP, auto exposure), same set, ~1 min earlier"}</figcaption></figure></div>
+<div class=pair><figure>{sink.img(d / f'{cam}_crop.png', f'{title} 1:1 card crop (pixels 2x)', 1400, pixelated_inline=True)}<figcaption>1:1 crop at the card (pixels enlarged 2×)</figcaption></figure>
+<figure>{sink.img(d / f'{cam}_hist.png', f'{title} RAW histogram')}<figcaption>histogram of the RAW sites (log count)</figcaption></figure></div>
+<figure>{sink.img(d / f'{cam}_phases.png', f'{title} crop under the 4 CFA phases', 2080)}<figcaption>the same crop under the 4 CFA phases</figcaption></figure>
 <h3>Tags</h3><p>RAW 1×: {t1 or 'none'} · RAW 2×: {sorted(c['aruco_raw_2x']) or 'none'} · board JPEG: {jt or 'none'} · demosaiced 3× + CLAHE crop: {sorted(c['aruco_crop_3x_clahe']) if isinstance(c['aruco_crop_3x_clahe'], dict) else c['aruco_crop_3x_clahe']} (tag edge in px).</p>
 <div class=wrap><table><tr><th>tag</th><th class=num>edge sharpness</th><th class=num>contrast (DN)</th><th>status</th></tr>{tag_rows}</table></div>
 <h3>Pipeline checks</h3><div class=wrap><table><tr><th>check</th><th>result</th><th>evidence</th></tr>{chk}</table></div>
@@ -104,7 +108,8 @@ p,ul{{margin:0;max-width:115ch}} .muted{{color:var(--ink2)}} section{{background
 .pair{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}} figure{{margin:0;display:grid;gap:4px}} img{{width:100%;height:auto;border-radius:3px}} .pix{{image-rendering:pixelated}}
 figcaption{{color:var(--ink2);font-size:.82rem}} .wrap{{overflow-x:auto}} table{{border-collapse:collapse;width:100%;font-size:.85rem}} th,td{{padding:4px 8px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}} .num{{text-align:right;font-variant-numeric:tabular-nums}}
 .pass{{background:var(--okbg);color:var(--ok);font-weight:600}} .fail{{background:var(--badbg);color:var(--bad);font-weight:600}}
-</style><main><h1>OpenMV RAW pipeline diagnosis</h1>
+</style>''' + LIGHTBOX + f'''<main><h1>OpenMV RAW pipeline diagnosis</h1>
+<p class=muted>Click any image to open it full size: scroll or pinch to zoom (up to 3200 %), drag to pan, pixels drawn sharp above 100 %; Esc closes.</p>
 <p class=muted>{e(r['experiment'])} on nereus002 (2× 5300 K LED panels in frame, card at ~1 m; IMX708 estimate 1.21 m). Question (Nick): is something wrong in the raw pipeline, given the sweep did not find the card on the N6 / AE3?</p>
 <section><h2>Verdict</h2><ul>
 <li><b>Pipeline OK on both boards:</b> every check passes. BGGR is the right phase and the one the code uses. The data is 8-bit, 1 byte/px, unpacked, black at 0 (on-chip). There is no row shift or wrap. The RAW registers to the board's own JPEG at 0 px offset with no flip. Exposure and gain read back exactly.</li>
@@ -114,9 +119,12 @@ figcaption{{color:var(--ink2);font-size:.82rem}} .wrap{{overflow-x:auto}} table{
 <li><b>Next fixes (small):</b> a per-camera shutter ladder for the sweep (OpenMV ~1/2000 … 1/250 s, or meter first); a per-camera ROI that excludes the LED panel for the N6; refocus or replace the N6 lens.</li></ul></section>
 {''.join(secs)}</main>'''
     Path(out).write_text(page, encoding="utf-8")
-    print(out, round(Path(out).stat().st_size / 1e6, 1), "MB")
+    print(out, round(Path(out).stat().st_size / 1e6, 1), "MB html,", round(sink.bytes / 1e6, 1),
+          "MB images,", len(sink.files), "files")
+    if sink.files:
+        (Path(out).parent / "files.json").write_text(json.dumps(sink.files, indent=1))
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(*sys.argv[1:4]))
+    raise SystemExit(main(*sys.argv[1:5]))

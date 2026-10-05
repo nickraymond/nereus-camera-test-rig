@@ -23,7 +23,8 @@ from PIL import Image
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO / "src"), str(REPO)]
 
-from nereus_camera_test_rig.color.raw_io import bin2x2, normalize, read_dng  # noqa: E402
+from compression_study.presets.keepable import LIGHTBOX, Sink  # noqa: E402
+from nereus_camera_test_rig.color.raw_io import demosaic_bilinear, normalize, read_dng  # noqa: E402
 
 ORDER = ["gray_white", "gray_light", "gray_mid", "gray_dark", "cream", "tan", "ochre", "orange",
          "brown", "dark_brown", "coral_pink", "red_orange", "yellow", "green", "cyan", "blue",
@@ -34,25 +35,26 @@ def frac(us):
     return f"1/{round(1e6 / us)} s"
 
 
-def thumbs(exp: Path, colour: dict) -> list[str]:
+def thumbs(exp: Path, colour: dict, sink: Sink, pick_us: int) -> list[str]:
+    """Full-resolution RAW renders (bilinear demosaic, the frame's AWB gains, ONE display scale:
+    the 1/15 s frame's 99th percentile = white). The picked frame is lossless WebP; the others
+    lossy WebP q90 to keep the keepable file under ~50 MB."""
     dngs = sorted((exp / "captures" / "imx708").glob("imx708_raw_sweep*.dng"))
-    rgb = []
-    for d in dngs:
-        fr = read_dng(d)
-        lin, sat, cfa = normalize(fr)
-        b, _ = bin2x2(lin, cfa, sat)
-        rgb.append(b[::3, ::3].copy())
-        del lin, sat, b
     gains = colour["frames"][-1]["awb_gains"]
-    g = np.array([gains[0], 1.0, gains[1]])
-    scale = 1 / max(float(np.percentile(rgb[-1][..., 1], 99)), 1e-4)
+    g = np.array([gains[0], 1.0, gains[1]], np.float32)
+    last = normalize(read_dng(dngs[-1]))
+    scale = 1 / max(float(np.percentile(demosaic_bilinear(last[0], last[2])[::4, ::4, 1], 99)), 1e-4)
+    del last
     out = []
-    for b in rgb:
-        im = Image.fromarray((np.clip(b * g * scale, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8))
-        im = im.resize((420, round(420 * im.height / im.width)), Image.Resampling.LANCZOS)
-        buf = io.BytesIO()
-        im.save(buf, "JPEG", quality=88)
-        out.append("data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode())
+    for d, f in zip(dngs, colour["frames"]):
+        lin, _, cfa = normalize(read_dng(d))
+        rgb = demosaic_bilinear(lin, cfa).astype(np.float32)
+        del lin
+        disp = (np.clip(rgb * g * scale, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)
+        del rgb
+        best = f["shutter_us"] == pick_us
+        out.append(sink.img(disp, f"IMX708 at {frac(f['shutter_us'])}, full resolution"
+                            + (" (lossless)" if best else " (WebP q90)"), 420, lossless=best))
     return out
 
 
@@ -99,15 +101,16 @@ def bar_chart(pick_de: dict, jpg_de: dict) -> str:
     return "".join(parts)
 
 
-def main(exp: str, colour_path: str, out: str) -> int:
+def main(exp: str, colour_path: str, out: str, embed: str = "split") -> int:
     exp_dir = Path(exp)
+    sink = Sink(Path(out).parent, embed == "embed")
     c = json.loads(Path(colour_path).read_text())
     rec = json.loads((exp_dir / "experiment.json").read_text())
     pick_us = c["mac_pick"]["shutter_us"]
     pf = next(f for f in c["frames"] if f["shutter_us"] == pick_us)
     pj = c["production_jpeg"]
     s4 = c.get("s4_single_lamp", {})
-    imgs = thumbs(exp_dir, c)
+    imgs = thumbs(exp_dir, c, sink, pick_us)
     e = html.escape
 
     cells = []
@@ -115,7 +118,7 @@ def main(exp: str, colour_path: str, out: str) -> int:
         is_pick = f["shutter_us"] == pick_us
         clip = f["clipping"]["card_area_pct"]
         cells.append(f'''<div class="cell{' pick' if is_pick else ''}"><span class="tag">{frac(f['shutter_us'])}
-{'<b class="pk">PICK</b>' if is_pick else ''}</span><img src="{img}" alt="IMX708 at {frac(f['shutter_us'])}, downscaled">
+{'<b class="pk">PICK</b>' if is_pick else ''}</span>{img}
 <dl><dt>read-back</dt><dd>{f['exposure_us']} µs · gain {f['analogue_gain']:.3f} · DG {f['digital_gain']:.3f}</dd>
 <dt>white level</dt><dd>{' / '.join(f'{v:.2f}' for v in f['white_level'])}{' CLIPPED' if f['white_clipped'] else ''}</dd>
 <dt>card clip % RGB</dt><dd>{' / '.join(f'{v:.2f}' for v in clip)}</dd>
@@ -164,7 +167,7 @@ p,ul{{margin:0;max-width:110ch}} .muted{{color:var(--ink2)}} section{{background
 dl{{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.82rem;font-variant-numeric:tabular-nums}} dt{{color:var(--ink2)}} dd{{margin:0}}
 .wrap{{overflow-x:auto}} table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}} th,td{{padding:4px 8px;border-bottom:1px solid var(--rule);text-align:left}} .num{{text-align:right}}
 .legend span{{display:inline-flex;align-items:center;gap:6px;margin-right:16px}} .sw{{width:12px;height:12px;border-radius:2px;display:inline-block}}
-</style><main>
+</style>''' + LIGHTBOX + f'''<main>
 <h1>Exposure sweep under two 5300 K LEDs</h1>
 <p class="muted">{e(c['experiment'])} · nereus002 IMX708 · 2026-10-05 (PDT evening, Nick at the rig)</p>
 <section><h2>Setup</h2><ul>
@@ -172,7 +175,7 @@ dl{{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.
 <li><b>Card:</b> V1 + Pixel Perfect checker, ~1 m (Nick, deliberate, pool-like). Estimated from the card's tag spacing: {c['distance_m_estimate']} m (ESTIMATE: nominal lens, no distortion model). Located on all 4 tags (on the 1/15 s frame); grey 128 patch ≈ {pf['patch_px']} binned px.</li>
 <li><b>Sweep:</b> 1/250 → 1/15 s at the gain floor (asked 1.0, applied 1.1228), AWB auto per frame. Truth = the V1 card as measured on the IMX708 in air, 2026-09-28 (single lamp).</li></ul></section>
 <section><h2>Frames — pick {frac(pick_us)}</h2>
-<p class="muted">Mac (card area, full resolution): {e(c['mac_pick']['reason'])}. Pi (on the rig, MEDIUM ROI because its decimated card search misses the card at ~1 m): {e(str((c.get('pi_pick') or {}).get('reason')))}. Thumbnails DOWNSCALED, one display scale (the 1/15 s frame's 99th percentile = white).</p>
+<p class="muted">Mac (card area, full resolution): {e(c['mac_pick']['reason'])}. Pi (on the rig, MEDIUM ROI because its decimated card search misses the card at ~1 m): {e(str((c.get('pi_pick') or {}).get('reason')))}. Thumbnails are DOWNSCALED previews; click one for the full-resolution render (picked frame lossless, others WebP q90), zoomable with pixels drawn sharp above 100 %. One display scale (the 1/15 s frame's 99th percentile = white).</p>
 <p class="muted"><b>Flare check:</b> the black patch's level relative to white is {', '.join(f"{f['black_patch']['black_over_white_g']:.3f}" for f in c['frames'])} across the frames (rising only where the white clips), against {c['frames'][0]['black_patch']['truth_black_over_white']:.3f} for the printed card as measured. Blacks are not lifted: no visible veiling flare on the card from the panels.</p>
 <div class="strip">{''.join(cells)}</div></section>
 <section><h2>ΔE2000 per patch — pick ({frac(pick_us)}) vs today's JPEG</h2>
@@ -195,12 +198,14 @@ dl{{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.
 <p>Single lamp: camera colour ΔE {s4.get('uncorrected', {}).get('median')} median, card fit {s4.get('card_fit', {}).get('median')}; CCT {s4.get('cct', {}).get('cct_k')} K; red SNR {s4.get('red_snr_grey128')}. Two LEDs (this pick): camera colour {pf['uncorrected']['median']}, card fit {pf['card_fit']['median']}; CCT {cct.get('cct_k')} K; red SNR {pf['red_snr_grey128']}.</p>
 <p class="muted">What differs (more than one variable — CLAUDE.md §10): one lamp vs two, lamp CCT (S4 cool lamp ≈ {s4.get('cct', {}).get('cct_k')} K by the same estimate), card at ~0.5 m vs ~1 m (patches ~{s4.get('patch_px')} vs ~{pf['patch_px']} binned px), lamps straight-on vs in frame, exposure 103 ms vs 17 ms. The card truth was measured in the S4-style setup, so S4 is partly in-sample.</p>
 <p class="muted"><b>Why the card fit is worse than the camera colour here:</b> the truth's greys come from the single-lamp measurement session and are compressed (truth black/white 0.074; today's card reads 0.028, so no veiling flare on the card: rather the opposite). A 3×3 fit spreads that tone mismatch over every patch; a 3×3 + offset fit does not fix it (median 3.69). The greys' error is mostly the truth, not the camera.</p></section>
-<section><h2>OpenMV N6 / AE3</h2><p>Swept too (5 RAWs each, read-backs exact); no colour metrics yet. <b>Correction (diagnosis, 2026-10-05):</b> the RAW pipeline checks out on both boards. The <b>AE3 does find the card</b> on its RAW (all 4 tags, 26–27 px); it made no pick because even 1/250 s clips 0.67 % of the card box: the IMX708's shutter ladder is too long for the OpenMV sensor. The <b>N6</b> decodes only its right-hand tags because the left side of its lens is soft (edge sharpness 0.11–0.13 vs 0.19). Diagnostic sheet: https://claude.ai/artifact/NT49DezQc3jucXscpQDYMN</p></section>
+<section><h2>OpenMV N6 / AE3</h2><p>Swept too (5 RAWs each, read-backs exact); no colour metrics yet. <b>Correction (diagnosis, 2026-10-05):</b> the RAW pipeline checks out on both boards. The <b>AE3 does find the card</b> on its RAW (all 4 tags, 26–27 px); it made no pick because even 1/250 s clips 0.67 % of the card box: the IMX708's shutter ladder is too long for the OpenMV sensor. The <b>N6</b> decodes only its right-hand tags because the left side of its lens is soft (edge sharpness 0.11–0.13 vs 0.19). Diagnostic sheet: nereus002_raw_diagnostic_20261004.html (artifact id NT49DezQc3jucXscpQDYMN)</p></section>
 </main>'''
     Path(out).write_text(page, encoding="utf-8")
-    print(out, round(Path(out).stat().st_size / 1e6, 2), "MB")
+    print(out, round(Path(out).stat().st_size / 1e6, 2), "MB html,", len(sink.files), "files")
+    if sink.files:
+        (Path(out).parent / "files.json").write_text(json.dumps(sink.files, indent=1))
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(*sys.argv[1:4]))
+    raise SystemExit(main(*sys.argv[1:5]))

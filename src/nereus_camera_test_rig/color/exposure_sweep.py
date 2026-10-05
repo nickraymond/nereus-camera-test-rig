@@ -5,10 +5,10 @@ Per frame, on the RAW (never the camera JPEG):
 
 * **level** — green-plane 99.5th percentile and the clipped fraction (any channel ≥ 98 % of
   full scale) in the region of interest; the card's mid-grey level when the card is found;
-* **sharpness** — Laplacian energy of the green plane after 2×2 binning, minus its expected
-  noise share (Immerkær noise estimate), divided by the squared mean (so it does not grow with
-  brightness), in the card area when the card is found and in the frame centre (motion
-  anywhere in view). Frames darker than 3 % of full scale are "too dark to judge";
+* **sharpness** — edge acutance of the green plane after 2×2 binning: the strongest 1 % of
+  gradient magnitudes over the region's contrast (``_edge_acutance``; exposure-invariant on
+  static frames), in the card area when the card is found, else in the given ROI / the frame
+  centre. Frames darker than 3 % of full scale are "too dark to judge";
 * **red SNR** — mean / std of the red channel on the card's mid-grey patch when the card is
   found, else a global estimate on the frame centre (Immerkær's noise estimator).
 
@@ -66,6 +66,28 @@ def _laplacian_energy(g: np.ndarray) -> Optional[float]:
     return float(max(np.mean(lap ** 2) - 20 * sigma ** 2, 0.0) / (m * m))
 
 
+def _edge_acutance(g: np.ndarray) -> Optional[float]:
+    """Edge sharpness that does not depend on exposure: per direction, the mean of the strongest
+    1 % of gradient magnitudes over the region's contrast (95th − 5th percentile), on the
+    2x2-binned plane; the LOWER of the two directions is returned, so motion blur in any one
+    direction counts. Measured on static frames (2026-10-05) it stays flat across a 16x shutter
+    range where a brightness-normalised Laplacian fell by half (8-bit quantisation in dark
+    frames). None when the region has no structure above the noise (contrast < 5 sigma)."""
+    if g.shape[0] < 8 or g.shape[1] < 8:
+        return None
+    h, w = g.shape[0] // 2 * 2, g.shape[1] // 2 * 2
+    b = g[:h, :w].reshape(h // 2, 2, w // 2, 2).mean(axis=(1, 3))
+    c = float(np.percentile(b, 95) - np.percentile(b, 5))
+    sigma = _immerkaer_sigma(b) or 0.0
+    if c <= 1e-6 or c < 5 * sigma:
+        return None
+    gy, gx = np.gradient(b)
+    vals = []
+    for d in (np.abs(gx), np.abs(gy)):
+        vals.append(float(d[d >= np.percentile(d, 99)].mean() / c))
+    return min(vals)
+
+
 def _immerkaer_sigma(p: np.ndarray) -> Optional[float]:
     """Fast noise sigma estimate (Immerkær 1996) on one plane."""
     if p.shape[0] < 8 or p.shape[1] < 8:
@@ -95,7 +117,7 @@ def score_frame(frame, card_box: Optional[tuple[int, int, int, int]] = None,
     for name, box in boxes.items():
         binned, clip = _planes(_crop(frame, *box))
         g = binned[..., 1]
-        out["sharpness"][name] = _laplacian_energy(g)
+        out["sharpness"][name] = _edge_acutance(g)
         if name == out["roi"]:
             out["level_p995"] = round(float(np.percentile(g, 99.5)), 4)
             out["clip_frac"] = round(float(np.mean(clip.any(axis=-1))), 5)

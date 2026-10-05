@@ -42,3 +42,19 @@ floor). Records only; the 15 RAWs per run (~130 MB) stay on nereus002 under
     the card box: the ladder is too long for the OpenMV sensor.
   - The N6's left tags fail on optics: the left side of its lens is soft (edge sharpness 0.11–0.13
     vs 0.19), on the RAW and its own JPEG alike.
+- **Runs 6–7** (three cameras, 3 repeats per step; OpenMV ladder 1/4000 → 1/250 s at 3.15 dB;
+  ROIs exclude the LED panels).
+  - Run 6 exposed two flaws, both fixed before run 7:
+    1. The brightness-normalised Laplacian fell by half on static frames as exposure rose (8-bit
+       quantisation in dark frames). It is now direction-wise edge acutance.
+    2. The IMX708 autofocus moved 0.95 → 2.6 dioptres across the sweep. Focus is now locked to
+       the still's lens position.
+  - Run 6 also had one N6 USB short read (1 of 15).
+  - Run 7 (`run7_3cam_colour.json`): 45 / 45 frames.
+    - Picks: IMX708 1/60 s, N6 1/250 s, AE3 1/500 s.
+    - ΔE00 after the card fit, median: IMX708 3.64 (17 patches), N6 4.95 (13 right-side patches),
+      AE3 6.36 (17 patches).
+    - No LED flicker: the brightest patch varies ≤ 0.5 % over 3 repeats, down to 1/4000 s.
+  - Sheet v5 at the same URL (https://claude.ai/artifact/Cf6WfxtP3s3JfnoVf2bWyy). Keepable files
+    in ~/Downloads: `nereus002_exposure_sweep_20261004_v4.html`,
+    `nereus002_exposure_sweep_20261004.html` (v3) and `nereus002_raw_diagnostic_20261004.html`.

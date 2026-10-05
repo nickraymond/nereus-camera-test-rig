@@ -183,25 +183,28 @@ def sweep_settings(profile: dict[str, Any], override: Optional[dict[str, Any]],
     ``override`` (from the CLI) wins over the profile's ``exposure_sweep`` block; its ``roi``
     may be one box for every camera or ``{camera: box}`` (ROIs are in each camera's own px)."""
     cfg = {**(profile.get("exposure_sweep") or {}), **(override or {})}
-    if isinstance(cfg.get("roi"), dict):
-        cfg["roi"] = cfg["roi"].get(camera)
+    for key in ("roi", "shutters_us"):  # one value for every camera, or {camera: value}
+        if isinstance(cfg.get(key), dict):
+            cfg[key] = cfg[key].get(camera, cfg[key].get("_default"))
     if not cfg.get("enabled"):
         return None
     shutters = [int(v) for v in (cfg.get("shutters_us") or DEFAULT_SWEEP_SHUTTERS_US)]
     roi = cfg.get("roi")
-    return {"shutters_us": shutters, "gain": cfg.get("gain", "floor"),
+    return {"shutters_us": shutters, "repeats": max(int(cfg.get("repeats", 1)), 1),
+            "gain": cfg.get("gain", "floor"),
             "tolerance": float(cfg.get("tolerance", 0.10)), "card": cfg.get("card"),
             "roi": [int(v) for v in roi] if roi else None}
 
 
 def _capture_sweep(name: str, device, profile: dict[str, Any], cap_dir: Path, when: datetime,
-                   sweep: dict[str, Any]) -> list:
+                   sweep: dict[str, Any], still: Optional[CaptureResult] = None) -> list:
     """N RAW frames at the shutter ladder, gain locked at the camera's floor, back to back
     (each with the profile's reset first where it asks for one). Never raises."""
     lock = getattr(device, "locked_exposure_settings", None)
     capture_raw = getattr(device, "capture_raw", None)
     frames = []
-    for i, shutter in enumerate(sweep["shutters_us"]):
+    ladder = [sh for sh in sweep["shutters_us"] for _ in range(sweep.get("repeats", 1))]
+    for i, shutter in enumerate(ladder):
         if not callable(lock) or not callable(capture_raw):
             frames.append((shutter, CaptureResult(
                 camera=_identity(device), request=CaptureRequest(kind="image"), status="failed",
@@ -209,6 +212,12 @@ def _capture_sweep(name: str, device, profile: dict[str, Any], cap_dir: Path, wh
                        "message": f"{type(device).__name__} cannot lock exposure for a sweep"})))
             continue
         settings = merge_settings(profile, lock(shutter))
+        # Focus fixed for the whole sweep: a camera that reports a lens position on its still
+        # (the IMX708's autofocus) is locked there, so frames differ only in shutter time.
+        lens = ((still.sensor_metadata or {}) if still is not None else {}).get("LensPosition")
+        if lens is not None:
+            settings = merge_settings(settings, {"camera_controls": {"focus": {
+                "mode": "manual", "lens_position": float(lens)}}})
         _reset_if_asked(name, device, settings, f"sweep frame {i}")
         ext = getattr(device, "raw_extension", "raw")
         dest = cap_dir / naming.capture_filename(name, f"raw_sweep{i:02d}", ext, when)
@@ -232,7 +241,8 @@ def _score_sweeps(record: ExperimentRecord, outcomes: list, sweeps: dict[str, di
             continue
         sweep = sweeps[o.camera_name]
         entry: dict[str, Any] = {
-            "shutters_us": sweep["shutters_us"], "gain": sweep["gain"],
+            "shutters_us": sweep["shutters_us"], "repeats": sweep.get("repeats", 1),
+            "gain": sweep["gain"],
             "captures": [{"shutter_us": sh, "status": r.status, "file": Path(r.output_path).name
                         if r.output_path else None, "error": r.error,
                         "readback": {k: (r.sensor_metadata or {}).get(k) for k in
@@ -317,7 +327,7 @@ def _capture_one_camera(
             logger.exception("camera %s: adapter raised during capture", name)
             result = _synth_failed_result(name, camera_cfg, "adapter_exception", repr(exc))
         if want_raw and sweep:
-            sweep_frames = _capture_sweep(name, device, profile, cap_dir, when, sweep)
+            sweep_frames = _capture_sweep(name, device, profile, cap_dir, when, sweep, result)
         elif want_raw:
             try:
                 raw_result = _capture_raw(name, device, profile, cap_dir, when)

@@ -56,7 +56,7 @@ def _mosaic(img):
 def test_motion_blur_lowers_sharpness():
     rng = np.random.default_rng(0)
     img = np.clip(0.4 + 0.2 * (rng.random((400, 600)) > 0.5), 0, 1)
-    img = np.kron(img[:100, :150], np.ones((4, 4)))       # blocky texture, 400x600
+    img = np.kron(img[:50, :75], np.ones((8, 8)))         # blocky texture, 400x600
     k = 15
     blurred = np.mean([np.roll(img, s, axis=1) for s in range(k)], axis=0)  # horizontal motion
     sharp = score_frame(_mosaic(img))["sharpness"]["centre"]
@@ -67,12 +67,12 @@ def test_motion_blur_lowers_sharpness():
 def test_noise_alone_does_not_look_sharp():
     rng = np.random.default_rng(2)
     flat = np.full((400, 600), 0.02) + rng.normal(0, 0.004, (400, 600))
-    assert score_frame(_mosaic(np.clip(flat, 0, 1)))["sharpness"]["centre"] < 0.05
+    assert not score_frame(_mosaic(np.clip(flat, 0, 1)))["sharpness"]["centre"]   # None
 
 
 def test_sharpness_does_not_grow_with_brightness():
     rng = np.random.default_rng(1)
-    img = np.kron(0.2 + 0.1 * (rng.random((100, 150)) > 0.5), np.ones((4, 4)))
+    img = np.kron(0.2 + 0.1 * (rng.random((50, 75)) > 0.5), np.ones((8, 8)))
     a = score_frame(_mosaic(img))["sharpness"]["centre"]
     b = score_frame(_mosaic(img * 2))["sharpness"]["centre"]
     assert abs(a / b - 1) < 0.05
@@ -99,3 +99,11 @@ def test_per_camera_roi():
     assert s["roi"] is None
     assert sweep_settings({}, {"enabled": True, "roi": {"imx708": [1, 2, 3, 4]}},
                           "imx708")["roi"] == [1, 2, 3, 4]
+
+
+def test_per_camera_ladder_and_repeats():
+    o = {"enabled": True, "repeats": 3,
+         "shutters_us": {"openmv_ae3": [250, 500], "_default": [4000, 8000]}}
+    ae3 = sweep_settings({}, o, "openmv_ae3")
+    assert ae3["shutters_us"] == [250, 500] and ae3["repeats"] == 3
+    assert sweep_settings({}, o, "imx708")["shutters_us"] == [4000, 8000]

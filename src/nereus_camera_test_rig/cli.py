@@ -61,8 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --raw: N RAWs per camera at a shutter ladder, gain at the floor, best frame "
              "picked (pool tool; off by default)")
     p_experiment.add_argument(
-        "--sweep-shutters-us", default=None,
-        help="comma-separated shutter ladder in us (default 4000,8000,16667,33333,66667)")
+        "--sweep-shutters-us", action="append", default=None,
+        help="[camera=]comma-separated shutter ladder in us (default 4000,8000,16667,33333,"
+             "66667); repeatable per camera, e.g. openmv_ae3=250,500,1000,2000,4000")
+    p_experiment.add_argument(
+        "--sweep-repeats", type=int, default=None,
+        help="frames per shutter step (default 1); repeats expose LED flicker")
     p_experiment.add_argument(
         "--sweep-roi", action="append", default=None,
         help="[camera=]x,y,w,h in that camera's px, scored when the card is not found (default: "
@@ -201,7 +205,16 @@ def _sweep_arg(args: argparse.Namespace):
         return None
     out: dict = {"enabled": True}
     if args.sweep_shutters_us:
-        out["shutters_us"] = [int(v) for v in args.sweep_shutters_us.split(",") if v.strip()]
+        lad: dict = {}
+        for item in args.sweep_shutters_us:
+            cam, _, vals = item.rpartition("=")
+            lad[cam or "*"] = [int(v) for v in vals.split(",") if v.strip()]
+        out["shutters_us"] = lad["*"] if list(lad) == ["*"] else {
+            k: v for k, v in lad.items() if k != "*"}
+        if "*" in lad and len(lad) > 1:
+            out["shutters_us"]["_default"] = lad["*"]
+    if args.sweep_repeats:
+        out["repeats"] = args.sweep_repeats
     if args.sweep_tolerance is not None:
         out["tolerance"] = args.sweep_tolerance
     if args.sweep_roi:

@@ -45,7 +45,7 @@ sys.path[:0] = [str(REPO / "src"), str(REPO)]
 
 from compression_study.rois import find_rois  # noqa: E402
 from nereus_camera_test_rig.color.card import load_card  # noqa: E402
-from nereus_camera_test_rig.color.exposure_sweep import _laplacian_energy, pick  # noqa: E402
+from nereus_camera_test_rig.color.exposure_sweep import _edge_acutance, pick  # noqa: E402
 from nereus_camera_test_rig.color.metrics import (  # noqa: E402
     delta_e2000,
     linear_to_lab,
@@ -205,7 +205,7 @@ def analyse_dng(dng: Path, rois: dict, ct_curve, meta: dict | None = None) -> di
                "white_clipped": bool(stats["gray_white"]["clip"].max() > CLIP_PATCH),
                "truth_black_over_white": round(float(TRUTH["gray_black"][1]
                                                      / TRUTH["gray_white"][1]), 4)},
-           "sharpness_card": _laplacian_energy(binned[y0:y1, x0:x1, 1]),
+           "sharpness_card": _edge_acutance(binned[y0:y1, x0:x1, 1]),
            "cct": cct_from_greys(stats, ct_curve)}
     out.update(colour_metrics(stats, meta.get("ColourGains"), meta.get("ColourCorrectionMatrix")))
     return out
