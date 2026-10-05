@@ -105,3 +105,12 @@ def test_analysis_config_from_dict_defaults():
     cfg = AnalysisConfig.from_dict({"apriltag": {"expected_tag_ids": [0, 1, 2, 3]}})
     assert cfg.expected_tag_ids == [0, 1, 2, 3]
     assert cfg.rectified_w == 3000 and cfg.rectified_h == 1000
+
+
+def test_upscaled_passes_are_capped_and_stop_once_all_tags_are_found():
+    img = _synth_card()
+    full = detect_tags(img, max_pixels=10**12)
+    capped = detect_tags(img, expected=4, max_pixels=img.shape[0] * img.shape[1])  # scale 1 only
+    assert capped.tag_ids == full.tag_ids and capped.scale_used == 1
+    # a cap below the native size still runs scale 1
+    assert detect_tags(img, max_pixels=1).scale_used == 1

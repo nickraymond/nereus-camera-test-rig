@@ -32,13 +32,24 @@ FRAMESIZES = {
 DEFAULT_FRAMESIZE = "HD"
 
 # Pixel-format allowlist: wire name -> sensor module attribute. RGB565 and GRAYSCALE
-# verified; YUV422 raised "Sensor control failed" (BAYER works but is left out — the
-# capture path saves JPEG and RGB565/GRAYSCALE cover the eval needs).
+# verified; YUV422 raised "Sensor control failed". BAYER is not a JPEG pixformat: RAW goes
+# through ``capture_raw`` (RAW_* below).
 PIXEL_FORMATS = {
     "RGB565": "RGB565",
     "GRAYSCALE": "GRAYSCALE",
 }
 DEFAULT_PIXEL_FORMAT = "RGB565"
+
+# Bayer RAW (``capture_raw``, csi module), measured on OpenMV v5.0.1 on ``nereus002``
+# 2026-09-28 (OQ-21, ``openmv/probes/raw_probe2_v5.py``): ``csi.BAYER`` is 8 bit, 1 byte/px;
+# CFA of the delivered bytes is BGGR (decided on the V1 card: patch hues within 9 deg of
+# truth, RGGB 180 deg off); black level 0 (subtracted on chip, noise clipped at 0). Only HD
+# was probed — whether smaller sizes bin or crop the mosaic is unknown, so they are not offered.
+RAW_FRAMESIZES = {"HD": "HD"}
+RAW_DEFAULT_FRAMESIZE = "HD"
+RAW_CFA = "BGGR"
+RAW_BITS = 8
+RAW_BLACK_LEVEL = 0
 
 DEFAULT_JPEG_QUALITY = 90
 DEFAULT_WARMUP_MS = 2000          # let auto-exposure settle before the snapshot
@@ -54,9 +65,6 @@ STREAM_MAX_SECONDS = 300          # safety cap so a dead host can't stream forev
 # correction. Convention: degrees to rotate the raw frame COUNTER-CLOCKWISE for an
 # upright image (matches the N6 convention).
 #
-# UNVERIFIED for the AE3 (OQ-18): unlike the N6, the AE3's mount rotation has not been
-# confirmed against a known-orientation reference capture — the bring-up recon shot was a
-# ceiling scene with no reliable gravity cue. This value does NOT affect capture,
-# checksums, or the Phase 4 exit criteria (it is metadata only). Left at 0 until a
-# known-orientation shot is taken; do not assume it matches the N6's 90°.
+# 0 on nereus002, verified 2026-09-28 (OQ-18): the V1 card and room read upright in the raw
+# frame. A property of the mount, not the board.
 MOUNT_ROTATION_DEG = 0

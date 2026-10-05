@@ -45,3 +45,6 @@ diagnostics_*.tar.gz
 *.DNG
 *.raw
 *.bayer
+
+# --- Compression study: isolated libs (imagecodecs, cmake, jpegli build) ---
+/.study-pylib/

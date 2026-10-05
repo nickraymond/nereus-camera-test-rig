@@ -41,7 +41,7 @@ if str(_REPO_ROOT) not in sys.path:
 from openmv.common import command_protocol as cp  # noqa: E402
 
 from host_tools.discover_openmv import find_port  # noqa: E402
-from nereus_camera_test_rig.cameras.openmv_usb import _SerialIO  # noqa: E402
+from nereus_camera_test_rig.cameras.openmv_usb import WRITE_TIMEOUT, _SerialIO  # noqa: E402
 
 DEFAULT_BAUD = 115200
 DEFAULT_HTTP_PORT = 8081
@@ -90,7 +90,7 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
         while state.running:
             io.write_message(cp.make_request("start_stream", command_id, settings))
             while state.running:
-                header = cp.decode_message(io.read_line(timeout=10.0))
+                header = io.read_message(timeout=10.0)
                 status = header.get("status")
                 if status == "frame":
                     meta = header.get("frame") or {}
@@ -232,7 +232,7 @@ def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=
     if not dev:
         raise RuntimeError("no OpenMV board found for serial_number=%r" % serial_number)
 
-    ser = serial.Serial(dev, DEFAULT_BAUD, timeout=0.2)
+    ser = serial.Serial(dev, DEFAULT_BAUD, timeout=0.2, write_timeout=WRITE_TIMEOUT)
     io = _SerialIO(ser, default_timeout=10.0)
     command_id = "focus-stream"
     # max_seconds caps each board-side stream segment; the reader re-requests to stay live.

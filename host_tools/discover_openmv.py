@@ -110,19 +110,24 @@ def handshake(port, timeout=DEFAULT_HANDSHAKE_TIMEOUT):
     import serial
 
     try:
-        with serial.Serial(port, DEFAULT_BAUD, timeout=timeout) as ser:
+        with serial.Serial(port, DEFAULT_BAUD, timeout=timeout, write_timeout=timeout) as ser:
             ser.reset_input_buffer()
             ser.write(cp.encode_message(cp.make_request("get_device_info", "discover-0")))
-            # Read one JSON line (pyserial's per-read timeout bounds each ser.read()).
+            # Read up to the first JSON line (pyserial's per-read timeout bounds each
+            # ser.read()); board console lines such as OpenMV v5's ``sensor``
+            # deprecation warning come first and are skipped.
             buf = bytearray()
-            while b"\n" not in buf:
-                chunk = ser.read(256)
-                if not chunk:
+            while True:
+                while b"\n" not in buf:
+                    chunk = ser.read(256)
+                    if not chunk:
+                        return None
+                    buf += chunk
+                line, _, rest = bytes(buf).partition(b"\n")
+                buf = bytearray(rest)
+                if line.strip().startswith(b"{"):
                     break
-                buf += chunk
-            if b"\n" not in buf:
-                return None
-            resp = cp.decode_message(bytes(buf).split(b"\n", 1)[0])
+            resp = cp.decode_message(line)
             if resp.get("status") == "completed":
                 return resp.get("output")
             return None

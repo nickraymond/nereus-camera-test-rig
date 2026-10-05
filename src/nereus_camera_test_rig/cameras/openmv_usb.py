@@ -19,6 +19,7 @@ a fake loopback exercises the whole adapter on the host with no hardware.
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 import time
@@ -48,6 +49,10 @@ TRANSFER_TIMEOUT = 30.0
 RESET_TIMEOUT = 20.0
 _READ_CHUNK = 4096
 
+# A board that stops reading its USB input makes host writes block forever once the CDC buffer
+# fills (AE3 on nereus002, 2026-09-28: a hardware test hung 11 min in serial.write).
+WRITE_TIMEOUT = 10.0
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,6 +70,13 @@ class OpenMvTimeout(OpenMvError):
         super().__init__("timeout", message)
 
 
+class OpenMvDisconnected(OpenMvError):
+    """The USB port went away mid-command (board rebooted or dropped off the bus)."""
+
+    def __init__(self, message: str):
+        super().__init__("device_disconnected", message)
+
+
 class _SerialIO:
     """Buffered line/binary reader over a ``read(n)``/``write(bytes)`` transport.
 
@@ -78,10 +90,24 @@ class _SerialIO:
         self._buf = bytearray()
 
     def write_message(self, message: dict) -> None:
-        self._t.write(cp.encode_message(message))
+        try:
+            self._t.write(cp.encode_message(message))
+        except OSError as exc:  # pyserial's SerialTimeoutException is an OSError
+            raise OpenMvTimeout(
+                "board is not reading its USB input (write failed: %s) — the service is stuck "
+                "or the board is wedged; replug its USB cable (AE3: never USB-reset it)" % exc
+            ) from exc
 
     def _read_some(self) -> bytes:
-        return self._t.read(_READ_CHUNK) or b""
+        try:
+            return self._t.read(_READ_CHUNK) or b""
+        except OSError as exc:  # pyserial SerialException: "device reports readiness to
+            # read but returned no data" — the port vanished. Overnight soak on nereus002
+            # (2026-09-29): the N6 rebooted mid-capture in 9 of 134 cycles, this escaped the
+            # adapter and aborted the whole experiment (no experiment.json, AE3 never tried).
+            raise OpenMvDisconnected(
+                "USB port lost mid-command (%s) — the board rebooted or dropped off the bus"
+                % exc) from exc
 
     def read_line(self, timeout: Optional[float] = None) -> bytes:
         deadline = time.monotonic() + (self._default_timeout if timeout is None else timeout)
@@ -95,6 +121,18 @@ class _SerialIO:
         line = bytes(self._buf[:idx])
         del self._buf[: idx + 1]
         return line
+
+    def read_message(self, timeout: Optional[float] = None) -> dict:
+        """The next protocol message. Board console lines — anything not starting with
+        ``{``, e.g. OpenMV v5's ``sensor`` deprecation warning printed into the USB stream
+        at service start (N6 on ``nereus002``, 2026-09-28) — are logged and skipped."""
+        deadline = time.monotonic() + (self._default_timeout if timeout is None else timeout)
+        while True:
+            line = self.read_line(timeout=max(0.0, deadline - time.monotonic()))
+            if line.strip().startswith(b"{"):
+                return cp.decode_message(line)
+            if line.strip():
+                logger.info("board console: %s", line.decode("utf-8", "replace").strip()[:200])
 
     def read_exact(self, n: int, timeout: Optional[float] = None) -> bytes:
         deadline = time.monotonic() + (self._default_timeout if timeout is None else timeout)
@@ -115,6 +153,7 @@ class OpenMvUsbCamera(CameraDevice):
     """Host adapter driving an OpenMV board over USB serial (N6 today, AE3 in Phase 4)."""
 
     driver = "openmv_usb"
+    raw_extension = "bayer"
 
     def __init__(
         self,
@@ -161,7 +200,11 @@ class OpenMvUsbCamera(CameraDevice):
             )
         self._port = port
         # Short per-read timeout; overall deadlines are enforced in _SerialIO.
-        return serial.Serial(port, self._baudrate, timeout=0.2)
+        try:
+            return serial.Serial(port, self._baudrate, timeout=0.2,
+                                 write_timeout=WRITE_TIMEOUT)
+        except OSError as exc:  # port vanished between discovery and open (re-enumerating)
+            raise OpenMvDisconnected("could not open %s: %s" % (port, exc)) from exc
 
     def _resolve_port(self) -> Optional[str]:
         from host_tools.discover_openmv import find_port
@@ -191,7 +234,7 @@ class OpenMvUsbCamera(CameraDevice):
         io = self._ensure_io()
         command_id = uuid.uuid4().hex[:12]
         io.write_message(cp.make_request(action, command_id, settings))
-        resp = cp.decode_message(io.read_line(timeout=timeout))
+        resp = io.read_message(timeout=timeout)
         if resp.get("status") == "failed":
             err = resp.get("error") or {}
             raise OpenMvError(
@@ -236,6 +279,46 @@ class OpenMvUsbCamera(CameraDevice):
 
         return self._validate(identity, request, dest, output, time.monotonic() - started)
 
+    def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
+        """8-bit Bayer RAW at a locked exposure (Phase 8 S3, OQ-21) → ``destination``
+        (``.bayer``, the mosaic bytes row-major) + ``<stem>.json`` sidecar with everything
+        needed to read it (W, H, CFA, bits, black / white level, read-back exposure / gain)
+        — ``color.raw_io.read_openmv_bayer`` turns the pair into a ``RawFrame``.
+
+        The board streams the frame from RAM in the command's own framed reply (no
+        ``/flash`` copy, see ``capture_service.capture_raw``). Settings: ``warmup_ms``
+        (metering time), optional ``exposure_us`` / ``gain_db`` (else the metered values
+        are locked). On the AE3, ``reset_board`` first (one camera session per boot on v5).
+        """
+        dest = Path(destination)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        identity = self._current_identity()
+        started = time.monotonic()
+        try:
+            settings = {**self._settings, **(request.settings or {}), "filename": dest.name}
+            io = self._ensure_io()
+            io.write_message(cp.make_request("capture_raw", uuid.uuid4().hex[:12], settings))
+            data, footer = self._receive_framed(io, "capture_raw", CAPTURE_TIMEOUT)
+            output = footer.get("output") or {}
+            expected = output["width"] * output["height"] * output["bits"] // 8
+            if len(data) != expected:
+                raise OpenMvError("size_mismatch", "raw is %d B, expected %dx%dx%d bits" % (
+                    len(data), output["width"], output["height"], output["bits"]))
+            dest.write_bytes(data)
+        except OpenMvError as exc:
+            return self._failed(identity, request, exc.code, exc.message,
+                                time.monotonic() - started)
+        result = self._validate(identity, request, dest, output, time.monotonic() - started)
+        if result.ok:
+            sidecar = {"format": "openmv_bayer", "file": dest.name, "sha256": result.sha256,
+                       "size_bytes": result.size_bytes,
+                       "captured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "camera": result.camera.to_dict(),
+                       "duration_seconds": round(result.duration_seconds, 3),
+                       **result.sensor_metadata}
+            dest.with_suffix(".json").write_text(json.dumps(sidecar, indent=2) + "\n")
+        return result
+
     def capture_video(self, destination: str, request: CaptureRequest) -> CaptureResult:
         # OQ-4: short-clip-to-file on the N6 is not yet verified. Live focus streaming is
         # provided separately (host focus stream). Report unsupported, not a crash.
@@ -259,7 +342,16 @@ class OpenMvUsbCamera(CameraDevice):
         or does not come back within ``timeout``.
         """
         started = time.monotonic()
-        self._command("reset_board")
+        try:
+            self._command("reset_board")
+        except (OpenMvTimeout, OpenMvDisconnected) as exc:
+            # The ack can be lost when the board resets before its CDC buffer drains —
+            # the port vanishes mid-read (pyserial SerialException, an OSError) or goes
+            # silent. That is the reset we asked for; only a structured refusal (e.g.
+            # firmware without reset_board) is an error. Measured on the N6 (nereus002,
+            # 2026-09-28): ~1 in 8 resets right after a 1 MB capture_raw lost the ack.
+            logger.info("reset_board ack not received (serial=%r: %s) — board is resetting",
+                        self._serial_number, exc.message)
         if not self._owns_transport:
             # Injected transport (tests/loopback): no real USB to re-enumerate — just
             # re-handshake over the same transport.
@@ -313,29 +405,8 @@ class OpenMvUsbCamera(CameraDevice):
         io = self._ensure_io()
         command_id = uuid.uuid4().hex[:12]
         io.write_message(cp.make_request("get_file", command_id, {"filename": filename}))
-        header = cp.decode_message(io.read_line(timeout=TRANSFER_TIMEOUT))
-        if header.get("status") == "failed":
-            err = header.get("error") or {}
-            raise OpenMvError(
-                err.get("code", "file_not_found"), err.get("message", "get_file failed")
-            )
-        if header.get("status") != "sending":
-            raise OpenMvError("bad_transfer", "unexpected transfer header: %r" % header)
-        transfer = header.get("transfer") or {}
-        size = int(transfer.get("size_bytes", 0))
-        data = io.read_exact(size, timeout=TRANSFER_TIMEOUT)
-        footer = cp.decode_message(io.read_line(timeout=TRANSFER_TIMEOUT))
-        if footer.get("status") != "completed":
-            raise OpenMvError("bad_transfer", "transfer not completed: %r" % footer)
-
-        # Verify the framed payload against the header before trusting it (§19).
-        if len(data) != size:
-            raise OpenMvError("size_mismatch", "got %d bytes, expected %d" % (len(data), size))
+        data, _footer = self._receive_framed(io, "get_file", TRANSFER_TIMEOUT)
         actual_sha = _sha256_bytes(data)
-        expected_sha = transfer.get("sha256")
-        if expected_sha and actual_sha != expected_sha:
-            raise OpenMvError("checksum_mismatch",
-                              "sha256 %s != board %s" % (actual_sha, expected_sha))
         # Cross-check against the capture metadata's own sha where present.
         cap_sha = expected.get("sha256")
         if cap_sha and cap_sha != actual_sha:
@@ -347,6 +418,33 @@ class OpenMvUsbCamera(CameraDevice):
         # free on 2026-07-17 and every capture failed with io_error). Best-effort: a
         # failed delete (e.g. pre-delete_file firmware) must not fail the capture.
         self._delete_remote_file(filename)
+
+    @staticmethod
+    def _receive_framed(io: _SerialIO, action: str, timeout: float) -> tuple[bytes, dict]:
+        """Read one §10 framed reply — ``sending`` header, exactly ``size_bytes`` of payload,
+        ``completed`` footer — and verify the payload's size and SHA-256 against the header
+        before trusting it (§19). Returns (payload, footer)."""
+        header = io.read_message(timeout=timeout)
+        if header.get("status") == "failed":
+            err = header.get("error") or {}
+            raise OpenMvError(err.get("code", "file_not_found"),
+                              err.get("message", "%s failed" % action))
+        if header.get("status") != "sending":
+            raise OpenMvError("bad_transfer", "unexpected transfer header: %r" % header)
+        transfer = header.get("transfer") or {}
+        size = int(transfer.get("size_bytes", 0))
+        data = io.read_exact(size, timeout=TRANSFER_TIMEOUT)
+        footer = io.read_message(timeout=TRANSFER_TIMEOUT)
+        if footer.get("status") != "completed":
+            raise OpenMvError("bad_transfer", "transfer not completed: %r" % footer)
+        if len(data) != size:
+            raise OpenMvError("size_mismatch", "got %d bytes, expected %d" % (len(data), size))
+        actual_sha = _sha256_bytes(data)
+        expected_sha = transfer.get("sha256")
+        if expected_sha and actual_sha != expected_sha:
+            raise OpenMvError("checksum_mismatch",
+                              "sha256 %s != board %s" % (actual_sha, expected_sha))
+        return data, footer
 
     def _delete_remote_file(self, filename: str) -> None:
         """Best-effort ``delete_file`` after a verified retrieval; warn, never raise."""
@@ -383,7 +481,7 @@ class OpenMvUsbCamera(CameraDevice):
             size_bytes=dest.stat().st_size,
             sha256=local_sha,
             duration_seconds=duration,
-            sensor_metadata={
+            sensor_metadata=_raw_metadata(output) if output.get("format") == "bayer" else {
                 "framesize": output.get("framesize"),
                 "pixel_format": output.get("pixel_format"),
                 "jpeg_quality": output.get("jpeg_quality"),
@@ -411,6 +509,19 @@ class OpenMvUsbCamera(CameraDevice):
             duration_seconds=duration,
             error={"code": code, "message": message},
         )
+
+
+_RAW_KEYS = ("width", "height", "framesize", "cfa", "bits", "black_level", "white_level",
+             "exposure_us", "gain_db", "requested", "frame_time_us", "metered", "isp_rgb_gain_db",
+             "mount_rotation_deg", "timing_ms")
+
+
+def _raw_metadata(output: dict) -> dict[str, Any]:
+    """The board's ``capture_raw`` facts, as recorded in the sidecar (OQ-21: CFA, black
+    level and bit depth are measured board facts from ``board_config.RAW_*``;
+    ``isp_rgb_gain_db`` is diagnostic only — the ISP WB gains are not in the Bayer data
+    and the firmware lists the top-left (blue) site first)."""
+    return {k: output.get(k) for k in _RAW_KEYS}
 
 
 def _sha256_bytes(data: bytes) -> str:

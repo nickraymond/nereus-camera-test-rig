@@ -13,6 +13,7 @@ path; see OQ-10). The camera's chosen values are recorded from ``--metadata``.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import shutil
 import subprocess
@@ -36,6 +37,8 @@ DEFAULT_VIDEO_SECONDS = 5.0
 DEFAULT_VIDEO_WIDTH = 1920
 DEFAULT_VIDEO_HEIGHT = 1080
 DEFAULT_VIDEO_CODEC = "mjpeg"
+
+_DNG_HEADER_MAX = 2_000_000  # DNG tags + embedded thumbnail, bytes
 
 # Sensor metadata fields worth recording from libcamera --metadata (Spec §5).
 _METADATA_FIELDS = (
@@ -144,8 +147,20 @@ class Imx708Camera(CameraDevice):
     def configure(self, settings: dict[str, Any]) -> None:
         self._settings.update(settings or {})
 
+    raw_extension = "dng"
+
     def capture_image(self, destination: str, request: CaptureRequest) -> CaptureResult:
-        dest = Path(destination)
+        return self._still(Path(destination), request, raw=False)
+
+    def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
+        """RAW (DNG) + JPEG from one exposure: ``rpicam-still --raw`` writes the DNG next to the
+        JPEG; ``--mode W:H`` makes it full resolution (without it the DNG is the 2304x1296
+        binned mode — OQ-24, verified on nereus002). ``destination`` is the ``.dng``; the JPEG
+        sibling is kept. Exposure as the still (auto unless the profile's camera_controls
+        lock it); card metering is ``scripts/capture_raw_imx708.py --card``."""
+        return self._still(Path(destination).with_suffix(".jpg"), request, raw=True)
+
+    def _still(self, dest: Path, request: CaptureRequest, raw: bool) -> CaptureResult:
         dest.parent.mkdir(parents=True, exist_ok=True)
         meta_path = dest.with_suffix(dest.suffix + ".rpicam.json")
         camera = CameraIdentity(driver=self.driver, platform="raspberry_pi", sensor="imx708")
@@ -169,17 +184,37 @@ class Imx708Camera(CameraDevice):
                 "--width", str(width),
                 "--height", str(height),
                 "-q", str(quality),
-                "--metadata", str(meta_path),
+                "--metadata", meta_path.name,
                 "--metadata-format", "json",
             ]
             cmd += _control_args(settings.get("camera_controls") or {})
-            cmd += ["-o", str(dest)]
-            self._run(cmd, timeout)
+            if raw:
+                cmd += ["--raw", "--mode", f"{width}:{height}"]
+            cmd += ["-o", dest.name]
+            self._run(cmd, timeout, cwd=dest.parent)
         except CaptureError as exc:
             elapsed = self._clock() - started
             return self._failed(camera, request, "capture_failed", str(exc), elapsed)
 
-        return self._validate_still(camera, request, dest, meta_path, self._clock() - started)
+        result = self._validate_still(camera, request, dest, meta_path, self._clock() - started)
+        return self._validate_dng(result, dest.with_suffix(".dng"), width, height) if raw \
+            else result
+
+    def _validate_dng(self, still: CaptureResult, dng: Path, width: int,
+                      height: int) -> CaptureResult:
+        """The DNG is the output: it must exist and hold a 16-bit WxH mosaic plus tags and a
+        thumbnail (24,029,068 B at 4608x2592 on nereus002). The still's metadata is kept."""
+        if not still.ok:
+            return still
+        size = dng.stat().st_size if dng.is_file() else 0
+        if not width * height * 2 <= size <= width * height * 2 + _DNG_HEADER_MAX:
+            return self._failed(still.camera, still.request, "bad_raw",
+                                f"{dng}: {size} B, expected {width}x{height}x2 B + header",
+                                still.duration_seconds)
+        return dataclasses.replace(still, output_path=str(dng), image_format="dng",
+                                   size_bytes=size, sha256=sha256_file(dng),
+                                   sensor_metadata={**still.sensor_metadata,
+                                                    "jpeg_path": still.output_path})
 
     def capture_video(self, destination: str, request: CaptureRequest) -> CaptureResult:
         dest = Path(destination)
@@ -205,9 +240,9 @@ class Imx708Camera(CameraDevice):
                 "--width", str(width),
                 "--height", str(height),
                 "--codec", codec,
-                "-o", str(dest),
+                "-o", dest.name,
             ]
-            self._run(cmd, timeout)
+            self._run(cmd, timeout, cwd=dest.parent)
         except CaptureError as exc:
             elapsed = self._clock() - started
             return self._failed(camera, request, "capture_failed", str(exc), elapsed)
@@ -229,10 +264,16 @@ class Imx708Camera(CameraDevice):
         }
 
     # -- helpers -------------------------------------------------------------
-    def _run(self, cmd: list[str], timeout: float) -> None:
+    def _run(self, cmd: list[str], timeout: float, cwd: Optional[Path] = None) -> None:
+        """Output files are passed as bare names with ``cwd`` = their folder: rpicam-still
+        (rpicam-apps 1.12, nereus002) silently truncates an ``-o`` path to 127 characters and
+        exits 0 — an absolute results path + experiment type went past that and the still
+        was written as ``imx708_image_20260929T03`` (2026-09-28)."""
         joined = " ".join(cmd)
         try:
-            result = self._runner(cmd, capture_output=True, timeout=timeout, check=False)
+            kwargs = {"cwd": str(cwd)} if cwd is not None else {}
+            result = self._runner(cmd, capture_output=True, timeout=timeout, check=False,
+                                  **kwargs)
         except subprocess.TimeoutExpired as exc:
             raise CaptureError(f"camera command timed out after {timeout}s: {joined}") from exc
         except FileNotFoundError as exc:

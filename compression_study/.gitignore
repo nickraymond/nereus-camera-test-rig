@@ -1,0 +1,10 @@
+# Generated study outputs stay local (SPEC §6: no generated evidence in git).
+# Committed: REPORT.md and results/results.csv (small text evidence); report.html is
+# published as an artifact instead.
+/work/
+/results/*
+!/results/results.csv
+!/results/versions.json
+!/results/gate.json
+!/results/inventory.json
+/bin/

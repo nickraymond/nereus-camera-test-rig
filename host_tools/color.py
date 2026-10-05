@@ -20,6 +20,9 @@ Usage::
     python -m host_tools.color decide results/color/<dataset_id>/correct --config <dataset.yaml>
     python -m host_tools.color grvi results/color/<dataset_id>/locate --config <dataset.yaml> \
         --backend <nereus-vision-dev checkout> --python <backend env python>   # before correct
+    python -m host_tools.color jxl-check <.orf|.dng|.bayer> [--jxl-distance 0.5 1.0]  # transport
+    python -m host_tools.color calibrate configs/calibration/sessions/<session>.yaml \
+        --data <folder of capture folders>   # S4 in-air colour calibration (rig cameras)
 """
 
 from __future__ import annotations
@@ -60,6 +63,21 @@ def main(argv=None) -> int:
     p = sub.add_parser("inspect", help="metadata + linear stats + preview of one RAW file")
     p.add_argument("file", type=Path)
     p.add_argument("--out", type=Path, default=REPO / "results" / "color")
+    p = sub.add_parser("jxl-check", help="linear JPEG XL transport round trip on one RAW")
+    p.add_argument("file", type=Path)
+    p.add_argument("--jxl-distance", "--distance", dest="distance", type=float, nargs="+",
+                   default=[0.5, 1.0], help="JPEG XL encoder distance (cjxl -d; 0 = lossless, "
+                   "larger = smaller file, more loss) — not a camera distance")
+    p.add_argument("--crop",
+                   type=lambda v: v if v == "card" else tuple(int(c) for c in v.split(",")),
+                   help="x,y,w,h in sensor px, or 'card' (1600x900 centred on the card; needs "
+                        "--card); default: centred 1600x900, bmcam001's crop")
+    p.add_argument("--wb", type=lambda v: tuple(float(c) for c in v.split(",")),
+                   help="r,g,b gains that set the code spacing (default: the file's as-shot WB)")
+    p.add_argument("--card", type=Path,
+                   help="white-balance on this card's grey, located in the file (e.g. "
+                        "configs/cards/nereus_v2.yaml); overrides the as-shot WB")
+    p.add_argument("--out", type=Path, default=REPO / "results" / "color" / "jxl_check")
     p = sub.add_parser("ingest", help="build the tool manifest for a dataset folder")
     p.add_argument("dataset_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -103,6 +121,11 @@ def main(argv=None) -> int:
     p.add_argument("--card", type=Path, default=REPO / "configs" / "cards" / "nereus_v2.yaml")
     p.add_argument("--calibration", type=Path,
                    help="default: configs/calibration/<dataset camera>.yaml")
+    p = sub.add_parser("calibrate", help="S4: colour matrix per rig camera x illuminant")
+    p.add_argument("session", type=Path, help="configs/calibration/sessions/<session>.yaml")
+    p.add_argument("--data", type=Path, required=True, help="root of the session's captures")
+    p.add_argument("--out", type=Path, default=REPO / "results" / "color")
+    p.add_argument("--workers", type=int, default=4)
     p = sub.add_parser("decide", help="S2a decision report: classes, CIs, win rates, needs-V3")
     p.add_argument("correct_dir", type=Path)
     p.add_argument("--config", type=Path, required=True)
@@ -130,6 +153,19 @@ def main(argv=None) -> int:
     try:
         if args.stage == "inspect":
             summary = stages.inspect(args.file, args.out)
+        elif args.stage == "jxl-check":
+            from nereus_camera_test_rig.color.card import load_card
+            from nereus_camera_test_rig.color.linear_jxl import roundtrip_check
+
+            if args.card and args.wb:
+                raise ValueError("give --wb or --card, not both")
+            summary = roundtrip_check(stages.open_raw(args.file), args.out / args.file.stem,
+                                      args.distance, args.crop, args.wb,
+                                      load_card(args.card) if args.card else None)
+        elif args.stage == "calibrate":
+            from nereus_camera_test_rig.color.calibrate import calibrate
+
+            summary = calibrate(args.session, args.data, args.out, args.workers)
         elif args.stage == "ingest":
             summary = ingest(args.dataset_dir, args.config, args.out, read_exif)
         elif args.stage == "measure-card":

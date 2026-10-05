@@ -36,6 +36,7 @@ import sensor
 
 STORAGE_DIR = "/flash"
 _CHUNK = 512  # small allocations for MicroPython (CLAUDE.md §23)
+_RAW_CHUNK = 4096  # memoryview slices of the frame buffer: no copy, no allocation per chunk
 
 # Filename charset allowed for on-board files. The host controls the name (it owns real
 # time for timestamps); the board sanitizes to a basename in this set so a request can
@@ -129,6 +130,164 @@ def capture_image(board_config, settings):
     except Exception:
         pass
     return out
+
+
+def _finite(v):
+    """JSON-safe float: the AE3 reports ``rgb_gain_db()`` as (-inf, 0, -inf)."""
+    v = float(v)
+    return v if v == v and v not in (float("inf"), float("-inf")) else None
+
+
+# PAG7936 frame-time registers (us, 21 bit) + the sensor-update commit — the sensor on both
+# boards. Ported unchanged from Nick's ``ADIN_SPI_OpenMV/pi/s28/s28_board_burst.py``
+# (``set_frame_time``, verified there 2026-09-03: exposure read-back exact, no wedge). The
+# exposure lock clamps to the live frame time (N6 8,248 us, AE3 16,584 us at HD Bayer by
+# default, OQ-51), so a longer exposure needs a longer frame first. ``csi.framerate()`` would
+# do this through a mode rewrite + capture abort that wedges the board — never call it.
+_FT_H, _FT_M, _FT_L = 0x004E, 0x004D, 0x004C
+_SENSOR_UPDATE, _SU_FLAG = 0x00EB, 0x80
+_FT_SLACK_US = 5000  # frame time = exposure + slack (the sensor keeps an 80 us margin)
+_FT_MAX_US = 2000000
+
+
+def _set_frame_time(cam, ft_us):
+    ft_us = min(max(int(ft_us), 200), _FT_MAX_US)
+    h = cam.__read_reg(_FT_H)
+    cam.__write_reg(_FT_H, (h & 0xE0) | ((ft_us >> 16) & 0x1F))
+    cam.__write_reg(_FT_M, (ft_us >> 8) & 0xFF)
+    cam.__write_reg(_FT_L, ft_us & 0xFF)
+    cam.__write_reg(_SENSOR_UPDATE, _SU_FLAG)
+    return ft_us
+
+
+def _get_frame_time(cam):
+    return (((cam.__read_reg(_FT_H) & 0x1F) << 16) | (cam.__read_reg(_FT_M) << 8)
+            | cam.__read_reg(_FT_L))
+
+
+def _snap(cam, tries=4):
+    """``snapshot()`` that retries the transient "Frame capture has timed out." seen on the
+    first frame after a frame-time change (Nick's ``snap``, measured 2026-09-02)."""
+    for i in range(tries):
+        try:
+            return cam.snapshot()
+        except RuntimeError as e:
+            if "timed out" in str(e) and i < tries - 1:
+                time.sleep_ms(60)
+                continue
+            raise
+
+
+def capture_raw(usb, command_id, board_config, settings):
+    """Bayer RAW at a locked exposure, streamed straight from RAM to the host (S3, OQ-21).
+
+    Uses the v5 ``csi`` module (``csi.BAYER`` is the only raw format: 8 bit, 1 byte/px).
+    Autos run for ``warmup_ms``, then exposure / gain are locked at the metered values —
+    or at ``exposure_us`` / ``gain_db`` when given — and WB is frozen, then 3 frames are
+    flushed (a changed exposure can leave two stale frames buffered; Nick's
+    ``s28_board_burst.py``) before the snapshot, so the read-back values describe this
+    frame. The ISP WB gains are *not* in the Bayer data and ``rgb_gain_db()`` lists the
+    top-left site first (OQ-21): reported as-is, for diagnosis only. An exposure longer than
+    the default frame time allows is reached by lengthening the frame through the sensor's
+    registers (``_set_frame_time``, OQ-51; reported as ``frame_time_us``). Never calls
+    ``csi.framerate()`` (wedges the board). On the AE3 this is a camera session:
+    ``reset_board`` first (one session per boot on v5).
+
+    Wire sequence, as ``send_file`` (§10): ``sending`` header (size + SHA-256) -> exactly
+    size_bytes of mosaic -> ``completed`` line carrying the capture metadata. No ``/flash``
+    copy: writing 1 MB to the N6's flash took ~7.6 s of wall time with the tick counter and
+    USB stalled (``ticks_ms`` reported 0.5 s), and the N6 dropped off USB after ~1 in 10
+    such captures (``nereus002``, 2026-09-28); with no flash write the capture takes ~1 s.
+    Settings errors raise ``ProtocolError`` before any binary is sent.
+    """
+    import csi
+
+    fs_name = settings.get("framesize", board_config.RAW_DEFAULT_FRAMESIZE)
+    attr = board_config.RAW_FRAMESIZES.get(fs_name)
+    if attr is None:
+        raise cp.ProtocolError(
+            cp.ERR_CAPTURE_FAILED, "unsupported raw framesize: " + repr(fs_name)
+        )
+    warmup_ms = int(settings.get("warmup_ms", board_config.DEFAULT_WARMUP_MS))
+    name = _safe_basename(settings.get("filename") or "capture.bayer")
+
+    t_start = time.ticks_ms()
+    cam = csi.CSI()
+    cam.reset()
+    cam.pixformat(csi.BAYER)
+    cam.framesize(getattr(csi, attr))
+    while time.ticks_diff(time.ticks_ms(), t_start) < warmup_ms:
+        cam.snapshot()
+    metered = {"exposure_us": cam.exposure_us(), "gain_db": _finite(cam.gain_db())}
+    exposure_us = int(settings.get("exposure_us") or metered["exposure_us"])
+    gain_db = float(settings.get("gain_db") or metered["gain_db"] or 0.0)
+    cam.auto_exposure(False, exposure_us=exposure_us)
+    cam.auto_gain(False, gain_db=gain_db)
+    cam.auto_whitebal(False)
+    frame_time_us = default_ft = None
+    if cam.exposure_us() < exposure_us * 0.95:
+        # Clamped by the frame time: lengthen the frame, then lock the exposure again. Only
+        # then — the default path never touches sensor registers. The previous frame time is
+        # put back after the frame is sent, so a long capture leaves no state behind (a
+        # later short locked capture would otherwise still run one frame per long period).
+        default_ft = _get_frame_time(cam)
+        frame_time_us = _set_frame_time(cam, exposure_us + _FT_SLACK_US)
+        cam.auto_exposure(False, exposure_us=exposure_us)
+    try:
+        _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
+                                 metered, exposure_us, gain_db, frame_time_us)
+    finally:
+        if default_ft is not None:
+            _set_frame_time(cam, default_ft)
+
+
+def _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
+                             metered, exposure_us, gain_db, frame_time_us):
+    t_locked = time.ticks_ms()
+    for _ in range(3):
+        _snap(cam)
+    img = _snap(cam)
+    t_snap = time.ticks_ms()
+
+    data = memoryview(img.bytearray())
+    size = len(data)
+    h = hashlib.sha256()
+    for off in range(0, size, _RAW_CHUNK):
+        h.update(data[off:off + _RAW_CHUNK])
+    sha = binascii.hexlify(h.digest()).decode()
+    t_sha = time.ticks_ms()
+    out = {
+        "filename": name,
+        "width": img.width(),
+        "height": img.height(),
+        "format": "bayer",
+        "framesize": fs_name,
+        "cfa": board_config.RAW_CFA,
+        "bits": board_config.RAW_BITS,
+        "black_level": board_config.RAW_BLACK_LEVEL,
+        "white_level": (1 << board_config.RAW_BITS) - 1,
+        "exposure_us": cam.exposure_us(),
+        "gain_db": _finite(cam.gain_db()),
+        "requested": {"exposure_us": exposure_us, "gain_db": gain_db},
+        "frame_time_us": frame_time_us,
+        "metered": metered,
+        "isp_rgb_gain_db": [_finite(v) for v in cam.rgb_gain_db()],
+        "size_bytes": size,
+        "sha256": sha,
+        "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
+    }
+    usb.write(cp.encode_message(cp.sending_response(command_id, name, size, sha)))
+    for off in range(0, size, _RAW_CHUNK):
+        usb.write(data[off:off + _RAW_CHUNK])
+    # Where the capture time goes (metering, lock + flush + snapshot, SHA-256, USB send);
+    # the soak cadence depends on it (S7).
+    out["timing_ms"] = {
+        "meter": time.ticks_diff(t_locked, t_start),
+        "lock_snapshot": time.ticks_diff(t_snap, t_locked),
+        "sha256": time.ticks_diff(t_sha, t_snap),
+        "send": time.ticks_diff(time.ticks_ms(), t_sha),
+    }
+    usb.write(cp.encode_message(cp.completed_response(command_id, out)))
 
 
 def reset_board(usb, command_id):

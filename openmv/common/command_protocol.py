@@ -49,9 +49,11 @@ PROTOCOL_VERSION = 1
 #: ``get_file``) — the flash copy is only a transfer buffer; the host deletes it after a
 #: checksum-verified retrieval so captures can't fill /flash (observed 2026-07-17: the N6
 #: hit 0 bytes free and every capture failed with io_error "Write failed").
+#: ``capture_raw`` streams one 8-bit Bayer frame at a locked exposure, framed like
+#: ``get_file`` (Phase 8 S3, OQ-21).
 ALLOWED_ACTIONS = (
-    "get_device_info", "capture_image", "get_file", "delete_file", "start_stream",
-    "reset_board",
+    "get_device_info", "capture_image", "capture_raw", "get_file", "delete_file",
+    "start_stream", "reset_board",
 )
 
 LINE_TERMINATOR = b"\n"
@@ -129,7 +131,7 @@ def failed_response(command_id, code, message, version=PROTOCOL_VERSION):
 
 
 def sending_response(command_id, filename, size_bytes, sha256, version=PROTOCOL_VERSION):
-    """Header line that precedes a framed binary payload (get_file)."""
+    """Header line that precedes a framed binary payload (get_file, capture_raw)."""
     return {
         "version": version,
         "command_id": command_id,

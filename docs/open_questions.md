@@ -40,14 +40,27 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 - **[NEEDS-DOCS] OQ-6 — On-board AprilTag capability.** Whether N6/AE3 can/should run any
   detection on-device, or whether all analysis stays host-side (Pi). Affects nothing in the
   MVP (analysis is host-side) but relevant to the down-select (Spec §17–18).
-- **[NEEDS-HARDWARE] OQ-18 — AE3 sensor mount rotation.** The AE3 carries the same PAG7936
+- **[RESOLVED 2026-09-28] OQ-18 — AE3 sensor mount rotation.** **Answer (`nereus002`):** all
+  three cameras deliver upright raw frames on this rig — V1 card text and the room read upright
+  in the IMX708, N6 and AE3 frames. `MOUNT_ROTATION_DEG` = 0 on both OpenMV boards (the N6's 90
+  was the `nereus000` mount); the IMX708 has no rotation field and is no longer inverted (the
+  Phase 6 "mounted inverted" note was `nereus000`). Mount rotation is a rig fact, re-check it
+  after any re-mount. *Original:* The AE3 carries the same PAG7936
   sensor as the N6 but on a different PCB, so its physical mount rotation is not necessarily
   the N6's 90°. The bring-up recon shot (2026-07-15) was a ceiling scene with no reliable
   gravity cue, so `openmv/ae3/board_config.py` sets `MOUNT_ROTATION_DEG = 0` as a placeholder.
   This is metadata only — raw frames are stored un-rotated and it does not affect capture,
   checksums, or the Phase 4 exit criteria — but the down-select side-by-side wants it right.
   Resolve with a known-orientation reference capture; do **not** assume it matches the N6.
-- **[DEFERRED] OQ-19 — Firmware update to v5.0.0 + `sensor`→`csi` migration.** Both boards run
+- **[PARTIAL 2026-09-28] OQ-19 — Firmware update to v5.0.0 + `sensor`→`csi` migration.**
+  **Firmware: done** — both boards on `nereus002` run **OpenMV v5.0.1** (MicroPython 1.28,
+  `os.uname()`), updated by Nick. What changed for the rig, all verified on hardware: the N6's
+  `pyb` has no `USB_VCP` → shared `openmv/common/usb_console.py` shim (#67); the legacy
+  `sensor` module still works but prints a deprecation warning into the USB stream → the host
+  skips non-JSON lines (#67); the AE3 hard-crashes on the second camera session per boot → one
+  capture per boot, `reset_board` first (#70; Nick's `ADIN_SPI_OpenMV/firmware/ae3_usb/README.md`);
+  a board that stops reading no longer hangs the host (write timeout, #69). **Still open:** the
+  `sensor` → `csi` migration (do it before `sensor` is removed). *History:* Both boards ran
   pre-v5.0.0 firmware (N6 MicroPython `1.26.0`; AE3 `1.25.0-preview`). OpenMV **v5.0.0** (2026-07-02)
   takes the N6/AE3 out of beta and lists "Fix Apriltags on the AE3", but bundles MicroPython 1.28
   with API changes: the legacy `sensor` module (used by `openmv/common/capture_service.py`) is
@@ -105,7 +118,9 @@ the relevant item is resolved against official OpenMV docs or a working board ex
 
 ## Video (Pi)
 
-- **[RESOLVED-CONSTRAINT] OQ-17 — Video codec on the Pi 5.** The Pi 5 has **no
+- **[RESOLVED-CONSTRAINT] OQ-17 — Video codec on the Pi 5.** *Pi 5 only:* the Zero 2 W rig
+  (`nereus002`, OQ-15) has a hardware H.264 encoder — re-check `rpicam-vid` codecs there when
+  video is next needed. The Pi 5 has **no
   hardware H.264 encoder**, and `nereus000`'s `rpicam-vid` was built **without libav**
   (`--codec libav` → "Unrecognised codec"; `--codec h264` → "Unable to find an
   appropriate H.264 codec"). Working dependency-free codecs are `mjpeg` and `yuv420`.
@@ -137,10 +152,16 @@ the relevant item is resolved against official OpenMV docs or a working board ex
   imported it (the planned HEIC-encode port was never built) and its wheels carry a GPLv2
   classifier (SPEC §20 licence policy). If HEIC is needed later, add it to an internal-only
   extra with a `configs/licenses.yaml` review; it must not enter the shipped closure.
-- **[RESOLVED] OQ-15 — Target Pi model / OS version.** `nereus000` = Raspberry Pi 5
-  (BCM2712), Debian 13 "trixie", aarch64, Python 3.13, kernel 6.18. More memory/CPU than the
-  Pi Zero 2W the prior art was tuned for, so the isolated-subprocess memory workarounds are
-  less critical here (keep them anyway — cheap insurance).
+- **[CHANGED 2026-09-28] OQ-15 — Target Pi model / OS version.** **The rig is now `nereus002`,
+  a Raspberry Pi Zero 2 W** with the IMX708, N6 and AE3 (Nick, 2026-09-28): the field units are
+  Zero 2 W class and the Pi 5 will not be used for field testing, so no Pi 5 support is needed.
+  Zero 2 W constraints to plan for: 512 MB RAM (the prior art's isolated-subprocess memory
+  workarounds matter again; measure OpenCV card analysis on 12 MP frames), one USB OTG data
+  port (a powered hub for the two OpenMV boards), VC4 ISP. OS, arch (32/64-bit), kernel and
+  Python version: record at bring-up. *History:* Phases 1–6 were built and verified on
+  `nereus000` = Raspberry Pi 5 (BCM2712), Debian 13 "trixie", aarch64, Python 3.13, kernel
+  6.18. That Pi has since been repurposed (not the rig), so every hardware result from it is
+  re-verified on `nereus002` before S3.
 - **[OPEN] OQ-16 — `opencv-contrib-python` on the Pi.** ArUco requires the contrib build;
   confirm it installs cleanly on the target Pi OS/arch (wheels availability).
 
@@ -150,7 +171,46 @@ From the design brief §11 (`docs/DESIGN_edge_color_correction.md`) plus gaps fo
 planning (2026-09-26). "Blocks" names the Phase 8 sprint (SPEC §4) that needs the answer.
 Items for Nick are marked **(Nick)**.
 
-- **[PARTIAL] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.* What the
+- **[RESOLVED 2026-09-28] OQ-21 — OpenMV Bayer (RAW) support, bit depth, WB.** *Blocks S3.*
+  **Answer (both boards, real hardware on `nereus002`, OpenMV v5.0.1, `csi`,
+  `openmv/probes/raw_probe2_v5.py`, V1 card in air):**
+  - **CFA = BGGR** on both boards, for the bytes as `img.bytearray()` delivers them (same
+    orientation as the ISP JPEG — checked against a `capture_image` frame). Decided on the card:
+    after grey WB, all 7 colour patch hues land within 9° of the V1 measured truth; median
+    ΔE00 (WB'd camera RGB as sRGB, no matrix) BGGR 10.0 vs RGGB 24.7 (N6), 8.3 vs 25.7 (AE3).
+  - **8-bit**, HD 1280×800, 1,024,000 B; **black level 0** — the sensor subtracts black on chip
+    and clips: at the shortest exposure (80 µs, 3.15 dB) the per-site means are 0.3–1.1 and
+    the mode is 0 (N6 47 %, AE3 39 % of samples). No pedestal, so dark-noise is clipped at 0
+    (a small positive bias in near-black patches). A lens-covered frame would pin the noise
+    floor; not needed for the black level. `blc_regs` → "not supported"; `auto_blc` needs an
+    argument (untouched).
+  - **ISP WB gains are not in the Bayer data.** Grey on the raw is far from neutral (card WB
+    needs R +6.9 / B +2.3 dB on the N6, +6.0 / +2.8 dB on the AE3). Forcing
+    `auto_whitebal(False, rgb_gain_db=(0,0,0))` is silently ignored (read-back and Bayer means
+    unchanged). The N6's `rgb_gain_db()` (2.7, 0, 6.5 dB) equals the grey-world gains of the
+    raw with the **top-left (blue) site listed first** — do not read its first element as red.
+    The AE3 reports (−inf, 0, −inf): no WB gains. So as-shot WB for OpenMV RAW comes from the
+    card (or a stored calibration), never from `rgb_gain_db`.
+  - **Minimum analogue gain 3.15 dB** (asking for 0 dB reads back 3.152157; the auto value reads
+    0.0 until locked), **minimum exposure 80 µs** (asking for 1 µs). Lock pattern (from Nick's
+    `s28_board_burst.py`): `auto_exposure(False, exposure_us=e)`, `auto_gain(False, gain_db=g)`,
+    `auto_whitebal(False)`, then flush 3 frames; never `csi.framerate()` (wedges the board).
+  - Free heap after a frame: N6 25.6 MB, **AE3 4.1 MB**. Flash free: N6 1.7 MB with two frames
+    stored (4.2 MB total), AE3 3.8 MB (8.4 MB total) — one frame at a time on the N6.
+  - The in-air test scene clipped (max 255 on every site at the auto exposure): the S3 locked
+    recipe must meter for the card, not the window.
+  - **`capture_raw` (allowlisted, shared service) streams the frame from RAM** in its own
+    framed reply (§10 framing, SHA-256 verified), with no `/flash` copy: writing 1 MB to the
+    N6's flash took **~7.6 s of wall time while `ticks_ms` reported 0.5 s** (tick counter and
+    USB stalled), and the N6 dropped off USB mid-capture during it. Streamed: **~2.5 s per
+    capture** on both boards at 2 s metering (send 50–90 ms, SHA-256 90–150 ms on board).
+    Stress on `nereus002` with `reset_board` before each: N6 30/30, AE3 15/15.
+  *First probe (N6, `raw_probe_v5.py`):* `csi.BAYER` is the only raw format (no 10/12-bit
+  constant); per-2×2 means 56.9 / 80.6 / 80.5 / 40.7 put the greens at TR/BL; `mpremote fs cp`
+  of the 1 MB frame took > 90 s → use the rig's framed `get_file` (OQ-23). The AE3 gave the
+  same 8-bit HD frames in Nick's September runs (`isp_run.py`). *Next:* allowlisted
+  `capture_raw` (S3).
+  *Earlier notes:* What the
   repo already tells us:
   - **AE3:** `sensor.BAYER` was accepted by `set_pixformat` during the 2026-07-15 bring-up
     probe (fw 1.25.0-preview), recorded in the `PIXEL_FORMATS` comment in
@@ -172,26 +232,58 @@ Items for Nick are marked **(Nick)**.
   answerable from code: the current path configures one pixformat and takes one
   `snapshot()`. If one exposure can't give both, capture back-to-back and record it
   (brief §7 P0).
-- **[NEEDS-HARDWARE] OQ-23 — USB transfer time for a raw frame.** *Blocks S3 (soak cadence
+- **[RESOLVED 2026-09-28] OQ-23 — USB transfer time for a raw frame.** **Answer (`nereus002`,
+  rig `get_file`, 512 B board chunks, SHA-256 verified):** 1,024,000 B in **0.77 s on the N6**
+  (~1.3 MB/s) and **0.91 s on the AE3** (~1.1 MB/s), repeatable across two frames each —
+  well inside `TRANSFER_TIMEOUT` (30 s), and > 100× faster than `mpremote fs cp`. `capture_raw`
+  skips the file step and streams from RAM: capture + transfer **~2.5 s** end to end (OQ-21);
+  add ~3.5 s (N6) / ~5 s (AE3) when `reset_board` runs first. *Original:*
+  *Blocks S3 (soak cadence
   in S7).* Transfer is not timed separately, but the host's capture `duration_seconds`
   includes `_retrieve_file` (`cameras/openmv_usb.py`), and `TRANSFER_TIMEOUT = 30.0` s bounds
   it — a 2 MB frame must finish inside that. Expected payload is 1.0 MB (8-bit) or 2.0 MB (16-bit) per HD frame over
   the existing length-framed path (512 B board-side chunks, SHA-256 verified). Measure on
   both boards; log it in `capture.json`.
-- **[NEEDS-HARDWARE] OQ-24 — `rpicam-still --raw` on the Pi 5.** *Blocks S3; the S0 DNG
+- *(2026-09-29 addendum to OQ-24)* **rpicam-still (rpicam-apps 1.12) truncates its `-o`
+  path to 127 characters and still exits 0** (measured on `nereus002`: any path ≥ 128 chars is
+  written as its first 127). `cameras/imx708.py` now runs rpicam with `cwd` = the capture folder
+  and bare file names. `scripts/capture_raw_imx708.py` still passes full paths — safe with its
+  default `results/raw_imx708/<UTC>/` (~70 chars), not with a long `--out`.
+- **[RESOLVED 2026-09-28] OQ-24 — `rpicam-still --raw` on the rig Pi (`nereus002`, Zero 2 W; was
+  "on the Pi 5").** **Answer (real hardware, `scripts/capture_raw_imx708.py`):** one exposure
+  gives JPEG + DNG; with `--mode 4608:2592` the DNG is full resolution, 16-bit, uncompressed,
+  BGGR, black 64 / white 1023 (10-bit), 24,029,068 B (without `--mode` the September captures
+  were 2304×1296 binned). The DNG's ExposureTime and ISO match `--metadata`; AsShotNeutral is
+  the inverse of the locked ColourGains to ~1 %. The raw sits in a **SubIFD** with the colour
+  tags in IFD0 — `read_dng` missed them until PR #60. No **FNumber** tag: the fixed aperture
+  must come from the camera's calibration file. The sensor's lowest analogue gain is
+  **1.1228** (1.0 is clamped; read back). `tifffile` reads it (`NEREUS_IMX708_DNG` test).
+  *Original question:* *Blocks S3; the S0 DNG
   demo needs one sample.* Does it write a DNG from the same frame as the JPEG, and do the
   DNG's tags match the exposure/gains in `--metadata`? The adapter never passes `--raw`
   today (`cameras/imx708.py` builds `--width/--height/--metadata` + optional controls), but
   it already records ExposureTime / AnalogueGain / ColourGains from `--metadata` (OQ-10),
   so there is a ready comparison. Also unverified: that `tifffile` reads the rpicam DNG.
-  For S0: one manual `rpicam-still --raw` capture on `nereus000` (no code change) gives the
+  For S0: one manual `rpicam-still --raw` capture on the rig (no code change) gives the
   sample; the full answer is S3.
-- **[NEEDS-HARDWARE] OQ-25 — Pi 5 processing time for full-res IMX708 RAW through physics
+- **[NEEDS-HARDWARE] OQ-25 — Zero 2 W (rig / field Pi) processing time for full-res IMX708 RAW through physics
   v0.** *Informational, S3+.* Measure once `color/pipeline.py` exists. Fallback if too slow:
   the 2304×1296 binned sensor mode (brief §10).
-- **[OPEN] OQ-26 — Pool housing plan (Nick).** *Blocks S6.* All cameras + Pi in one housing,
-  or cameras housed and cabled to a dry poolside Pi?
-- **[OPEN] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *S2b and S4.* Enables
+- **[RESOLVED 2026-10-01] OQ-26 — Pool housing plan (Nick).** One housing: the Pi and all three
+  cameras (IMX708, N6, AE3) aimed at the same target, with a depth sensor. Depth-sensor model and
+  interface still open (`docs/SPEC_pool_codec_test.md` §9).
+- **[PARTIAL 2026-09-28] OQ-27 — X-Rite ColorChecker Classic available? (Nick).** *Answer:* no
+  X-Rite; Nick has a **Datacolor SpyderCheckr 24** (SCK200) — same role (absolute reference beside
+  the card). Its authoritative Lab values are in **Datacolor's SpyderCheckr software reference
+  file** (or from Datacolor support); darktable PR #22278 (2026) fixed wrong copies of them and found
+  no real pre/post-2018 edition difference. Take the values from Datacolor's file, not from a
+  third-party copy (and not from darktable's GPL source, §20 licensing). The SpyderCheckr has no
+  AprilTags: place it at a fixed offset from the V1 card, or click its corners with the existing
+  tool. **2026-09-30 (S4 session 1):** the chart on the rig is a **Pixel Perfect "24 Standard Color
+  Calibration Chart"** (logo on the chart, ColorChecker Classic layout but different colours), not a
+  SpyderCheckr: it has no published values, so it was used as a second set of surfaces measured through
+  the IMX708's DNG matrix. Absolute truth still needs the SpyderCheckr in frame + Datacolor's values (or
+  an instrument reading, OQ-40). *Original:* *S2b and S4.* Enables
   card-truth Option B (brief §5.3). More valuable than before: the V2 card is water-damaged,
   so a reshoot of it gives an unreliable daylight reference for its light patches. Not a
   blocker for the S2a gate (design values + the TG-7's embedded colour matrix).
@@ -296,13 +388,13 @@ Items for Nick are marked **(Nick)**.
   pipeline needs only core / imgproc / calib3d / objdetect (ArUco AprilTag) — no video.
   Options to verify: (a) build OpenCV from source with FFmpeg/video I/O off
   (`-DWITH_FFMPEG=OFF` etc.) for the Pi and backend images; (b) a distro package, only if
-  its linked libraries check out. Each option must still import on the Pi 5 (aarch64,
-  Python 3.13) and keep `DICT_APRILTAG_36h11`. Mac analysis tools may keep the PyPI wheel
+  its linked libraries check out. Each option must still import on the rig Pi (Zero 2 W,
+  OQ-15) and keep `DICT_APRILTAG_36h11`. Mac analysis tools may keep the PyPI wheel
   (internal use). The acceptance test exists: `make license-check-shipped` runs the
   `cv2_without_ffmpeg` probe (`cv2.getBuildInformation()` must not report `FFMPEG: YES`);
   on the Mac PyPI wheel it fails as expected. Also pending: run it on the Pi to review what
-  the Linux numpy wheel bundles (OpenBLAS / gfortran runtime) — blocked 2026-09-26 by an
-  SSH host-key mismatch for `nereus000` (not bypassed; owner to confirm the key).
+  the Linux numpy wheel bundles (OpenBLAS / gfortran runtime) (on `nereus002`; the 2026-09-26 block
+  was `nereus000`, which is no longer the rig).
 - **[OPEN] OQ-37 — TG-7 `ShadingCompensation2: On`.** *S2a.* The ORFs report
   `ShadingCompensation: Off` but `ShadingCompensation2: On`. Unverified whether the camera
   JPEG is shading- (vignetting-) corrected while the RAW is not. Matters for comparing
@@ -371,7 +463,11 @@ Items for Nick are marked **(Nick)**.
 
 ### Card V3 (design 2026-09-27, `docs/reference_card_v3.md`)
 
-- **[NEEDS-HARDWARE] OQ-43 — Real N6 / AE3 blur, distortion and card detection range.** *Blocks
+- **[NEEDS-HARDWARE] OQ-43 — Real N6 / AE3 blur, distortion and card detection range.**
+  *First real frames (nereus002, 2026-09-28, V1 card ~1.5 m, in air, HD 1280×800):* the N6 and
+  AE3 have **fixed lenses** (no focus adjustment, Nick). The N6 image is soft on the left: it
+  finds only the right-hand tags (1, 3; card ~370 px wide) at every detection scale; the AE3
+  finds all 4 (card ~340 px). *Blocks
   printing V3.* The V3 sizes come from a simulator that is ~2× optimistic against the real TG-7:
   it located V2 in 100 % of runs at 1–3 m where the dives got 56 % (1–2 m) and 45 % (2–3 m); the
   main real failure is slow-shutter motion blur (at 1–2 m, 88 % located below 1/30 s vs 27 % at or
@@ -420,6 +516,115 @@ Items for Nick are marked **(Nick)**.
   per-frame affine's offset (S2a PR #44) already absorbs haze, measuring the printed black fixes the
   unknown-black problem, and trapped air, wet flocking and a bolt-on part are real underwater risks.
   If the haze model needs validating, test a trap as a separate pool experiment.
+
+### Field transport (prototype 2026-09-28, `color/linear_jxl.py`)
+
+- **[OPEN] OQ-49 — Linear JPEG XL on the field camera.** The prototype (RAW → black subtract
+  → 2×2 bin → WB gains + square-root curve → 10-bit JPEG XL, inverted in the cloud) is
+  measured only on one TG-7 ORF on the Mac: d1.0 → 42–47 KB for a 1600×900 crop, region
+  means within p99 0.6–1.8 %. **(1) and (2) answered 2026-09-28 on `nereus002` (Zero 2 W):**
+  Debian `libjxl-tools` 0.11.2; `cjxl` 1.6 s (effort 7) / 0.8 s (effort 5) per 800×450
+  10-bit frame, decode 0.1 s, `jxl-check` peak RSS 134 MB; IMX708 full-res DNGs, d1.0 →
+  28–38 KB, region p99 1.8–3.2 % (lower at higher exposure). Still unknown: (3) whether 2×2 binning (half resolution) is
+  acceptable or the cloud needs a demosaiced full-resolution crop (size not measured);
+  (4) how the backend stores and decodes the files. The codec is transport only — no BM /
+  cellular code in this repo (SPEC §2).
+
+- **[OPEN] OQ-50 — The rig's card is V1; the web colour check assumes V2.** The card on
+  `nereus002` is a "Reef Reference Card V1" print (2026-09-28). Its tags match V2's (same IDs,
+  same physical tag frame), so both are located, but the patch layout differs. Phase 8 tools read
+  the card YAML and now fail loudly on a layout mismatch (`linear_jxl.layout_check`); pass
+  `--card configs/cards/nereus_v1.yaml`. `web/color_check.py` (Phase 6, intentionally not
+  changed) hard-codes V2 boxes and design values, so its grey / colour ΔE on V1 frames is
+  meaningless (grey 27, colour 45 on the first rig run). Options: point it at a card YAML, or
+  label it V2-only. V2 prints no longer exist (Nick); V3 is in production.
+
+- **[RESOLVED 2026-09-28] OQ-51 — OpenMV exposure ceiling for long (under-water) exposures.**
+  **Answer:** Nick approved the port. `capture_raw` now lengthens the frame through the PAG7936
+  frame-time registers (Nick's `set_frame_time`, unchanged) **only when the lock clamps**, then
+  restores the previous frame time after the frame is sent. Verified on both boards
+  (`nereus002`): 16 / 50 / 200 ms read back exactly (frame time = exposure + 5 ms), no wedge,
+  a 200 ms capture takes 1.1–1.4 s; brightness scales linearly between 16, 50 and 200 ms
+  (within 3 %); a 4 ms capture after a 200 ms one locks + snapshots in 42 ms (restored). Note
+  auto-exposure alone reaches 16.6 ms on the N6 in a dim room (plus 23.8 dB gain) — the
+  default ceiling applies to *locked* exposures. *Original:* At HD Bayer the
+  sensor silently clamps exposure to its frame time: **N6 8,248 µs, AE3 16,584 µs** (asked for
+  up to 100 ms, read back; `nereus002`, 2026-09-28). `scripts/capture_raw_openmv.py` makes the
+  shortfall up with gain (N6 in air: +1.0 dB), but in dark water that means high gain and noise.
+  `csi.framerate()` wedges the board (Nick's workbench notes); Nick's `s28_board_burst.py`
+  lengthens the frame time with direct PAG7936 register writes (`set_frame_time`, exposures up
+  to ~2 s). Porting that into the rig service is a sensor-register change on Nick's boards —
+  **needs Nick's OK**. Decide before the pool sweep (S6).
+
+- **[OPEN] OQ-52 — OpenMV RAW has no ISO or f-number.** `RawFrame.exposure_factor()` (t · ISO /
+  N²) needs both, so the `patches` stage (`sample_raw`) refuses OpenMV frames; `jxl-check` and
+  `color.raw_meter` don't need them. The sidecar records exposure and analogue gain (dB). Proposal
+  for S4: the fixed aperture goes in `configs/calibration/<camera_id>.yaml`, and the reader maps
+  gain to a relative ISO (100 × linear gain above the 3.15 dB floor) — a convention, recorded as
+  such, not a sensor rating.
+
+- **[OPEN] OQ-53 — N6 reboots itself mid-capture / USB boot loop: cable, power or board?**
+  Overnight HIL soak (2026-09-29, 135 cycles): the N6 rebooted during a capture in 9 cycles
+  (IMX708 and AE3: 0). Confirmation soak without the N6 pre-capture reset (90 cycles): it rebooted
+  in cycle 4 anyway, then sat in a USB boot loop (bootloader re-enumerating, `error -71`,
+  ~15,000 kernel USB lines/h) for ~10 h until the rig was physically moved. The reset is not the
+  cause (kept on). Since #82 a lost N6 fails only its own slot. **Cable A/B (Nick, 2026-09-29):**
+  the suspect **white** USB cable (was on the N6) moved to the **AE3**, the **black** cable to the
+  N6. If the reboots / `-71` loops follow the white cable to the AE3 → cable; if they stay on the
+  N6 → board or its power. Check with `scripts/hil_soak.py` + `journalctl -k | grep -c "usb 1-1"`
+  per hour (which port is which: `lsusb -t`). Nick's bench rule already says shielded USB cables
+  only on the camera boards (ADIN_SPI_OpenMV SPEC, 2026-08-25 N6 drops).
+  **2026-09-30 (S4 session 1, ~20 min of captures after the swap):** 0 spontaneous reboots, 0 USB
+  errors — every re-enumeration was a commanded `reset_board` (N6 21 of 21, AE3 20 of 20). Too short to
+  conclude. **Confound:** the swap also moved hub ports — N6 1-1.1 → 1-1.3, AE3 1-1.3 → 1-1.1 — so a
+  failure now tests cable *and* port. Next: overnight soak as is; if clean, swap only the ports.
+  **2026-10-01 (compression study Phase 2):** 4 N6 probe sessions + 1 AE3 session (mpremote run +
+  reset + handshake each): 0 `error -71`, 0 spontaneous reboots; every re-enumeration was the
+  commanded reset. Still too short to conclude.
+
+- **[RESOLVED 2026-10-01] OQ-54 — OpenMV "raw" Bayer is processed on the sensor: lens shading + denoise.**
+  Found by the compression study's fact-check (2026-09-30) and read back on both boards
+  (2026-10-01, `openmv/probes/compress_probe_v5.py`, register reads only): DENOISE_EN (PAG7936
+  0x0882) = 3 and the lens-shading registers 0x0820–0x0833 populated (20 of 20 non-zero, identical on both boards) in
+  HD Bayer. Evidence in the data: temporal var/mean doubles from centre to corner (a radial
+  digital gain), neighbouring noise correlated +0.4–0.5 (IMX708: +0.03), measured 8×8 block-mean
+  noise 2–3× the white-noise value. With the 8-bit `csi.BAYER` path and black over-subtracted by
+  ~1 DN and clipped at 0, OpenMV RAW is "processed 8-bit Bayer": linear above ~20 DN, bent below
+  ~10 DN — exactly where under-water red sits. The compression study treats it as its own class.
+  **Needs Nick's OK:** a capture with DENOISE_EN = 0 and the LSC coefficients zeroed (sensor
+  register writes, reverted by `reset_board`) to see whether truly raw data is reachable, and
+  whether the PAG7936 can deliver 10 bits through any v5 path.
+  **Resolved (Nick approved the writes, 2026-10-01; `openmv/probes/raw_isp_probe_v5.py`, both
+  boards, dark room, restored by reset + handshake):** truly raw 8-bit Bayer IS reachable with
+  `DENOISE_EN` (0x0882) = 0 and the six LSC gains (0x0820–0x0825) = 0, committed with 0x00EB = 0x80.
+  N6: neighbour noise correlation 0.27 → 0.04 (AE3 0.42 → 0.005); temporal noise variance centre
+  0.79 → 4.6 DN² (the on-chip denoise removes ~80–85 % of it); with LSC gains zeroed the noise and
+  the mean go flat from centre to corner (N6 var 4.0–4.6 everywhere, was 0.8 → 2.7). Zero gain = LSC
+  off, as assumed. Consequences: truly raw frames cost more bytes (noise is incompressible) and
+  need vignetting handled downstream (a flat-field, S4); the denoise trades resolution for size.
+  Still open: 10-bit output (no v5 path found). **Decision (Nick, 2026-10-01): keep denoise and
+  lens shading ON** — they improve image quality and reduce file size; nothing in the rig changes
+  (they are the sensor defaults).
+
+- **[OPEN] OQ-55 — The OpenMV USB console drops ~512-byte blocks under sustained output.**
+  `mpremote run` stdout from the N6 lost data in 8 % of 1 KB lines (blocks of ~500 characters
+  missing, newlines lost so lines merged), unchanged by 5× slower pacing (2026-10-01). Short
+  lines (256 characters) with a CRC each, sent 3×, got every payload through on the N6 and AE3
+  (3–5 % of copies damaged). Anything that moves data over the console (probes, debug dumps)
+  needs framing + CRC; the rig service's framed, SHA-256-checked protocol is not affected (it
+  checks every transfer). Worth knowing before Phase 2 moves bigger payloads.
+- **[RESOLVED] OQ-56 — C native modules on OpenMV (MicroPython 1.28): what the GC needs.**
+  Found porting hydrium (2026-10-01, `compression_study/natmod/hyd_mod.c`). (1) MicroPython's GC
+  counts a pointer as a reference only if it points to the **exact start** of a heap block
+  (`py/gc.c` `VERIFY_PTR` requires block alignment): C code that keeps `block + offset`
+  (e.g. a size header in front of each allocation) loses those blocks at the next collection.
+  On the AE3 (~2–3 MB free) collections run mid-encode and caused random internal errors; the
+  N6 (25 MB free) never collected, so it looked fine. Rule: hand `m_realloc` results to C
+  unmodified, or run the call with `gc.disable()`. (2) A large module needs its biggest buffer
+  allocated early (the caller passes it in): after the 1 MB frame copy the AE3 heap has
+  ~2–2.7 MB free in pieces, too fragmented for a 768 KB block. (3) mpy_ld places only
+  non-static global bss. Verified on both boards with a GC forced mid-encode
+  (`openmv/probes/hyd_stress_v5.py`) and 72/72 byte-identical planes.
 
 ---
 

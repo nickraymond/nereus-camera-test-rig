@@ -54,10 +54,13 @@ def _load_analyzer(analysis_config: Optional[dict[str, Any]]):
     raw evidence and must never be gated on the analysis dependency (CLAUDE.md §11).
     """
     try:
-        from ..analysis.result_writer import AnalysisConfig, analyze_reference_card
+        from ..analysis.isolated import analyze_isolated
+        from ..analysis.result_writer import AnalysisConfig
     except ImportError:
         return None
-    return AnalysisConfig.from_dict(analysis_config), analyze_reference_card
+    # In a child process: an OOM kill on the Zero 2 W then fails only the analysis, and the
+    # experiment record is still written (analysis/isolated.py).
+    return AnalysisConfig.from_dict(analysis_config), analyze_isolated
 
 
 @dataclass
@@ -70,6 +73,7 @@ class CameraOutcome:
     metadata_path: Optional[str] = None
     analysis: Optional[DetectionResult] = None
     analysis_dir: Optional[str] = None
+    raw_result: Optional[CaptureResult] = None  # Phase 8 S3, when raw capture is on
 
     @property
     def ok(self) -> bool:
@@ -133,12 +137,52 @@ def _synth_failed_result(
     )
 
 
+def _reset_if_asked(name: str, device, profile: dict[str, Any], why: str) -> None:
+    """Hard-reset the board when its profile asks for it. Best-effort: a board that can't
+    reset (older deployed board code, transient USB trouble) still gets its capture."""
+    if not profile.get("reset_before_capture"):
+        return
+    reset = getattr(device, "reset_board", None)
+    if callable(reset):
+        try:
+            r = reset()
+            logger.info("camera %s: board hard-reset before %s (%.1fs to ready)",
+                        name, why, r.get("duration_seconds", 0.0))
+        except Exception as exc:
+            logger.warning("camera %s: reset before %s failed (continuing): %s", name, why, exc)
+
+
+def _capture_raw(name: str, device, profile: dict[str, Any], cap_dir: Path,
+                 when: datetime) -> CaptureResult:
+    """The RAW step (Phase 8 S3, SPEC §20 ``raw: true``): after the still, same camera guard.
+    Boards with ``reset_before_capture`` are reset again first — the AE3 allows one camera
+    session per boot on OpenMV v5 (PR #70). Never raises."""
+    capture_raw = getattr(device, "capture_raw", None)
+    request = CaptureRequest(kind="image", settings=dict(profile))
+    if not callable(capture_raw):
+        return CaptureResult(camera=_identity(device), request=request, status="failed",
+                             error={"code": "not_supported",
+                                    "message": f"{type(device).__name__} has no capture_raw"})
+    _reset_if_asked(name, device, profile, "raw capture")
+    ext = getattr(device, "raw_extension", "raw")
+    dest = cap_dir / naming.capture_filename(name, "raw", ext, when)
+    logger.info("camera %s: capturing RAW -> %s", name, dest)
+    return capture_raw(str(dest), request)
+
+
+def _identity(device) -> CameraIdentity:
+    current = getattr(device, "_current_identity", None)
+    return current() if callable(current) else CameraIdentity(
+        driver=getattr(device, "driver", "unknown"), platform="unknown")
+
+
 def _capture_one_camera(
     name: str,
     camera_cfg: dict[str, Any],
     paths: ExperimentPaths,
     analyzer,
     when: datetime,
+    raw: Optional[bool] = None,
 ) -> CameraOutcome:
     """Capture + (best-effort) analyze one camera. Never raises (Spec §11)."""
     cap_dir = paths.capture_dir(name)
@@ -156,21 +200,8 @@ def _capture_one_camera(
     # between experiments and firmware AWB state can survive the per-capture
     # ``sensor.reset()`` (AE3 green cast after lights-off runs, 2026-07-16). When the
     # camera profile asks for it, hard-reset the board so this experiment starts from
-    # fresh firmware state. Best-effort: a board that can't reset (older deployed board
-    # code, transient USB trouble) still gets its capture attempt.
-    if profile.get("reset_before_capture"):
-        reset = getattr(device, "reset_board", None)
-        if callable(reset):
-            try:
-                r = reset()
-                logger.info(
-                    "camera %s: board hard-reset before capture (%.1fs to ready)",
-                    name, r.get("duration_seconds", 0.0),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "camera %s: reset_before_capture failed (continuing): %s", name, exc
-                )
+    # fresh firmware state.
+    _reset_if_asked(name, device, profile, "capture")
 
     # Handshake first so the recorded identity carries the device-reported board +
     # firmware (Spec §5 requires firmware in every experiment record; §12 identity).
@@ -185,8 +216,23 @@ def _capture_one_camera(
     request = CaptureRequest(kind="image", settings=dict(profile))
 
     logger.info("camera %s: capturing -> %s", name, dest)
+    raw_result = None
+    want_raw = profile.get("raw", False) if raw is None else raw
     try:
-        result = device.capture_image(str(dest), request)  # adapters never raise on failure
+        # Adapters return failed results rather than raise; this guard keeps one that does
+        # anyway (an unmapped transport error) from aborting every later camera — Spec §11.
+        try:
+            result = device.capture_image(str(dest), request)
+        except Exception as exc:
+            logger.exception("camera %s: adapter raised during capture", name)
+            result = _synth_failed_result(name, camera_cfg, "adapter_exception", repr(exc))
+        if want_raw:
+            try:
+                raw_result = _capture_raw(name, device, profile, cap_dir, when)
+            except Exception as exc:
+                logger.exception("camera %s: adapter raised during RAW capture", name)
+                raw_result = _synth_failed_result(name, camera_cfg, "adapter_exception",
+                                                  repr(exc))
     finally:
         close = getattr(device, "close", None)
         if callable(close):
@@ -200,7 +246,17 @@ def _capture_one_camera(
         result=result,
         image_path=result.output_path,
         metadata_path=str(meta_path),
+        raw_result=raw_result,
     )
+    if raw_result is not None:
+        write_capture_metadata(cap_dir / "raw_capture.json", raw_result)
+        if raw_result.ok:
+            logger.info("camera %s: RAW %s %s bytes sha256=%s", name,
+                        raw_result.image_format, raw_result.size_bytes, raw_result.sha256)
+        else:
+            err = raw_result.error or {}
+            logger.error("camera %s: RAW capture FAILED %s: %s", name, err.get("code"),
+                         err.get("message"))
 
     if not result.ok:
         err = result.error or {}
@@ -236,12 +292,17 @@ def run_experiment(
     results_root: Optional[str | Path] = None,
     analysis: bool = True,
     when: Optional[datetime] = None,
+    raw: Optional[bool] = None,
 ) -> ExperimentOutcome:
     """Run one sequential capture set across all connected cameras (Spec §11, §13).
 
     Returns an ``ExperimentOutcome``; a disconnected/failing camera yields a
     ``partial`` status with its slot marked failed in ``experiment.json`` while every
     other camera's raw + analysis artifacts are retained.
+
+    ``raw``: take a RAW after each still (Phase 8 S3); ``None`` = each camera profile's
+    ``raw`` flag (default off, so the Phase 5 path is unchanged). A failed RAW is recorded in
+    ``raw_captures`` + ``errors`` but does not fail the camera's still.
     """
     when = when or datetime.now(timezone.utc)
     if results_root is None:
@@ -280,7 +341,7 @@ def run_experiment(
 
     outcomes: list[CameraOutcome] = []
     for name in ordered:
-        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when)
+        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw)
         outcomes.append(outcome)
         record.cameras.append(outcome.result.camera)
         record.captures.append(outcome.result)
@@ -289,6 +350,11 @@ def run_experiment(
         if not outcome.ok:
             err = outcome.result.error or {}
             record.errors.append(f"{name}: {err.get('code')}: {err.get('message')}")
+        if outcome.raw_result is not None:
+            record.raw_captures.append(outcome.raw_result)
+            if not outcome.raw_result.ok:
+                err = outcome.raw_result.error or {}
+                record.errors.append(f"{name} raw: {err.get('code')}: {err.get('message')}")
 
     store.write_record(paths, record)
 

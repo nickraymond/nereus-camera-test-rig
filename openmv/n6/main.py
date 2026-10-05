@@ -1,7 +1,9 @@
 """OpenMV N6 capture service entry point — Spec §7, §8.
 
 Auto-runs at boot (MicroPython runs ``main.py`` after ``boot.py``). Owns the USB CDC
-serial via ``pyb.USB_VCP``, reads newline-delimited JSON commands, validates each
+serial via ``pyb.USB_VCP`` — or, on OpenMV v5 firmware where ``pyb`` has no ``USB_VCP``
+(measured on ``nereus002`` 2026-09-28), via the shared ``usb_console.UsbConsole``. Reads
+newline-delimited JSON commands, validates each
 against the allowlist, dispatches to the shared services, and replies with structured
 JSON (+ framed binary for ``get_file``). One bad command never takes the service down.
 
@@ -20,7 +22,7 @@ import board_config
 import capture_service
 import command_protocol as cp
 import device_info
-import pyb
+import usb_console
 
 
 def _send(usb, message):
@@ -41,6 +43,10 @@ def _handle_line(usb, line):
         elif action == "capture_image":
             output = capture_service.capture_image(board_config, settings)
             _send(usb, cp.completed_response(command_id, output))
+        elif action == "capture_raw":
+            # Bayer RAW at a locked exposure, streamed from RAM (S3); emits its own framed
+            # response (sending header -> bytes -> completed). Board facts: board_config.RAW_*.
+            capture_service.capture_raw(usb, command_id, board_config, settings)
         elif action == "get_file":
             # send_file emits its own framed response(s).
             capture_service.send_file(usb, command_id, settings.get("filename"))
@@ -63,14 +69,24 @@ def _handle_line(usb, line):
         _send(usb, cp.failed_response(command_id, cp.ERR_IO_ERROR, str(exc)))
 
 
+def _open_usb():
+    """``pyb.USB_VCP`` where the firmware has it (≤ 1.26), else the console-stream shim."""
+    try:
+        import pyb
+
+        return pyb.USB_VCP()
+    except (ImportError, AttributeError):
+        return usb_console.UsbConsole()
+
+
 def run():
     """Read-dispatch loop. Accumulates bytes and processes complete newline lines."""
-    usb = pyb.USB_VCP()
+    usb = _open_usb()
     buffer = b""
     while True:
-        pending = usb.any()
-        if pending:
-            buffer += usb.read(pending)
+        chunk = usb.read(256) if usb.any() else None
+        if chunk:
+            buffer += chunk
             while b"\n" in buffer:
                 line, buffer = buffer.split(b"\n", 1)
                 if line.strip():
