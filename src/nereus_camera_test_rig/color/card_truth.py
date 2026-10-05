@@ -258,6 +258,14 @@ def median_means(frames: list[dict], key: str) -> dict[str, np.ndarray]:
 
 # ------------------------------------------------------------------ run
 
+def _raw_frames(folder: Path) -> list[Path]:
+    """The locked captures in a capture folder: ``stop_*`` RAWs when present (the capture
+    scripts also write a metering ``probe`` RAW at another exposure), else every RAW."""
+    raws = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".dng", ".bayer"))
+    locked = [p for p in raws if p.name.startswith("stop_")]
+    return locked or raws
+
+
 def measure(session: dict, root: Path, open_raw=None, overlay_dir: Optional[Path] = None) -> dict:
     """Session dict (paths relative to ``root``) -> result dict with the ``measured`` block."""
     card = load_card(root / session["card"])
@@ -270,9 +278,8 @@ def measure(session: dict, root: Path, open_raw=None, overlay_dir: Optional[Path
                          "(chart.order lists the reference names row by row as framed)")
     name_of = {p.id: name for p, name in zip(chart.patches, order)}
     frames_dir = root / session["frames"]
-    frames = sorted(p for p in frames_dir.iterdir() if p.suffix.lower() in (".dng", ".bayer"))
-    flats = sorted(p for p in (root / session["flat"]).iterdir()
-                   if p.suffix.lower() in (".dng", ".bayer")) if session.get("flat") else []
+    frames = _raw_frames(frames_dir)
+    flats = _raw_frames(root / session["flat"]) if session.get("flat") else []
     from .stages import open_raw as _open
     flat = _flat(flats, open_raw or _open)
     samples = [sample_frame(p, card, chart, session["chart"].get("region"),

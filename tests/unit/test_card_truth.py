@@ -84,3 +84,19 @@ def test_measured_block_round_trips_through_the_card_loader(tmp_path):
     T.write_block(card_yaml, wet)
     assert "\nmeasured_wet:" in card_yaml.read_text()
     assert load_card(card_yaml).patch("gray_mid").truth == (120.0, 130.0, 140.0)
+
+
+def test_colorchecker_reference_matches_its_layout_and_the_comparison_tool():
+    from host_tools.chart_vs_colorchecker import CC_2014
+
+    from nereus_camera_test_rig.color.chart import load_chart
+    ref = T.load_reference(REPO / "configs/charts/colorchecker_classic_24_post2014_lab_d50.csv")
+    chart = load_chart(REPO / "configs/charts/colorchecker_classic_24.yaml")
+    assert [p.label for p in chart.patches] == list(ref) == [r[0] for r in CC_2014]
+    assert all(ref[n]["lab"] == tuple(v) for n, *v in CC_2014)
+
+
+def test_raw_frames_skip_the_metering_probe(tmp_path):
+    for n in ("probe.dng", "stop_+0_r0.dng", "stop_+0_r1.dng", "stop_+0_r0.jpg"):
+        (tmp_path / n).write_bytes(b"x")
+    assert [p.name for p in T._raw_frames(tmp_path)] == ["stop_+0_r0.dng", "stop_+0_r1.dng"]

@@ -10,14 +10,15 @@ flat: data/v3_truth/c1_dry_YYYYMMDD/flat        # optional flat-field DNGs (matt
 light: {name: '2x 5300 K LED panels', cct_k: 5300, cri: null, setup: '45 deg left/right, ~1 m'}
 
 chart:
-  config: configs/charts/spydercheckr_24.yaml
-  reference: data/v3_truth/spydercheckr_24_reference.csv    # Spyder software export (Lab D50)
+  config: configs/charts/colorchecker_classic_24.yaml           # Nick's ColorChecker Classic (10/6)
+  reference: configs/charts/colorchecker_classic_24_post2014_lab_d50.csv   # published, Lab D50
   # Reference patch names row by row as the chart is FRAMED (top-left first). Leave null to use
   # the CSV's own order (only right if the CSV is row-major in the framed orientation).
   order: null
   # Where to look for the chart: a box in the V3 card's canonical px (10 px/mm from the card's
-  # top-left). Chart to the right of the card, ~2 cm gap: x from 4400 (card is 4200 wide).
-  region: [4300, -300, 7600, 3000]
+  # top-left). ColorChecker landscape LEFT of the card, ~2 cm gap, vertically centred on it
+  # (see docs/card_truth/LADDER_colorchecker.md for why not below the card).
+  region: [-3300, -400, -100, 3100]
   # Fallback if it is not found: the 4 corner-patch centres in RAW px, order r1c1, r1c6, r4c6, r4c1
   # (read them off the overlay PNG). When set, `region` is ignored.
   quad_raw: null

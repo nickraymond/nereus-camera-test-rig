@@ -97,15 +97,21 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--data-root", type=Path, default=REPO,
                     help="root the data/ paths are relative to (the primary checkout)")
+    ap.add_argument("--chart", type=Path, default=REPO / "configs/charts/pixel_perfect_24.yaml",
+                    help="chart layout (row-major in ColorChecker order); e.g. "
+                         "configs/charts/colorchecker_classic_24.yaml for the acceptance test")
+    ap.add_argument("--only-extra", action="store_true", help="skip the built-in S4 frames")
     ap.add_argument("--extra", nargs="*", default=[],
                     help="label=dng=rpicam_json=card_yaml=x0,y0,x1,y1 (more frames)")
     a = ap.parse_args()
-    chart = load_chart(REPO / "configs/charts/pixel_perfect_24.yaml")
-    frames = [(lb, a.data_root / d, a.data_root / j, REPO / c, r) for lb, d, j, c, r in FRAMES]
+    chart = load_chart(a.chart)
+    frames = [] if a.only_extra else [(lb, a.data_root / d, a.data_root / j, REPO / c, r)
+                                      for lb, d, j, c, r in FRAMES]
     for e in a.extra:
         lb, d, j, c, r = e.split("=")
         frames.append((lb, Path(d), Path(j), REPO / c, [float(v) for v in r.split(",")]))
     res = {"reference": "ColorChecker Classic, X-Rite post-Nov-2014, Lab D50",
+           "chart": str(a.chart.name),
            "patches": [r[0] for r in CC_2014], "frames": {}}
     for lb, dng, js, card_yaml, region in frames:
         s = T.sample_frame(dng, load_card(card_yaml), chart, region)
