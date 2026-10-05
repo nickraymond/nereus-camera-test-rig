@@ -146,6 +146,9 @@ class ExperimentRecord:
     # unused, so older records read the same.
     exposure_lock: dict[str, Any] = field(default_factory=dict)
     sensors: dict[str, Any] = field(default_factory=dict)
+    # Exposure sweep (pool tool, Nick 2026-10-05): per camera the shutter ladder, every frame's
+    # scores and the best-frame pick with its reason. Empty unless the sweep is switched on.
+    exposure_sweeps: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

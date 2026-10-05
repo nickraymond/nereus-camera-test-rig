@@ -56,6 +56,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_experiment.add_argument(
         "--depth", default="none",
         help="depth sensor read at set start/end: none | fake | fake:<metres> (pool §5.1)")
+    p_experiment.add_argument(
+        "--exposure-sweep", action="store_true",
+        help="with --raw: N RAWs per camera at a shutter ladder, gain at the floor, best frame "
+             "picked (pool tool; off by default)")
+    p_experiment.add_argument(
+        "--sweep-shutters-us", default=None,
+        help="comma-separated shutter ladder in us (default 4000,8000,16667,33333,66667)")
+    p_experiment.add_argument(
+        "--sweep-tolerance", type=float, default=None,
+        help="pick the longest shutter within this fraction of the sharpest frame (default 0.10)")
     p_experiment.set_defaults(func=_cmd_experiment)
 
     p_meter = sub.add_parser(
@@ -148,6 +158,7 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
         raw=True if args.raw else None,
         exposure_lock=lock,
         depth_sensor=depth,
+        exposure_sweep=_sweep_arg(args),
     )
 
     print(f"[nereus-rig] experiment {outcome.record.experiment_id}")
@@ -160,6 +171,11 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
             if c.analysis is not None:
                 note = f" · analysis={c.analysis.status} tags={c.analysis.tags_detected}"
             print(f"  [ok]   {c.camera_name}: {dims}{r.size_bytes} bytes{note}")
+            if c.sweep:
+                done = sum(1 for _, r in c.sweep if r.ok)
+                pick = (outcome.record.exposure_sweeps.get(c.camera_name) or {}).get("pick") or {}
+                print(f"         sweep: {done}/{len(c.sweep)} RAWs, pick "
+                      f"{pick.get('shutter_us')} us — {pick.get('reason', 'not scored')}")
             if c.raw_result is not None:
                 rr = c.raw_result
                 print(f"         raw: {rr.image_format} {rr.size_bytes} bytes" if rr.ok else
@@ -173,6 +189,18 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
     # Exit 0 only when every included camera captured. Analysis finding no card does
     # NOT fail the run (expected during mechanical bring-up).
     return 0 if outcome.status == "completed" else 1
+
+
+def _sweep_arg(args: argparse.Namespace):
+    """CLI → the coordinator's exposure_sweep override (None = profiles decide; off by default)."""
+    if not args.exposure_sweep:
+        return None
+    out: dict = {"enabled": True}
+    if args.sweep_shutters_us:
+        out["shutters_us"] = [int(v) for v in args.sweep_shutters_us.split(",") if v.strip()]
+    if args.sweep_tolerance is not None:
+        out["tolerance"] = args.sweep_tolerance
+    return out
 
 
 def _cmd_meter(args: argparse.Namespace) -> int:
