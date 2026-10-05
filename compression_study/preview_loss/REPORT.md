@@ -32,7 +32,15 @@ container, sent as keyed chunks) shows nothing until every chunk arrives, and a 
    - With FEC +18, the first send shows colour on 100 % of real first sends and on a 40-chunk
      tail loss; 90 % arrive complete.
    - It costs 20 more messages (SSIM 0.969 vs 0.973 for FEC +18 alone) and 1.4 s on the Pi.
-4. **Not recommended:**
+4. **Sync collisions (bm_cam_legacy #126): fix them at the source; FEC alone does not cover them.**
+   A send that starts during the Spotter's hub.sync loses 31–38 chunks in a row, and START with
+   them. FEC +18 and +27 cannot absorb that; +36 covers 31, and +45 (25 %, SSIM 0.967) covers 38.
+   - The post-sync settle proposed in #126 removes the pattern at no byte cost.
+   - Until then, the preview's END copy still shows colour.
+   - Because START can be lost, put k, m, the plane boundaries and the preview's chunk range in
+     every chunk header, not only in START. Today a lost chunk 0 also hides the planes that did
+     arrive.
+5. **Not recommended:**
    - **A (one progressive codestream):** stock libjxl decodes nothing until chunk ~100 of 180,
      because the squeeze low-pass sits in the first half of the stream. Any hole cuts
      everything after it.
@@ -80,6 +88,7 @@ Median over 4 frames. All methods fill the same 180 messages of 288 B.
 | D FEC +18 | 18 | 0.973 / 0.30 | 100 / 88 / 88 % | 100 % | 100 % | 0 % | 100 % | +0.1 s | RS decode | same |
 | D FEC +27 | 27 | 0.971 / 0.32 | 100 / 94 / 94 % | 100 % | 100 % | 0 % | 100 % | +0.1 s | RS decode | same |
 | D FEC +36 | 36 | 0.969 / 0.34 | 100 / 98 / 98 % | 100 % | 100 % | 0 % | 100 % | +0.1 s | RS decode | same |
+| D FEC +45 | 45 | 0.967 / 0.36 | 100 / 100 / 100 % | 100 % | 100 % | 100 % | 100 % | +0.1 s | RS decode | same |
 | B+D preview ×2 + FEC +18 | 38 | 0.969 / 0.34 | 100 / 100 / 90 % | 100 % | 100 % | 100 % | 100 % | +1.5 s | both | both |
 | B+D preview ×2 + FEC +27 | 47 | 0.967 / 0.35 | 100 / 100 / 98 % | 100 % | 100 % | 100 % | 100 % | +1.5 s | both | both |
 
@@ -117,6 +126,43 @@ Detail per frame: `results/results.json`. Raw table: `results/table.md`.
   - Pi Zero, k = 116: encode 0.07–0.08 s, decode 0.13–0.15 s.
   - A fountain code (RaptorQ) is only needed above 256 chunks.
   - FEC turns "which chunks were lost" into "how many".
+
+## Sync-collision burst loss (bm_cam_legacy #126)
+
+The pattern comes from the issue and the G4 console.
+- **Window:** when a send starts in the Spotter's hub.sync, the 2-slot cellular queue takes 2
+  chunks, then reports `MS_Q_CELLULAR_ONLY is full` for about 40–50 s. That is 31–38 chunks at
+  the 1.3 s pacing, and START is inside the window.
+- **Real case:** the G4 bmcam004 trigger clip `0e5qbm` (2026-10-03 06:07Z), in a wake with 114
+  queue-full events, lost START and 24 of its 25 chunks; only chunk 12 got through.
+- **Simulated as:**
+  - a 31- or 38-chunk run starting at slot 2;
+  - the same 31-run at every position (the sync landing mid-burst);
+  - the real trigger pattern: slots 0–24 lost except 12.
+
+Median over the 4 frames. Each cell: complete / colour shown (grey plane renders are not
+counted as colour).
+
+| method | sync at start, 31 lost | sync at start, 38 lost | 31-run anywhere | real trg (24 of 25 + START) |
+|---|---|---|---|---|
+| today | 0 / 0 % | 0 / 0 % | 0 / 0 % | 0 / 0 % |
+| plane-aware | 0 / 0 % (grey 100 %) | 0 / 0 % (grey 100 %) | 0 / 0 % (grey 79 %) | 0 / 0 % (chunk 0 lost) |
+| A progressive | 0 / 0 % | 0 / 0 % | 0 / 33 % | 0 / 0 % |
+| B preview ×2 | 0 / 100 % | 0 / 100 % | 0 / 100 % | 0 / 100 % |
+| D FEC +18 | 0 / 0 % | 0 / 0 % | 0 / 0 % | 0 / 0 % |
+| D FEC +27 | 0 / 0 % | 0 / 0 % | 0 / 0 % | 100 / 100 % |
+| D FEC +36 | 100 / 100 % | 0 / 0 % | 100 / 100 % | 100 / 100 % |
+| D FEC +45 | 100 / 100 % | 100 / 100 % | 100 / 100 % | 100 / 100 % |
+| B+D preview ×2 + FEC +18 | 0 / 100 % | 0 / 100 % | 0 / 100 % | 100 / 100 % |
+| B+D preview ×2 + FEC +27 | 100 / 100 % | 0 / 100 % | 9 / 100 % | 100 / 100 % |
+
+Why the preview helps with FEC: the first preview copy sits in slots 0–9, so a window that
+starts at slot 2 spends 8 of its lost slots on a copy the end copy replaces. That is why
+preview ×2 + FEC +27 completes the 31-at-start case and preview ×2 + FEC +18 completes the
+real trigger.
+
+The plane-aware row assumes the plane offsets come from chunk 0. With them in every chunk
+header, the real trigger would show grey too.
 
 ## Method
 

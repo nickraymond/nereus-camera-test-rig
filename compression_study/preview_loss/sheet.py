@@ -20,7 +20,7 @@ from compression_study.preview_loss.traces import summarise
 SHOW = [("base", "Today (all-or-nothing)"), ("plane", "Today + plane-aware decode"),
         ("prog", "A · one progressive codestream"), ("prev2", "B · preview ×2 (10 msgs each)"),
         ("mdc", "C · 4 descriptions (polyphase)"), ("fec18", "D · FEC +18 parity (10 %)"),
-        ("fec27", "D · FEC +27 parity (15 %)"), ("prev2+fec18", "B + D · preview ×2 + FEC +18")]
+        ("fec27", "D · FEC +27 parity (15 %)"), ("fec45", "D · FEC +45 parity (25 %)"), ("prev2+fec18", "B + D · preview ×2 + FEC +18")]
 # real first sends from the HIL consoles (scaled to 180 slots)
 TYPICAL, BAD = "0e63wv", "0e5kgv"
 
@@ -98,6 +98,13 @@ def table_rows(results):
             "b16_complete": agg(results, meth, "burst16_any", "p_complete"),
             "tail40_colour": agg(results, meth, "tail40", "p_colour"),
             "iid5_complete": agg(results, meth, "iid5", "p_complete"),
+            "sync31_complete": agg(results, meth, "sync_start31", "p_complete"),
+            "sync31_colour": agg(results, meth, "sync_start31", "p_colour"),
+            "sync38_colour": agg(results, meth, "sync_start38", "p_colour"),
+            "sync_any_complete": agg(results, meth, "sync31_any", "p_complete"),
+            "sync_any_colour": agg(results, meth, "sync31_any", "p_colour"),
+            "trg_visible": agg(results, meth, "sync_trg_real", "p_visible"),
+            "trg_colour": agg(results, meth, "sync_trg_real", "p_colour"),
             "pi": _key(meth, PI), "backend": _key(meth, BACKEND), "wire": _key(meth, WIRE)})
     return rows
 
@@ -109,13 +116,18 @@ def pct(v):
 def markdown_table(rows) -> str:
     h = ("| method | extra msgs (of 180) | complete: SSIM / ΔE00 | traces: visible / colour / "
          "complete | 8-run anywhere: complete | 16-run anywhere: complete | tail 40: colour "
-         "shown | i.i.d. 5 %: complete | Pi Zero cost | backend | wire contract |\n"
-         "|---|---|---|---|---|---|---|---|---|---|---|\n")
+         "shown | i.i.d. 5 %: complete | sync at start, 31 lost: complete / colour | sync 31 "
+         "anywhere: complete / colour | real trg 24/25: shown / colour | Pi Zero cost | backend | "
+         "wire contract |\n"
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
     for r in rows:
         h += (f"| {r['method']} | {r['overhead_msgs']} | {r['complete_ssim']:.3f} / "
               f"{r['complete_de']:.2f} | {pct(r['tr_visible'])} / {pct(r['tr_colour'])} / "
               f"{pct(r['tr_complete'])} | {pct(r['b8_complete'])} | {pct(r['b16_complete'])} | "
-              f"{pct(r['tail40_colour'])} | {pct(r['iid5_complete'])} | {r['pi']} | "
+              f"{pct(r['tail40_colour'])} | {pct(r['iid5_complete'])} | "
+              f"{pct(r['sync31_complete'])} / {pct(r['sync31_colour'])} | "
+              f"{pct(r['sync_any_complete'])} / {pct(r['sync_any_colour'])} | "
+              f"{pct(r['trg_visible'])} / {pct(r['trg_colour'])} | {r['pi']} | "
               f"{r['backend']} | {r['wire']} |\n")
     return h
 
@@ -142,20 +154,22 @@ def main() -> int:
     name, dng, xywh, note = next(f for f in F.frames() if f[0] == a.frame)
     fr = S.Frame(name, dng, xywh, note)
     by_key = {t["key"]: t for t in traces}
-    cases = [("typical", by_key[TYPICAL]), ("bad", by_key[BAD])]
     cols = []
-    for label, t in cases:
+    for lb, t in (("Typical wake", by_key[TYPICAL]), ("Bad wake", by_key[BAD])):
         lost = S.scale(t)
-        rr = S.runs((~lost).astype(int).tolist())
-        cols.append((label, t, lost, ", ".join(f"{s}–{s + ln - 1}" for s, ln in rr)))
-    grid = ['<div class="row head"><div></div>'
-            + "".join(f'<div><b>{"Typical" if lb == "typical" else "Bad"} wake</b>: {int(lost.sum())} '
-                      f'of 180 chunks lost (slots {e(rng)}; real {e(t["key"])}, '
-                      f'{e(t["run"].split("_")[0])}, {t["lost"]}/{t["n"]})</div>'
-                      for lb, t, lost, rng in cols) + "</div>"]
+        rng = ", ".join(f"{a}–{a + ln - 1}" for a, ln in S.runs((~lost).astype(int).tolist()))
+        cols.append((lb, f'<b>{lb}</b>: {int(lost.sum())} of 180 chunks lost (slots {e(rng)}; '
+                         f'real {e(t["key"])}, {e(t["run"].split("_")[0])}, {t["lost"]}/{t["n"]})',
+                     lost))
+    sync = S.patterns(traces)["sync_start31"][0]
+    cols.append(("Sync collision", '<b>Sync collision</b> (bm_cam_legacy #126): the send starts in '
+                 'the Spotter hub.sync; 2 chunks pass, then 40 s of queue-full drops slots 2–32 '
+                 '(31) and START', sync))
+    grid = ['<div class="row head"><div></div>' + "".join(f"<div>{h}</div>" for _, h, _ in cols)
+            + "</div>"]
     for meth, title in SHOW:
         cells = []
-        for lb, t, lost, rng in cols:
+        for lb, _, lost in cols:
             img, ok, kind = S.outcome(fr, meth, lost)
             if img is None:
                 cells.append('<div class="none">nothing to show<br><span class="muted">waits '
@@ -177,6 +191,9 @@ def main() -> int:
                 f'<td class=num>{pct(r["tr_visible"])}</td><td class=num>{pct(r["tr_colour"])}</td>'
                 f'<td class=num>{pct(r["tr_complete"])}</td><td class=num>{pct(r["b8_complete"])}</td>'
                 f'<td class=num>{pct(r["b16_complete"])}</td><td class=num>{pct(r["tail40_colour"])}</td>'
+                f'<td class=num>{pct(r["sync31_complete"])} / {pct(r["sync31_colour"])}</td>'
+                f'<td class=num>{pct(r["sync_any_complete"])} / {pct(r["sync_any_colour"])}</td>'
+                f'<td class=num>{pct(r["trg_visible"])} / {pct(r["trg_colour"])}</td>'
                 f'<td>{e(r["pi"])}</td><td>{e(r["backend"])}</td><td>{e(r["wire"])}</td></tr>')
     rl = ", ".join(f"{k}×{v}" for k, v in tsum["run_lengths"].items())
     page = '''<title>nrjxl Loss Preview</title>
@@ -189,7 +206,7 @@ main{max-width:1500px;margin:0 auto;display:grid;gap:14px} h1{font-size:1.45rem;
 p,ul{margin:0;max-width:120ch} .muted{color:var(--ink2)} section{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px;display:grid;gap:8px}
 .rec{border-left:4px solid var(--acc);background:var(--accbg)}
 .wrap{overflow-x:auto} table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:.84rem} th,td{padding:4px 8px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top} .num{text-align:right;white-space:nowrap}
-.grid{display:grid;gap:8px} .row{display:grid;grid-template-columns:180px 1fr 1fr;gap:10px;align-items:start} .row.head{font-size:.85rem}
+.grid{display:grid;gap:8px} .row{display:grid;grid-template-columns:170px repeat(3,1fr);gap:10px;align-items:start} .row.head{font-size:.85rem}
 .mname{font-weight:600;padding-top:4px} .cap{font-size:.8rem;color:var(--ink2);font-variant-numeric:tabular-nums}
 .none{aspect-ratio:16/9;max-width:100%;display:grid;place-content:center;text-align:center;border:1px dashed var(--rule);border-radius:3px;color:var(--warn);font-weight:600}
 img{width:100%;height:auto;border-radius:3px}
@@ -202,12 +219,13 @@ img{width:100%;height:auto;border-radius:3px}
 <li><b>Ship erasure coding (D) first.</b> Reed–Solomon parity over the chunks: any k of n rebuild the whole file, no heal. +18 parity chunks (10 %) completes <b>{pct(agg(res, "fec18", "traces", "p_complete"))}</b> of real first sends (today {pct(agg(res, "base", "traces", "p_complete"))}) and every single 8- or 16-chunk run anywhere; +27 (15 %) completes {pct(agg(res, "fec27", "traces", "p_complete"))}. Cost: the image is coded at a higher distance (SSIM {full_quality(res, "fec18")[0]:.3f} vs {full_quality(res, "base")[0]:.3f}), ~0.08 s on the Pi Zero, ~0.1 s to decode, and heals become "send any N more parity chunks".</li>
 <li><b>Make the backend plane-aware now (free).</b> Decode each JPEG XL plane whose chunks all arrived: with no change on the camera, {pct(agg(res, "plane", "traces", "p_visible"))} of first sends show something (grey when R or B is missing).</li>
 <li><b>Add the small redundant preview (B) if a colour image on every wake matters more than ~0.005 SSIM:</b> a 320×180 colour JPEG XL rendered on the camera, 10 messages (2.9 kB), sent first and again last. With FEC +18 it shows colour on {pct(agg(res, "prev2+fec18", "traces", "p_colour"))} of real first sends and on a 40-chunk tail loss.</li>
+<li><b>Sync collisions (bm_cam_legacy #126) must be fixed at the source.</b> A send that starts in the Spotter's hub.sync loses 31–38 chunks in a row plus START (the real G4 trg clip lost START and 24 of 25). FEC +18/+27 cannot absorb that (complete {pct(agg(res, "fec27", "sync_start31", "p_complete"))}); +45 parity (25 %) does ({pct(agg(res, "fec45", "sync_start31", "p_complete"))}) at SSIM {full_quality(res, "fec45")[0]:.3f}. The post-sync settle proposed in #126 removes the pattern for free; until then the preview's END copy still shows colour ({pct(agg(res, "prev2+fec18", "sync_start31", "p_colour"))} with preview ×2 + FEC +18). Because START can be lost, put k, m and the preview's chunk range in every chunk header, not only in START.</li>
 <li><b>Not recommended:</b> A (progressive) — stock libjxl decodes nothing until ~{int(np.median([f["describe"]["prog"]["first_decodable_chunk"] for f in res["frames"].values()]))} of 180 chunks arrive in order, and a hole in the middle cuts everything after it; C (polyphase descriptions) — +54–66 % bytes at the same distance, so the complete image drops to SSIM {full_quality(res, "mdc")[0]:.3f}.</li>
 </ul></section>
 <section><h2>Real loss (HIL first sends)</h2>
 <p>{tsum["first_sends"]} first sends with START and END on the console; {tsum["with_loss"]} lost chunks (median {tsum["lost_pct_median_lossy"]} % of the clip when lossy, max {max(tsum["lost_pct_all"])} %). Loss runs: {tsum["runs_middle"]} in the middle, {tsum["runs_tail"]} at the tail; run lengths {e(rl)} (chunks × count). Runs of 8 are the Spotter's cellular queue filling (<code>MS_Q_CELLULAR_ONLY is full</code>); the console-derived losses match the backend's heal ranges exactly where both exist. So loss is mostly <b>one or two 8-chunk holes anywhere</b>, not just the tail.</p></section>
 <section><h2>Table (median over 4 frames)</h2><div class="wrap"><table>
-<tr><th>method</th><th class=num>extra msgs</th><th class=num>complete SSIM / ΔE</th><th class=num>traces: visible</th><th class=num>colour</th><th class=num>complete</th><th class=num>8-run anywhere: complete</th><th class=num>16-run: complete</th><th class=num>tail 40: colour</th><th>Pi Zero 2 W</th><th>backend</th><th>wire contract</th></tr>
+<tr><th>method</th><th class=num>extra msgs</th><th class=num>complete SSIM / ΔE</th><th class=num>traces: visible</th><th class=num>colour</th><th class=num>complete</th><th class=num>8-run anywhere: complete</th><th class=num>16-run: complete</th><th class=num>tail 40: colour</th><th class=num>sync at start (31 lost): complete / colour</th><th class=num>sync 31 anywhere: complete / colour</th><th class=num>real trg 24/25: shown / colour</th><th>Pi Zero 2 W</th><th>backend</th><th>wire contract</th></tr>
 {"".join(tr(r) for r in rows)}</table></div>
 <p class="muted">"visible" = the backend can show any image after the first send; "colour" = a colour image (complete, preview or progressive prefix), not a grey plane render. Pi Zero measured on nereus002 (run-7 frame, d 5.66): production 4-plane encode 7.5 s, preview {pi["preview_render_and_encode_s"]} s, RS encode {pi["rs_encode_k116_m18_s"]}–{pi["rs_encode_k116_m27_s"]} s, RS decode {pi["rs_decode_k116_m27_s"]} s.</p></section>
 <section><h2>What the user sees — {e(note)}</h2>

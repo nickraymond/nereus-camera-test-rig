@@ -36,7 +36,7 @@ from compression_study.preview_loss import frames as F
 SLOTS = 180
 PLANES = ("R", "G1", "G2", "B")
 PREV_W, PREV_H, PREV_MSGS = 320, 180, 10
-FEC_M = (9, 18, 27, 36)
+FEC_M = (9, 18, 27, 36, 45)
 
 
 # ------------------------------------------------------------------ loss patterns
@@ -68,10 +68,24 @@ def patterns(traces: list[dict]) -> dict[str, list[np.ndarray]]:
     rng = np.random.default_rng(5)
     burst = lambda ln: [np.r_[np.zeros(s, bool), np.ones(ln, bool),  # noqa: E731
                               np.zeros(SLOTS - s - ln, bool)] for s in range(SLOTS - ln + 1)]
+    def at(start, ln):
+        x = np.zeros(SLOTS, bool)
+        x[start:start + ln] = True
+        return x
+    trg = np.zeros(SLOTS, bool)          # G4 bmcam004 trg clip 0e5qbm (2026-10-03 06:07Z):
+    trg[:25] = True                      # START + 24 of 25 chunks lost, chunk 12 got through
+    trg[12] = False
     return {"traces": [scale(t) for t in traces],
             "burst8_any": burst(8), "burst16_any": burst(16),
-            "tail40": [np.r_[np.zeros(SLOTS - 40, bool), np.ones(40, bool)]],
-            "iid5": [rng.random(SLOTS) < 0.05 for _ in range(200)]}
+            "tail40": [at(SLOTS - 40, 40)],
+            "iid5": [rng.random(SLOTS) < 0.05 for _ in range(200)],
+            # sync collision (bm_cam_legacy #126): a send that starts in the Spotter's hub.sync
+            # gets 2 chunks into the 2-slot queue, then the queue rejects for 40-50 s
+            # (= 31-38 chunks at 1.3 s pacing); START is in the window too.
+            "sync_start31": [at(2, 31)], "sync_start38": [at(2, 38)],
+            "sync_trg_real": [trg],
+            # the same window when the sync lands anywhere in the burst
+            "sync31_any": burst(31)}
 
 
 # ------------------------------------------------------------------ methods
