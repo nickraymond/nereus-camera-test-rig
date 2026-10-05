@@ -36,8 +36,10 @@ from ..models import (
     DetectionResult,
     ExperimentRecord,
 )
+from ..sensors.depth import safe_read
 from ..storage.experiment_store import ExperimentPaths, ExperimentStore
 from ..storage.metadata import write_capture_metadata
+from .exposure_lock import merge_settings, overrides_from_lock
 
 # Fixed capture order (Spec §11): the Pi camera first, then the two USB boards. Any
 # camera present in config but not named here is captured last, in config order.
@@ -183,12 +185,16 @@ def _capture_one_camera(
     analyzer,
     when: datetime,
     raw: Optional[bool] = None,
+    settings_override: Optional[dict[str, Any]] = None,
 ) -> CameraOutcome:
-    """Capture + (best-effort) analyze one camera. Never raises (Spec §11)."""
+    """Capture + (best-effort) analyze one camera. Never raises (Spec §11).
+
+    ``settings_override`` (pool spec §5.2, from an exposure lock) is deep-merged into the
+    camera profile, so the still and the RAW both use it."""
     cap_dir = paths.capture_dir(name)
 
     try:
-        profile = load_camera_profile(camera_cfg)
+        profile = merge_settings(load_camera_profile(camera_cfg), settings_override)
         device = build_camera(camera_cfg, profile=profile)
     except Exception as exc:  # unknown driver / bad config — record and keep going
         logger.error("camera %s: could not build adapter: %s", name, exc)
@@ -293,6 +299,8 @@ def run_experiment(
     analysis: bool = True,
     when: Optional[datetime] = None,
     raw: Optional[bool] = None,
+    exposure_lock: Optional[dict[str, Any]] = None,
+    depth_sensor=None,
 ) -> ExperimentOutcome:
     """Run one sequential capture set across all connected cameras (Spec §11, §13).
 
@@ -303,6 +311,10 @@ def run_experiment(
     ``raw``: take a RAW after each still (Phase 8 S3); ``None`` = each camera profile's
     ``raw`` flag (default off, so the Phase 5 path is unchanged). A failed RAW is recorded in
     ``raw_captures`` + ``errors`` but does not fail the camera's still.
+
+    ``exposure_lock`` (pool spec §5.2, ``capture.exposure_lock``): each locked camera's settings
+    are merged into its profile; the lock is copied into ``experiment.json``. ``depth_sensor``
+    (``sensors.depth``, §5.1): read at the start and end of the set into ``record.sensors``.
     """
     when = when or datetime.now(timezone.utc)
     if results_root is None:
@@ -339,9 +351,22 @@ def run_experiment(
         paths.experiment_id, environment_label, ordered, analyzer is not None,
     )
 
+    overrides: dict[str, Any] = {}
+    if exposure_lock:
+        overrides = overrides_from_lock(exposure_lock)
+        record.exposure_lock = exposure_lock
+        unlocked = [n for n in ordered if n not in overrides]
+        logger.info("exposure lock %s: locked %s", exposure_lock.get("folder"), sorted(overrides))
+        if unlocked:
+            record.warnings.append(f"exposure lock: not locked (auto exposure): {unlocked}")
+    if depth_sensor is not None:
+        record.sensors["depth_info"] = depth_sensor.info()
+        record.sensors["depth_start"] = safe_read(depth_sensor)
+
     outcomes: list[CameraOutcome] = []
     for name in ordered:
-        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw)
+        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw,
+                                      overrides.get(name))
         outcomes.append(outcome)
         record.cameras.append(outcome.result.camera)
         record.captures.append(outcome.result)
@@ -355,6 +380,9 @@ def run_experiment(
             if not outcome.raw_result.ok:
                 err = outcome.raw_result.error or {}
                 record.errors.append(f"{name} raw: {err.get('code')}: {err.get('message')}")
+
+    if depth_sensor is not None:
+        record.sensors["depth_end"] = safe_read(depth_sensor)
 
     store.write_record(paths, record)
 
