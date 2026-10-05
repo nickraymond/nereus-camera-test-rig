@@ -34,3 +34,11 @@ floor). Records only; the 15 RAWs per run (~130 MB) stay on nereus002 under
   - Camera-colour ΔE median 2.74, card fit 3.62.
   - The production JPEG again clips 12/17 patches.
   - Same sheet URL, version 2.
+- **OpenMV RAW pipeline diagnosis** (Nick asked: is the raw pipeline broken?) —
+  `compression_study/presets/openmv_diag.py` → `run5_openmv_diag.json`, sheet
+  https://claude.ai/artifact/NT49DezQc3jucXscpQDYMN. All checks pass on both boards: CFA BGGR,
+  8-bit / unpacked / black 0, no row shift, no flip, exact read-back.
+  - The AE3 finds the card on its RAW. It made no pick because 1/250 s already clips 0.67 % of
+    the card box: the ladder is too long for the OpenMV sensor.
+  - The N6's left tags fail on optics: the left side of its lens is soft (edge sharpness 0.11–0.13
+    vs 0.19), on the RAW and its own JPEG alike.
