@@ -1,0 +1,22 @@
+{
+ "host": "nereus002",
+ "d": 5.66,
+ "read_and_code_s": 0.718,
+ "production_4_planes_s": 7.542,
+ "production_bytes": 33325,
+ "cjxl_peak_rss_mb_after_production": 68.3,
+ "prog_tiled_s": 7.883,
+ "prog_bytes": 32505,
+ "mdc_4_desc_s": 7.434,
+ "mdc_bytes": 51280,
+ "preview_render_and_encode_s": 1.414,
+ "preview_bytes": 2949,
+ "rs_encode_k116_m18_s": 0.072,
+ "rs_decode_k116_m18_s": 0.132,
+ "rs_roundtrip_m18_ok": true,
+ "rs_encode_k116_m27_s": 0.083,
+ "rs_decode_k116_m27_s": 0.148,
+ "rs_roundtrip_m27_ok": true,
+ "cjxl_peak_rss_mb": 123.3,
+ "self_peak_rss_mb": 119.9
+}
