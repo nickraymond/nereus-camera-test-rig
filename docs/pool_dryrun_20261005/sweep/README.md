@@ -14,3 +14,13 @@ floor). Records only; the 15 RAWs per run (~130 MB) stay on nereus002 under
   IMX708's view. The IMX708 picked 1/125 s and flagged 1/60 to 1/15 s as blurred. The panel lit
   the N6 / AE3 head-on, so all their frames clipped: no pick. Sheet:
   https://claude.ai/artifact/TkZqowjH2gEey42QmdmxiR
+- **Run 3** (19:25 PDT, Nick at the rig): light = **2× LED panel, 5300 K**, both in frame; card V1 +
+  checker at ~1 m (Nick; 1.21 m estimated from the tag spacing with nominal intrinsics). RAWs on
+  nereus002 `…/exp_20261005T022526Z_pool_sweep`. Mac colour analysis
+  (`compression_study/presets/sweep_colour.py` → `run3_2led_colour.json`):
+  - pick 1/60 s (card area; 1/30 and 1/15 s clip the white patch);
+  - camera colour ΔE00 median 2.94 (max 14.9 on white), card fit 3.82;
+  - scene CCT from the card greys 5650 K vs nominal 5300 K; red SNR 26.8 on grey 128;
+  - today's production JPEG (auto 49 ms at gain 2.0) clips 12 of 17 patches.
+  - The Pi's own pick was none: its centre fallback region contains an LED panel.
+  - Sheet: https://claude.ai/artifact/Cf6WfxtP3s3JfnoVf2bWyy
