@@ -24,3 +24,13 @@ floor). Records only; the 15 RAWs per run (~130 MB) stay on nereus002 under
   - today's production JPEG (auto 49 ms at gain 2.0) clips 12 of 17 patches.
   - The Pi's own pick was none: its centre fallback region contains an LED panel.
   - Sheet: https://claude.ai/artifact/Cf6WfxtP3s3JfnoVf2bWyy
+- **Run 5** (Nick: LEDs stay, crop them out): notes carry "2× 5300 K LED panels in frame,
+  excluded from the analysis; possible veiling flare"; IMX708 scored on the MEDIUM ROI
+  (`--sweep-roi imx708=1504,846,1600,900`).
+  - The Pi's own pick is now 1/60 s, the same as the Mac's card-area pick.
+  - Flare check: black/white = 0.028 in every unclipped frame (truth 0.074), so the blacks are
+    not lifted.
+  - MEDIUM / SMALL clipping 0 % up to 1/60 s.
+  - Camera-colour ΔE median 2.74, card fit 3.62.
+  - The production JPEG again clips 12/17 patches.
+  - Same sheet URL, version 2.

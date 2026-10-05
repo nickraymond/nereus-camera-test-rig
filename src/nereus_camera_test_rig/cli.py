@@ -64,6 +64,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--sweep-shutters-us", default=None,
         help="comma-separated shutter ladder in us (default 4000,8000,16667,33333,66667)")
     p_experiment.add_argument(
+        "--sweep-roi", action="append", default=None,
+        help="[camera=]x,y,w,h in that camera's px, scored when the card is not found (default: "
+             "frame centre); keeps light sources out, e.g. imx708=1504,846,1600,900; repeatable")
+    p_experiment.add_argument(
         "--sweep-tolerance", type=float, default=None,
         help="pick the longest shutter within this fraction of the sharpest frame (default 0.10)")
     p_experiment.set_defaults(func=_cmd_experiment)
@@ -200,6 +204,13 @@ def _sweep_arg(args: argparse.Namespace):
         out["shutters_us"] = [int(v) for v in args.sweep_shutters_us.split(",") if v.strip()]
     if args.sweep_tolerance is not None:
         out["tolerance"] = args.sweep_tolerance
+    if args.sweep_roi:
+        rois: dict = {}
+        for item in args.sweep_roi:
+            cam, _, box = item.rpartition("=")
+            rois[cam or "*"] = [int(v) for v in box.split(",")]
+        out["roi"] = rois["*"] if list(rois) == ["*"] else {k: v for k, v in rois.items()
+                                                             if k != "*"}
     return out
 
 

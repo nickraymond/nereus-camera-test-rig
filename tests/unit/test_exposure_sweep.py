@@ -76,3 +76,26 @@ def test_sharpness_does_not_grow_with_brightness():
     a = score_frame(_mosaic(img))["sharpness"]["centre"]
     b = score_frame(_mosaic(img * 2))["sharpness"]["centre"]
     assert abs(a / b - 1) < 0.05
+
+
+def test_roi_replaces_the_centre_fallback():
+    img = np.zeros((400, 600))
+    img[:, :300] = 1.0                                    # a clipped "light panel", left half
+    img[100:300, 350:550] = 0.3                           # dimmer scene on the right
+    centre = score_frame(_mosaic(img))
+    roi = score_frame(_mosaic(img), roi=(340, 90, 220, 220))
+    assert centre["clipped"]                              # the centre sees the panel
+    assert roi["clip_frac"] == 0 and roi["level_p995"] < 0.5
+
+
+def test_roi_outside_the_frame_falls_back_to_the_centre():
+    img = np.full((400, 600), 0.3)
+    r = score_frame(_mosaic(img), roi=(1504, 846, 1600, 900))   # IMX708 px on a small frame
+    assert r["fallback"].startswith("frame centre")
+
+
+def test_per_camera_roi():
+    s = sweep_settings({}, {"enabled": True, "roi": {"imx708": [1, 2, 3, 4]}}, "openmv_n6")
+    assert s["roi"] is None
+    assert sweep_settings({}, {"enabled": True, "roi": {"imx708": [1, 2, 3, 4]}},
+                          "imx708")["roi"] == [1, 2, 3, 4]

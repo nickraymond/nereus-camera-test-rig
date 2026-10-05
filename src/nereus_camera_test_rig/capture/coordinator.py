@@ -177,16 +177,21 @@ def _capture_raw(name: str, device, profile: dict[str, Any], cap_dir: Path,
 DEFAULT_SWEEP_SHUTTERS_US = (4000, 8000, 16667, 33333, 66667)  # 1/250 … 1/15 s
 
 
-def sweep_settings(profile: dict[str, Any], override: Optional[dict[str, Any]]
-                   ) -> Optional[dict[str, Any]]:
+def sweep_settings(profile: dict[str, Any], override: Optional[dict[str, Any]],
+                   camera: Optional[str] = None) -> Optional[dict[str, Any]]:
     """The exposure-sweep config for one camera, or None when it is off (the default).
-    ``override`` (from the CLI) wins over the profile's ``exposure_sweep`` block."""
+    ``override`` (from the CLI) wins over the profile's ``exposure_sweep`` block; its ``roi``
+    may be one box for every camera or ``{camera: box}`` (ROIs are in each camera's own px)."""
     cfg = {**(profile.get("exposure_sweep") or {}), **(override or {})}
+    if isinstance(cfg.get("roi"), dict):
+        cfg["roi"] = cfg["roi"].get(camera)
     if not cfg.get("enabled"):
         return None
     shutters = [int(v) for v in (cfg.get("shutters_us") or DEFAULT_SWEEP_SHUTTERS_US)]
+    roi = cfg.get("roi")
     return {"shutters_us": shutters, "gain": cfg.get("gain", "floor"),
-            "tolerance": float(cfg.get("tolerance", 0.10)), "card": cfg.get("card")}
+            "tolerance": float(cfg.get("tolerance", 0.10)), "card": cfg.get("card"),
+            "roi": [int(v) for v in roi] if roi else None}
 
 
 def _capture_sweep(name: str, device, profile: dict[str, Any], cap_dir: Path, when: datetime,
@@ -238,7 +243,7 @@ def _score_sweeps(record: ExperimentRecord, outcomes: list, sweeps: dict[str, di
             from ..color.exposure_sweep import DEFAULT_CARD, score_sweep
             scored = score_sweep([Path(r.output_path) for _, r in ok], [sh for sh, _ in ok],
                                  Path(sweep["card"]) if sweep.get("card") else DEFAULT_CARD,
-                                 sweep["tolerance"])
+                                 sweep["tolerance"], sweep.get("roi"))
             entry.update(scored)
             p = scored["pick"]
             logger.info("camera %s: sweep pick %s us — %s", o.camera_name, p["shutter_us"],
@@ -459,7 +464,7 @@ def run_experiment(
             prof = load_camera_profile(cameras_cfg[name])
         except Exception:  # _capture_one_camera records the init failure
             prof = {}
-        sweep = sweep_settings(prof, exposure_sweep)
+        sweep = sweep_settings(prof, exposure_sweep, name)
         if sweep:
             sweeps[name] = sweep
         outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw,

@@ -75,17 +75,23 @@ def _immerkaer_sigma(p: np.ndarray) -> Optional[float]:
     return float(np.sqrt(np.pi / 2) * np.mean(np.abs(k)) / 6)
 
 
-def score_frame(frame, card_box: Optional[tuple[int, int, int, int]] = None) -> dict[str, Any]:
-    """Scores for one RawFrame. Only two crops are normalised (the frame centre, 50 % x 50 %,
-    and the card box ``(x0, y0, x1, y1)`` in mosaic px when known), which keeps a 12 MP IMX708
-    frame inside the Pi Zero's memory."""
+def score_frame(frame, card_box: Optional[tuple[int, int, int, int]] = None,
+                roi: Optional[tuple[int, int, int, int]] = None) -> dict[str, Any]:
+    """Scores for one RawFrame. Only two crops are normalised, which keeps a 12 MP IMX708 frame
+    inside the Pi Zero's memory: the card box ``(x0, y0, x1, y1)`` in mosaic px when known, and
+    the fallback region — ``roi`` ``(x, y, w, h)`` when given (e.g. the MEDIUM crop, so light
+    sources elsewhere in the frame stay out), else the frame centre (50 % x 50 %)."""
     raw, _, _ = frame.active()
     H, W = raw.shape
-    boxes = {"centre": (W // 4, H // 4, W // 2, H // 2)}
+    fits = roi is not None and roi[0] >= 0 and roi[1] >= 0 and roi[0] + roi[2] <= W \
+        and roi[1] + roi[3] <= H
+    boxes = {"centre": tuple(roi) if fits else (W // 4, H // 4, W // 2, H // 2)}
     if card_box is not None:
         x0, y0, x1, y1 = card_box
         boxes["card"] = (x0, y0, x1 - x0, y1 - y0)
-    out: dict[str, Any] = {"roi": "card" if "card" in boxes else "centre", "sharpness": {}}
+    out: dict[str, Any] = {"roi": "card" if "card" in boxes else "centre", "sharpness": {},
+                           "fallback": ("given roi" if fits else "frame centre"
+                                        + (" (roi outside this frame)" if roi else ""))}
     for name, box in boxes.items():
         binned, clip = _planes(_crop(frame, *box))
         g = binned[..., 1]
@@ -130,7 +136,8 @@ def pick(frames: list[dict[str, Any]], tolerance: float = DEFAULT_TOLERANCE) -> 
 
 
 def score_sweep(paths: list[Path], shutters_us: list[int], card_yaml: Optional[Path] = None,
-                tolerance: float = DEFAULT_TOLERANCE) -> dict[str, Any]:
+                tolerance: float = DEFAULT_TOLERANCE,
+                roi: Optional[tuple[int, int, int, int]] = None) -> dict[str, Any]:
     """Score every RAW of one camera's sweep (``.dng`` or ``.bayer`` + sidecar) and pick one.
     The card is located once (first frame where it is found) and reused: the camera is fixed
     for the few seconds a sweep takes."""
@@ -154,8 +161,9 @@ def score_sweep(paths: list[Path], shutters_us: list[int], card_yaml: Optional[P
     frames = []
     for path, shutter in zip(paths, shutters_us):
         frames.append({"file": Path(path).name, "shutter_us": int(shutter),
-                       "scores": score_frame(read(path), quad)})
-    result = {"frames": frames, "card": card_note}
+                       "scores": score_frame(read(path), quad, roi)})
+    result = {"frames": frames, "card": card_note,
+              "fallback_region": list(roi) if roi else "frame centre 50 %"}
     result["pick"] = pick(frames, tolerance)
     return result
 

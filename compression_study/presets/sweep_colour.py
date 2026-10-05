@@ -59,6 +59,10 @@ DESIGN = {p.id: srgb8_to_linear(np.asarray(p.design, float)) for p in CARD.patch
 GREYS = ["gray_white", "gray_light", "gray_mid", "gray_dark", "gray_black"]
 CARD_IDS = [p.id for p in CARD.patches]
 CLIP_PATCH = 0.01  # a patch with > 1 % clipped pixels in any channel is excluded
+ROIS = {"MEDIUM": (1504, 846, 1600, 900), "SMALL": (2172, 1000, 800, 450)}  # native px
+LIGHT_NOTE = ("2× 5300 K LED panels in frame, excluded from the analysis; possible veiling flare "
+              "(Nick, 2026-10-05: the LEDs stay where they are; angling them causes card "
+              "reflections)")
 
 
 def rpicam_meta(dng: Path) -> dict:
@@ -190,7 +194,17 @@ def analyse_dng(dng: Path, rois: dict, ct_curve, meta: dict | None = None) -> di
            "red_snr_grey128": round(float(stats["gray_mid"]["mean"][0]
                                           / max(stats["gray_mid"]["std"][0], 1e-9)), 1),
            "patch_px": stats["gray_mid"]["n"],
-           "clipping": frame_clipping(binned, clip, rois["card_box"]),
+           "clipping": {**frame_clipping(binned, clip, rois["card_box"]),
+                        **{f"{n}_pct": [round(float(clip[y // 2:(y + h) // 2, x // 2:(x + w) // 2,
+                                                          c].mean() * 100), 3) for c in range(3)]
+                           for n, (x, y, w, h) in ROIS.items()}},
+           "black_patch": {
+               "level_rgb": [round(float(v), 4) for v in stats["gray_black"]["mean"]],
+               "black_over_white_g": round(float(stats["gray_black"]["mean"][1]
+                                                 / max(stats["gray_white"]["mean"][1], 1e-9)), 4),
+               "white_clipped": bool(stats["gray_white"]["clip"].max() > CLIP_PATCH),
+               "truth_black_over_white": round(float(TRUTH["gray_black"][1]
+                                                     / TRUTH["gray_white"][1]), 4)},
            "sharpness_card": _laplacian_energy(binned[y0:y1, x0:x1, 1]),
            "cct": cct_from_greys(stats, ct_curve)}
     out.update(colour_metrics(stats, meta.get("ColourGains"), meta.get("ColourCorrectionMatrix")))
@@ -270,6 +284,7 @@ def main(argv=None) -> int:
     if rois is None:
         raise SystemExit("card not located on any IMX708 sweep frame")
     res: dict = {"experiment": rec["experiment_id"], "notes": rec.get("operator_notes"),
+                 "lights": LIGHT_NOTE,
                  "card_located_on": located_on, "tags_found": rois.get("tags_found"),
                  "truth_source": CARD.truth_source, "quad_raw": rois["quad_raw"],
                  "card_box_binned": rois["card_box"], "frames": []}
@@ -284,7 +299,9 @@ def main(argv=None) -> int:
         res["frames"].append(f)
         print(f"{sh:6d} us: white {f['white_level']} clipped={f['white_clipped']} "
               f"uncorr ΔE {f.get('uncorrected', {}).get('median')} fit ΔE "
-              f"{f['card_fit']['median']} red SNR {f['red_snr_grey128']} card clip "
+              f"{f['card_fit']['median']} red SNR {f['red_snr_grey128']} black/white "
+              f"{f['black_patch']['black_over_white_g']} black G {f['black_patch']['level_rgb'][1]} "
+              f"card clip "
               f"{f['clipping']['card_area_pct']} sharp {f['sharpness_card']}", flush=True)
     frames_for_pick = [{"shutter_us": f["shutter_us"],
                         "scores": {"sharpness": {"card": f["sharpness_card"]},

@@ -119,6 +119,9 @@ def main(exp: str, colour_path: str, out: str) -> int:
 <dl><dt>read-back</dt><dd>{f['exposure_us']} µs · gain {f['analogue_gain']:.3f} · DG {f['digital_gain']:.3f}</dd>
 <dt>white level</dt><dd>{' / '.join(f'{v:.2f}' for v in f['white_level'])}{' CLIPPED' if f['white_clipped'] else ''}</dd>
 <dt>card clip % RGB</dt><dd>{' / '.join(f'{v:.2f}' for v in clip)}</dd>
+<dt>MEDIUM clip % RGB</dt><dd>{' / '.join(f'{v:.2f}' for v in f['clipping']['MEDIUM_pct'])}</dd>
+<dt>SMALL clip % RGB</dt><dd>{' / '.join(f'{v:.2f}' for v in f['clipping']['SMALL_pct'])}</dd>
+<dt>black patch (flare)</dt><dd>G {f['black_patch']['level_rgb'][1]:.4f} · black/white {f['black_patch']['black_over_white_g']:.3f}{' (white clipped)' if f['black_patch']['white_clipped'] else ''}</dd>
 <dt>sharpness (card)</dt><dd>{f['sharpness_card']:.3f}</dd>
 <dt>red SNR grey 128</dt><dd>{f['red_snr_grey128']}</dd>
 <dt>ΔE camera colour</dt><dd>med {f['uncorrected']['median']} · max {f['uncorrected']['max']} (n {f['uncorrected']['n']})</dd>
@@ -163,13 +166,14 @@ dl{{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.
 .legend span{{display:inline-flex;align-items:center;gap:6px;margin-right:16px}} .sw{{width:12px;height:12px;border-radius:2px;display:inline-block}}
 </style><main>
 <h1>Exposure sweep under two 5300 K LEDs</h1>
-<p class="muted">{e(c['experiment'])} · nereus002 IMX708 · 2026-10-05 19:25 PDT</p>
+<p class="muted">{e(c['experiment'])} · nereus002 IMX708 · 2026-10-05 (PDT evening, Nick at the rig)</p>
 <section><h2>Setup</h2><ul>
-<li><b>Light:</b> 2× LED panel, 5300 K (Nick's neutral panels), both in frame (left near centre-left, right at the right edge); room otherwise dark. The first test with two lamps instead of one.</li>
+<li><b>Light:</b> {e(c['lights'])}. Both panels in frame (left near centre-left, right at the right edge); room otherwise dark. The first test with two lamps instead of one. All analysis runs on the card area and the MEDIUM / SMALL ROIs, which do not include the panels; whole-frame clipping masks them.</li>
 <li><b>Card:</b> V1 + Pixel Perfect checker, ~1 m (Nick, deliberate, pool-like). Estimated from the card's tag spacing: {c['distance_m_estimate']} m (ESTIMATE: nominal lens, no distortion model). Located on all 4 tags (on the 1/15 s frame); grey 128 patch ≈ {pf['patch_px']} binned px.</li>
 <li><b>Sweep:</b> 1/250 → 1/15 s at the gain floor (asked 1.0, applied 1.1228), AWB auto per frame. Truth = the V1 card as measured on the IMX708 in air, 2026-09-28 (single lamp).</li></ul></section>
 <section><h2>Frames — pick {frac(pick_us)}</h2>
-<p class="muted">{e(c['mac_pick']['reason'])}. The Pi's own pick was none: its fallback region (frame centre) contains the left LED panel, so every frame looked clipped, and its decimated card search misses the card at ~1 m. The pick here is the same rule on the card area, scored on the Mac at full resolution. Thumbnails DOWNSCALED, one display scale (the 1/15 s frame's 99th percentile = white).</p>
+<p class="muted">Mac (card area, full resolution): {e(c['mac_pick']['reason'])}. Pi (on the rig, MEDIUM ROI because its decimated card search misses the card at ~1 m): {e(str((c.get('pi_pick') or {}).get('reason')))}. Thumbnails DOWNSCALED, one display scale (the 1/15 s frame's 99th percentile = white).</p>
+<p class="muted"><b>Flare check:</b> the black patch's level relative to white is {', '.join(f"{f['black_patch']['black_over_white_g']:.3f}" for f in c['frames'])} across the frames (rising only where the white clips), against {c['frames'][0]['black_patch']['truth_black_over_white']:.3f} for the printed card as measured. Blacks are not lifted: no visible veiling flare on the card from the panels.</p>
 <div class="strip">{''.join(cells)}</div></section>
 <section><h2>ΔE2000 per patch — pick ({frac(pick_us)}) vs today's JPEG</h2>
 <p class="legend"><span><i class="sw" style="background:var(--pick)"></i>pick, camera colour (uncorrected)</span><span><i class="sw" style="background:var(--jpg)"></i>today's production JPEG (pjpg q{pj['quality']}, {pj['bytes']:,} B, {pj['messages']} msgs), uncorrected</span><span>hatched = clipped in the JPEG</span></p>
@@ -190,7 +194,7 @@ dl{{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;margin:0;font-size:.
 <section><h2>Against the earlier single-lamp frame (S4, 2026-09-30, cool lamp, stop −1)</h2>
 <p>Single lamp: camera colour ΔE {s4.get('uncorrected', {}).get('median')} median, card fit {s4.get('card_fit', {}).get('median')}; CCT {s4.get('cct', {}).get('cct_k')} K; red SNR {s4.get('red_snr_grey128')}. Two LEDs (this pick): camera colour {pf['uncorrected']['median']}, card fit {pf['card_fit']['median']}; CCT {cct.get('cct_k')} K; red SNR {pf['red_snr_grey128']}.</p>
 <p class="muted">What differs (more than one variable — CLAUDE.md §10): one lamp vs two, lamp CCT (S4 cool lamp ≈ {s4.get('cct', {}).get('cct_k')} K by the same estimate), card at ~0.5 m vs ~1 m (patches ~{s4.get('patch_px')} vs ~{pf['patch_px']} binned px), lamps straight-on vs in frame, exposure 103 ms vs 17 ms. The card truth was measured in the S4-style setup, so S4 is partly in-sample.</p>
-<p class="muted"><b>Why the card fit is worse than the camera colour here:</b> the truth's greys come from the single-lamp measurement session and are compressed (truth black/white 0.074; today's card reads 0.028, so no veiling glare on the card: rather the opposite). A 3×3 fit spreads that tone mismatch over every patch; a 3×3 + offset fit does not fix it (median 3.69). The greys' error is mostly the truth, not the camera.</p></section>
+<p class="muted"><b>Why the card fit is worse than the camera colour here:</b> the truth's greys come from the single-lamp measurement session and are compressed (truth black/white 0.074; today's card reads 0.028, so no veiling flare on the card: rather the opposite). A 3×3 fit spreads that tone mismatch over every patch; a 3×3 + offset fit does not fix it (median 3.69). The greys' error is mostly the truth, not the camera.</p></section>
 <section><h2>OpenMV N6 / AE3</h2><p>Swept too (5 RAWs each, read-backs exact), but no colour metrics: the card was not located on their 1280×800 RAWs at ~1 m, and their centre fallback region read clipped on the longer frames (an LED panel in view): N6 picked 1/250 s, AE3 none. They need the card closer (pool spec: ~0.5 m) or a card ROI hint.</p></section>
 </main>'''
     Path(out).write_text(page, encoding="utf-8")
