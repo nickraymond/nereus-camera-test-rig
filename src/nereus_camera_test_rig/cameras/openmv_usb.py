@@ -279,6 +279,16 @@ class OpenMvUsbCamera(CameraDevice):
 
         return self._validate(identity, request, dest, output, time.monotonic() - started)
 
+    # Exposure sweep (pool, Nick 2026-10-05): exposure at ``shutter_us`` and gain at the
+    # PAG7936 floor (asking 0 dB reads back 3.152157 dB on both boards, OQ-21). Exposures past
+    # the default frame time lengthen the frame (OQ-51, up to ~2 s).
+    GAIN_FLOOR_DB = 3.152157
+
+    def locked_exposure_settings(self, shutter_us: int, gain_db: Optional[float] = None
+                                 ) -> dict[str, Any]:
+        return {"exposure_us": int(shutter_us),
+                "gain_db": float(self.GAIN_FLOOR_DB if gain_db is None else gain_db)}
+
     def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
         """8-bit Bayer RAW at a locked exposure (Phase 8 S3, OQ-21) → ``destination``
         (``.bayer``, the mosaic bytes row-major) + ``<stem>.json`` sidecar with everything

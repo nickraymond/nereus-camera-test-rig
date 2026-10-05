@@ -1,0 +1,4 @@
+{"created_utc": "2026-10-05T00:52:00Z", "note": "HAND-MADE lock for the pass-through test only (card not meterable at the 1.5 m bench framing); values are arbitrary but plausible", "card": null, "target": null, "folder": "manual_lock_passthrough",
+ "cameras": {"imx708": {"locked": true, "settings": {"camera_controls": {"exposure": {"shutter_us": 100000, "analogue_gain": 1.122807}, "white_balance": {"red_gain": 2.3697, "blue_gain": 1.7648}, "focus": {"mode": "manual", "lens_position": 0.6846}}}},
+             "openmv_n6": {"locked": true, "settings": {"exposure_us": 8000, "gain_db": 6.0}},
+             "openmv_ae3": {"locked": true, "settings": {"exposure_us": 12000, "gain_db": 6.0}}}}

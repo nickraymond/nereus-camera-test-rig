@@ -95,6 +95,24 @@ def exposure_for_target(exposure_us: float, level: float, target: float = DEFAUL
             "clamped": got != want, "remeter": clipped}
 
 
+def gain_priority(exposure_us: float, cap_us: float | None, min_gain: float,
+                  max_gain: float) -> dict[str, Any]:
+    """Nick's "ISO 100" rule (2026-10-05): lowest analogue gain first, lengthen the shutter up to
+    ``cap_us`` (motion limit, e.g. 1/60 s), and only then raise the gain. ``exposure_us`` is the
+    exposure that hits the target at ``min_gain`` (linear). Same total exposure (shutter × gain)
+    either way, because the RAW is linear. Gains are linear factors; the sensor rounds to its
+    own steps, which the capture's read-back reports."""
+    if not cap_us or exposure_us <= cap_us:
+        return {"exposure_us": round(exposure_us), "gain": min_gain, "capped": False,
+                "rule": "gain floor, shutter only"}
+    need = min_gain * exposure_us / cap_us
+    gain = min(need, max_gain)
+    return {"exposure_us": round(cap_us), "gain": gain, "capped": True,
+            "wanted_us": round(exposure_us), "gain_needed": round(need, 4),
+            "gain_clamped": gain < need,
+            "rule": "shutter at the motion cap, the rest in gain"}
+
+
 def card_reference(levels: dict[str, Any]) -> dict[str, Any]:
     """The brightest white-ish patch's brightest channel: its level and whether it clipped."""
     for pid in WHITE_PATCHES:

@@ -1,7 +1,7 @@
 # Pool Test: Raw Capture, Compression and Colour Correction
 ## Test specification
 
-**Status:** Draft, revised with Nick's decisions (2026-10-01)
+**Status:** Draft, revised with Nick's decisions (2026-10-01); §5 capture side built and dry-run on the bench, §7 IMX708 path revised (2026-10-04)
 **Parent:** `docs/SPEC_nereus_camera_test_rig.md` §4, "Raw compression study"; lab results in
 `compression_study/REPORT.md` ("hydrium vs wl53 on the OpenMV boards", PR #85).
 **Cameras:** IMX708 (Pi), OpenMV N6, OpenMV AE3 — all three in one housing with the Pi, aimed at
@@ -80,6 +80,44 @@ in the S3 demo). To add:
 5. **Storage check:** ~26 MB per set (IMX708 DNG ~24 MB + 2 × 1 MB) → ~1 GB for the day. Check
    free space on the Pi's SD card before the pool day.
 
+### 5a. Built and dry-run (2026-10-04/05, bench, unsealed, no housing)
+
+Branch `feat/pool-raw-prep`. Commands (on the Pi, from the repo root, rig venv):
+
+```
+# once per depth (§6 step 2): meter on the card, write the lock
+nereus-rig --config configs/rig.yaml meter --out results/pool/<date>/lock_<depth>
+# the 10 sets at that depth, under the lock
+scripts/hil_soak.py run --profile configs/experiments/pool_raw.yaml \
+    --exposure-lock results/pool/<date>/lock_<depth>/exposure_lock.json --notes "depth=6ft …"
+```
+
+- **§5.2 lock** (`capture/exposure_lock.py`): `meter` runs the two card-metering scripts
+  unchanged, and `experiment --exposure-lock` merges each locked camera's settings into its
+  profile. Verified on `nereus002` with a hand-made lock: the RAW read-back equals the lock on
+  all three cameras (IMX708 99,982 µs at gain 1.12 with the locked AWB and lens position; N6 and
+  AE3 exactly 8,000 / 12,000 µs at 6.02 dB). The OpenMV **stills** keep the boards' own auto
+  exposure; only the RAWs are locked, and only the RAWs are analysed (§7). A camera that cannot
+  find the card stays on auto, and `experiment.json` says so.
+  - **Not meterable at today's bench framing:** at ~1.5 m with plastic-wrap glare, the card was
+    not found (IMX708 0 tags, N6 / AE3 2 of 4). This is expected; the pool uses ~0.5 m (§3).
+- **§5.1 depth** (`sensors/depth.py`): interface plus a labelled fake source only; `--depth fake`
+  writes `depth_start` / `depth_end` into `experiment.json`.
+- **§5.3–5.4 profile + loop** (`configs/experiments/pool_raw.yaml`, `scripts/hil_soak.py run
+  --profile`): N sets with a gap, the lock, the depth placeholder, a per-set card check
+  (`color.card_check`) and one line per set.
+- **§5.5 / §9 storage + thermal:** a pre-flight against the profile's per-set estimate; Pi CPU
+  temperature and free disk on every line.
+- **Dry run, 10 sets in air** (`docs/pool_dryrun_20261005/`):
+  - 10 / 10 sets, all three stills and RAWs OK, no USB drops.
+  - 42–45 s capture per set, plus 16–19 s card check, plus the 30 s gap: ~91 s per set,
+    10 sets in 14 min.
+  - CPU 50.5 → 52.1 °C, unsealed in room air; never throttled.
+  - MemAvailable ≥ 237 MB; capture 3.0 W (4.1 W peak), idle 2.6 W.
+  - **28.6 MB per set** (286 MB for 10). A pool day of 3 depths × 10 + 10 dusk + 10 in air +
+    15 rehearsal ≈ 65 sets ≈ 1.9 GB, against 72.9 GB free on the SD.
+  - Card level was "n/a" every set (card not found at this framing, as above).
+
 ## 6. Pool-day run sheet
 
 Before leaving:
@@ -103,21 +141,37 @@ post-process (§7).
 For every saved raw frame (`compression_study/pool_score.py`, new; reuses the study's methods):
 
 1. **Lossless reference** = the raw frame as saved.
-2. **Encode** at the field budgets: hydrium and wl53 at 0.4 bpp (≈ 51 kB per OpenMV frame) and
-   0.8 bpp; for the IMX708, the 1600×900 field crop at 50 kB (hydrium, wl53, and JPEG XL D2 as
-   the Pi-side option). **Today's JPEG** (M1) at the same sizes from the same raw.
+2. **Encode** at the field budgets.
+   - **OpenMV N6 / AE3** (board comparison, unchanged): hydrium and wl53 at 0.4 bpp (≈ 51 kB per
+     OpenMV frame) and 0.8 bpp. **Today's JPEG** (M1) at the same sizes from the same raw.
+   - **IMX708** (revised 2026-10-04, EM for Nick): the **Sprint28 production encoder**,
+     bm_cam_legacy #120 `rc_raw_jxl` (4 Bayer planes, sqrt curve, cjxl modular e5, sealed NR
+     container). It runs on the Mac on the saved DNG, so the bytes are the ones a camera would send
+     (Mac and Pi bytes identical, `compression_study/presets/runs/sweep_20261003T203525Z`). The
+     distance comes from the byte-target search (`compression_study/presets/byte_target.py`,
+     ≤ 3 encodes, proposal `PROPOSAL_byte_target.md`). It is run at the **1600×900 default
+     crop** at **180, 250 and 500 messages** (288 B each: ≈ 51.8 / 72 / 144 kB).
+   - **IMX708 baseline:** **today's production JPEG** (`rc_jpeg_encoder` pjpg: 1600×900 → 1000×562,
+     quality ladder 90 → 9 under the 195-message cap), made from the same exposure's camera JPEG,
+     as in the 2026-10-03 sweep.
 3. **Decode** each stream (§7a) back to raw.
 4. **Colour-correct** lossless and every decode the same way: card located on the raw, card white
    balance (Phase 8 v0.2, the look Nick chose), then the card's colour patches scored.
 5. **Report** per camera, depth and light:
    - colour benefit: corrected raw (lossless and each codec) vs today's JPEG, card ΔE00 against
-     the card's measured colours;
+     the card's measured colours. For the IMX708, the card-corrected nrjxl at 180 / 250 / 500
+     messages vs the card-corrected production pjpg (each with its own card fit, as in the sweep),
+     plus ΔE vs RAW (no fit) as the compression-only number;
+   - IMX708 per budget: distance, bytes, messages, card-area and texture SSIM vs RAW, tag
+     acutance (the 2026-10-03 grid's columns);
    - codec cost: each codec's corrected colour vs the corrected lossless frame (stress ΔE00, block
      ΔE00, AprilTag-region SSIM);
    - card found on every decode (all four tags) where it is found on the lossless frame;
    - bytes per frame.
 6. **Slider pages** (`before-after-report` skill): today's JPEG → corrected raw, and lossless →
-   hydrium → wl53, at the whole frame, the card and an AprilTag at 1:1.
+   hydrium → wl53, at the whole frame, the card and an AprilTag at 1:1. For the IMX708: RAW vs
+   nrjxl at 180 / 250 / 500 messages (whole crop + card + texture), and today's pjpg vs
+   corrected nrjxl.
 
 ### 7a. Decoding checks (the files must be usable with only the bytes)
 
@@ -152,6 +206,17 @@ faster).
 sealed housing (time, heap, temperature, 50 frames) with the existing probe, before field use.
 
 ## 9. Open items
+
+**Needs Nick (as of 2026-10-05):**
+- **Depth sensor:** model, interface (I2C?), pressure port through the housing, accuracy.
+  `sensors/depth.py` takes a driver once he picks one.
+- **Housing:** port type (flat or dome), mounting of the 3 cameras + Pi + hub + sensor, seal.
+  The sealed thermal check (§6 in-air rehearsal) needs it: the bench was 52 °C in open air.
+- **Card at ~0.5 m and glare:** move the card to the pool distance and away from the window or
+  plastic-wrap glare, then re-run `meter`. The card cannot be metered at today's 1.5 m bench
+  framing.
+- **Pool date, site and light plan** (sun / cloud, the dusk set), and who is in the water.
+
 
 - **Depth sensor:** model, interface and mounting (pressure port through the housing), and its
   accuracy; plus a tape check at one depth.

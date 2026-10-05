@@ -141,6 +141,14 @@ class ExperimentRecord:
     analyses: list[DetectionResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # Pool spec §5.1-5.2: the exposure lock the run used (``capture.exposure_lock``) and
+    # environment sensor readings (``sensors.depth``: depth_start / depth_end). Empty when
+    # unused, so older records read the same.
+    exposure_lock: dict[str, Any] = field(default_factory=dict)
+    sensors: dict[str, Any] = field(default_factory=dict)
+    # Exposure sweep (pool tool, Nick 2026-10-05): per camera the shutter ladder, every frame's
+    # scores and the best-frame pick with its reason. Empty unless the sweep is switched on.
+    exposure_sweeps: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

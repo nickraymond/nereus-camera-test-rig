@@ -1,0 +1,46 @@
+{
+ "created_utc": "2026-10-05T00:49:54Z",
+ "card": "/home/pi/nereus-rig-pool/configs/cards/nereus_v1.yaml",
+ "target": 0.8,
+ "folder": "results/pool/lock_bench_20261005T004953Z",
+ "cameras": {
+  "imx708": {
+   "locked": false,
+   "exit_code": 1,
+   "stdout_tail": [
+    "-- rpicam-still -n -t 2000 --width 4608 --height 2592 --mode 4608:2592 -o results/pool/lock_bench_20261005T004953Z/imx708/meter.jpg --metadata results/pool/lock_bench_20261005T004953Z/imx708/meter.json --metadata-format json",
+    "-- rpicam-still -n -t 1000 --width 4608 --height 2592 --mode 4608:2592 -o results/pool/lock_bench_20261005T004953Z/imx708/probe.jpg --metadata results/pool/lock_bench_20261005T004953Z/imx708/probe.json --metadata-format json --raw --shutter 554833 --gain 1.0000 --awb custom --awbgains 2.3735,1.7702 --autofocus-mode manual --lens-position 0.6914",
+    "FAIL: card metering on probe.dng: card not found: 0 of 4 card tags found (need 3)  (results/pool/lock_bench_20261005T004953Z/imx708)"
+   ],
+   "summary": "imx708/capture_raw.json",
+   "passed": false,
+   "card_level": null,
+   "reason": "card metering on probe.dng: card not found: 0 of 4 card tags found (need 3)",
+   "seconds": 14.1
+  },
+  "openmv_n6": {
+   "locked": false,
+   "exit_code": 2,
+   "stdout_tail": [
+    "FAIL: card not found: 2 of 4 card tags found (need 3)  (results/pool/lock_bench_20261005T004953Z/openmv_n6/20261005T005009Z_n6)"
+   ],
+   "summary": "openmv_n6/20261005T005009Z_n6/capture_raw.json",
+   "passed": false,
+   "card_level": null,
+   "reason": "card not found: 2 of 4 card tags found (need 3)",
+   "seconds": 18.1
+  },
+  "openmv_ae3": {
+   "locked": false,
+   "exit_code": 2,
+   "stdout_tail": [
+    "FAIL: card not found: 2 of 4 card tags found (need 3)  (results/pool/lock_bench_20261005T004953Z/openmv_ae3/20261005T005028Z_ae3)"
+   ],
+   "summary": "openmv_ae3/20261005T005028Z_ae3/capture_raw.json",
+   "passed": false,
+   "card_level": null,
+   "reason": "card not found: 2 of 4 card tags found (need 3)",
+   "seconds": 20.5
+  }
+ }
+}

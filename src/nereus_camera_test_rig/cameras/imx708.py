@@ -152,6 +152,17 @@ class Imx708Camera(CameraDevice):
     def capture_image(self, destination: str, request: CaptureRequest) -> CaptureResult:
         return self._still(Path(destination), request, raw=False)
 
+    # Exposure sweep (pool, Nick 2026-10-05): settings that lock the shutter at ``shutter_us``
+    # and the analogue gain at the floor. Asking 1.0 applies 1.1228: the sensor's lowest gain
+    # code is 112 and gain = 1024 / (1024 - code) (v4l2 analogue_gain min=112, nereus002).
+    GAIN_FLOOR = 1.0
+
+    def locked_exposure_settings(self, shutter_us: int, gain: Optional[float] = None
+                                 ) -> dict[str, Any]:
+        return {"camera_controls": {"exposure": {
+            "shutter_us": int(shutter_us),
+            "analogue_gain": float(self.GAIN_FLOOR if gain is None else gain)}}}
+
     def capture_raw(self, destination: str, request: CaptureRequest) -> CaptureResult:
         """RAW (DNG) + JPEG from one exposure: ``rpicam-still --raw`` writes the DNG next to the
         JPEG; ``--mode W:H`` makes it full resolution (without it the DNG is the 2304x1296

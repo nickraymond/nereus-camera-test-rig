@@ -36,8 +36,10 @@ from ..models import (
     DetectionResult,
     ExperimentRecord,
 )
+from ..sensors.depth import safe_read
 from ..storage.experiment_store import ExperimentPaths, ExperimentStore
 from ..storage.metadata import write_capture_metadata
+from .exposure_lock import merge_settings, overrides_from_lock
 
 # Fixed capture order (Spec §11): the Pi camera first, then the two USB boards. Any
 # camera present in config but not named here is captured last, in config order.
@@ -74,6 +76,8 @@ class CameraOutcome:
     analysis: Optional[DetectionResult] = None
     analysis_dir: Optional[str] = None
     raw_result: Optional[CaptureResult] = None  # Phase 8 S3, when raw capture is on
+    # Exposure sweep (pool tool): (shutter_us, result) per frame, when the sweep is on
+    sweep: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -170,6 +174,96 @@ def _capture_raw(name: str, device, profile: dict[str, Any], cap_dir: Path,
     return capture_raw(str(dest), request)
 
 
+DEFAULT_SWEEP_SHUTTERS_US = (4000, 8000, 16667, 33333, 66667)  # 1/250 … 1/15 s
+
+
+def sweep_settings(profile: dict[str, Any], override: Optional[dict[str, Any]],
+                   camera: Optional[str] = None) -> Optional[dict[str, Any]]:
+    """The exposure-sweep config for one camera, or None when it is off (the default).
+    ``override`` (from the CLI) wins over the profile's ``exposure_sweep`` block; its ``roi``
+    may be one box for every camera or ``{camera: box}`` (ROIs are in each camera's own px)."""
+    cfg = {**(profile.get("exposure_sweep") or {}), **(override or {})}
+    for key in ("roi", "shutters_us"):  # one value for every camera, or {camera: value}
+        if isinstance(cfg.get(key), dict):
+            cfg[key] = cfg[key].get(camera, cfg[key].get("_default"))
+    if not cfg.get("enabled"):
+        return None
+    shutters = [int(v) for v in (cfg.get("shutters_us") or DEFAULT_SWEEP_SHUTTERS_US)]
+    roi = cfg.get("roi")
+    return {"shutters_us": shutters, "repeats": max(int(cfg.get("repeats", 1)), 1),
+            "gain": cfg.get("gain", "floor"),
+            "tolerance": float(cfg.get("tolerance", 0.10)), "card": cfg.get("card"),
+            "roi": [int(v) for v in roi] if roi else None}
+
+
+def _capture_sweep(name: str, device, profile: dict[str, Any], cap_dir: Path, when: datetime,
+                   sweep: dict[str, Any], still: Optional[CaptureResult] = None) -> list:
+    """N RAW frames at the shutter ladder, gain locked at the camera's floor, back to back
+    (each with the profile's reset first where it asks for one). Never raises."""
+    lock = getattr(device, "locked_exposure_settings", None)
+    capture_raw = getattr(device, "capture_raw", None)
+    frames = []
+    ladder = [sh for sh in sweep["shutters_us"] for _ in range(sweep.get("repeats", 1))]
+    for i, shutter in enumerate(ladder):
+        if not callable(lock) or not callable(capture_raw):
+            frames.append((shutter, CaptureResult(
+                camera=_identity(device), request=CaptureRequest(kind="image"), status="failed",
+                error={"code": "not_supported",
+                       "message": f"{type(device).__name__} cannot lock exposure for a sweep"})))
+            continue
+        settings = merge_settings(profile, lock(shutter))
+        # Focus fixed for the whole sweep: a camera that reports a lens position on its still
+        # (the IMX708's autofocus) is locked there, so frames differ only in shutter time.
+        lens = ((still.sensor_metadata or {}) if still is not None else {}).get("LensPosition")
+        if lens is not None:
+            settings = merge_settings(settings, {"camera_controls": {"focus": {
+                "mode": "manual", "lens_position": float(lens)}}})
+        _reset_if_asked(name, device, settings, f"sweep frame {i}")
+        ext = getattr(device, "raw_extension", "raw")
+        dest = cap_dir / naming.capture_filename(name, f"raw_sweep{i:02d}", ext, when)
+        logger.info("camera %s: sweep frame %d at %d us -> %s", name, i, shutter, dest.name)
+        try:
+            res = capture_raw(str(dest), CaptureRequest(kind="image", settings=settings))
+        except Exception as exc:
+            logger.exception("camera %s: adapter raised during sweep frame %d", name, i)
+            res = CaptureResult(camera=_identity(device), request=CaptureRequest(kind="image"),
+                                status="failed", error={"code": "adapter_exception",
+                                                        "message": repr(exc)})
+        frames.append((shutter, res))
+    return frames
+
+
+def _score_sweeps(record: ExperimentRecord, outcomes: list, sweeps: dict[str, dict]) -> None:
+    """Score each camera's sweep on its RAWs and pick a frame (color.exposure_sweep). Best
+    effort: a scoring failure is a warning, the frames are kept either way."""
+    for o in outcomes:
+        if not o.sweep:
+            continue
+        sweep = sweeps[o.camera_name]
+        entry: dict[str, Any] = {
+            "shutters_us": sweep["shutters_us"], "repeats": sweep.get("repeats", 1),
+            "gain": sweep["gain"],
+            "captures": [{"shutter_us": sh, "status": r.status, "file": Path(r.output_path).name
+                        if r.output_path else None, "error": r.error,
+                        "readback": {k: (r.sensor_metadata or {}).get(k) for k in
+                                     ("ExposureTime", "AnalogueGain", "DigitalGain",
+                                      "exposure_us", "gain_db")}} for sh, r in o.sweep]}
+        ok = [(sh, r) for sh, r in o.sweep if r.ok and r.output_path]
+        try:
+            from ..color.exposure_sweep import DEFAULT_CARD, score_sweep
+            scored = score_sweep([Path(r.output_path) for _, r in ok], [sh for sh, _ in ok],
+                                 Path(sweep["card"]) if sweep.get("card") else DEFAULT_CARD,
+                                 sweep["tolerance"], sweep.get("roi"))
+            entry.update(scored)
+            p = scored["pick"]
+            logger.info("camera %s: sweep pick %s us — %s", o.camera_name, p["shutter_us"],
+                        p["reason"])
+        except Exception as exc:  # scoring must never cost the frames
+            logger.exception("camera %s: sweep scoring failed", o.camera_name)
+            record.warnings.append(f"{o.camera_name} sweep scoring failed: {exc!r}")
+        record.exposure_sweeps[o.camera_name] = entry
+
+
 def _identity(device) -> CameraIdentity:
     current = getattr(device, "_current_identity", None)
     return current() if callable(current) else CameraIdentity(
@@ -183,12 +277,17 @@ def _capture_one_camera(
     analyzer,
     when: datetime,
     raw: Optional[bool] = None,
+    settings_override: Optional[dict[str, Any]] = None,
+    sweep: Optional[dict[str, Any]] = None,
 ) -> CameraOutcome:
-    """Capture + (best-effort) analyze one camera. Never raises (Spec §11)."""
+    """Capture + (best-effort) analyze one camera. Never raises (Spec §11).
+
+    ``settings_override`` (pool spec §5.2, from an exposure lock) is deep-merged into the
+    camera profile, so the still and the RAW both use it."""
     cap_dir = paths.capture_dir(name)
 
     try:
-        profile = load_camera_profile(camera_cfg)
+        profile = merge_settings(load_camera_profile(camera_cfg), settings_override)
         device = build_camera(camera_cfg, profile=profile)
     except Exception as exc:  # unknown driver / bad config — record and keep going
         logger.error("camera %s: could not build adapter: %s", name, exc)
@@ -217,6 +316,7 @@ def _capture_one_camera(
 
     logger.info("camera %s: capturing -> %s", name, dest)
     raw_result = None
+    sweep_frames: list = []
     want_raw = profile.get("raw", False) if raw is None else raw
     try:
         # Adapters return failed results rather than raise; this guard keeps one that does
@@ -226,7 +326,9 @@ def _capture_one_camera(
         except Exception as exc:
             logger.exception("camera %s: adapter raised during capture", name)
             result = _synth_failed_result(name, camera_cfg, "adapter_exception", repr(exc))
-        if want_raw:
+        if want_raw and sweep:
+            sweep_frames = _capture_sweep(name, device, profile, cap_dir, when, sweep, result)
+        elif want_raw:
             try:
                 raw_result = _capture_raw(name, device, profile, cap_dir, when)
             except Exception as exc:
@@ -247,7 +349,10 @@ def _capture_one_camera(
         image_path=result.output_path,
         metadata_path=str(meta_path),
         raw_result=raw_result,
+        sweep=sweep_frames,
     )
+    for i, (_, r) in enumerate(sweep_frames):
+        write_capture_metadata(cap_dir / f"raw_sweep{i:02d}.json", r)
     if raw_result is not None:
         write_capture_metadata(cap_dir / "raw_capture.json", raw_result)
         if raw_result.ok:
@@ -293,6 +398,9 @@ def run_experiment(
     analysis: bool = True,
     when: Optional[datetime] = None,
     raw: Optional[bool] = None,
+    exposure_lock: Optional[dict[str, Any]] = None,
+    depth_sensor=None,
+    exposure_sweep: Optional[dict[str, Any]] = None,
 ) -> ExperimentOutcome:
     """Run one sequential capture set across all connected cameras (Spec §11, §13).
 
@@ -303,6 +411,14 @@ def run_experiment(
     ``raw``: take a RAW after each still (Phase 8 S3); ``None`` = each camera profile's
     ``raw`` flag (default off, so the Phase 5 path is unchanged). A failed RAW is recorded in
     ``raw_captures`` + ``errors`` but does not fail the camera's still.
+
+    ``exposure_lock`` (pool spec §5.2, ``capture.exposure_lock``): each locked camera's settings
+    are merged into its profile; the lock is copied into ``experiment.json``. ``depth_sensor``
+    (``sensors.depth``, §5.1): read at the start and end of the set into ``record.sensors``.
+    ``exposure_sweep`` (pool tool, off by default; ``{"enabled": True, "shutters_us": [...]}``
+    or a camera profile's ``exposure_sweep`` block): with ``raw``, each camera takes N RAWs at
+    a shutter ladder with gain at its floor instead of the single RAW; every frame is kept,
+    scored, and one is picked (``record.exposure_sweeps``).
     """
     when = when or datetime.now(timezone.utc)
     if results_root is None:
@@ -339,9 +455,30 @@ def run_experiment(
         paths.experiment_id, environment_label, ordered, analyzer is not None,
     )
 
+    overrides: dict[str, Any] = {}
+    if exposure_lock:
+        overrides = overrides_from_lock(exposure_lock)
+        record.exposure_lock = exposure_lock
+        unlocked = [n for n in ordered if n not in overrides]
+        logger.info("exposure lock %s: locked %s", exposure_lock.get("folder"), sorted(overrides))
+        if unlocked:
+            record.warnings.append(f"exposure lock: not locked (auto exposure): {unlocked}")
+    if depth_sensor is not None:
+        record.sensors["depth_info"] = depth_sensor.info()
+        record.sensors["depth_start"] = safe_read(depth_sensor)
+
     outcomes: list[CameraOutcome] = []
+    sweeps: dict[str, dict] = {}
     for name in ordered:
-        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw)
+        try:
+            prof = load_camera_profile(cameras_cfg[name])
+        except Exception:  # _capture_one_camera records the init failure
+            prof = {}
+        sweep = sweep_settings(prof, exposure_sweep, name)
+        if sweep:
+            sweeps[name] = sweep
+        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw,
+                                      overrides.get(name), sweep)
         outcomes.append(outcome)
         record.cameras.append(outcome.result.camera)
         record.captures.append(outcome.result)
@@ -350,11 +487,21 @@ def run_experiment(
         if not outcome.ok:
             err = outcome.result.error or {}
             record.errors.append(f"{name}: {err.get('code')}: {err.get('message')}")
+        for _, r in outcome.sweep:
+            record.raw_captures.append(r)
+            if not r.ok:
+                err = r.error or {}
+                record.errors.append(f"{name} sweep: {err.get('code')}: {err.get('message')}")
         if outcome.raw_result is not None:
             record.raw_captures.append(outcome.raw_result)
             if not outcome.raw_result.ok:
                 err = outcome.raw_result.error or {}
                 record.errors.append(f"{name} raw: {err.get('code')}: {err.get('message')}")
+
+    if depth_sensor is not None:
+        record.sensors["depth_end"] = safe_read(depth_sensor)
+    if sweeps:
+        _score_sweeps(record, outcomes, sweeps)
 
     store.write_record(paths, record)
 

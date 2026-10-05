@@ -1,8 +1,9 @@
 """Command-line entry point — Spec §9, §15.
 
 Subcommands: ``info`` (config summary), ``capture`` (single still/video from one
-camera, Phase 1), and ``experiment`` (sequential multi-camera capture set into one
-Spec §13 experiment folder, Phase 5). Each returns a nonzero exit only on real
+camera, Phase 1), ``experiment`` (sequential multi-camera capture set into one
+Spec §13 experiment folder, Phase 5) and ``meter`` (card-metered exposure lock for
+``experiment --exposure-lock``, pool spec §5.2). Each returns a nonzero exit only on real
 failure (CLAUDE.md §17) — never a false success.
 """
 
@@ -49,7 +50,44 @@ def build_parser() -> argparse.ArgumentParser:
     p_experiment.add_argument(
         "--raw", action="store_true",
         help="also take a RAW after each still (Phase 8 S3; overrides the profiles' raw flag)")
+    p_experiment.add_argument(
+        "--exposure-lock", default=None,
+        help="exposure_lock.json from `nereus-rig meter`: lock each metered camera (pool §5.2)")
+    p_experiment.add_argument(
+        "--depth", default="none",
+        help="depth sensor read at set start/end: none | fake | fake:<metres> (pool §5.1)")
+    p_experiment.add_argument(
+        "--exposure-sweep", action="store_true",
+        help="with --raw: N RAWs per camera at a shutter ladder, gain at the floor, best frame "
+             "picked (pool tool; off by default)")
+    p_experiment.add_argument(
+        "--sweep-shutters-us", action="append", default=None,
+        help="[camera=]comma-separated shutter ladder in us (default 4000,8000,16667,33333,"
+             "66667); repeatable per camera, e.g. openmv_ae3=250,500,1000,2000,4000")
+    p_experiment.add_argument(
+        "--sweep-repeats", type=int, default=None,
+        help="frames per shutter step (default 1); repeats expose LED flicker")
+    p_experiment.add_argument(
+        "--sweep-roi", action="append", default=None,
+        help="[camera=]x,y,w,h in that camera's px, scored when the card is not found (default: "
+             "frame centre); keeps light sources out, e.g. imx708=1504,846,1600,900; repeatable")
+    p_experiment.add_argument(
+        "--sweep-tolerance", type=float, default=None,
+        help="pick the longest shutter within this fraction of the sharpest frame (default 0.10)")
     p_experiment.set_defaults(func=_cmd_experiment)
+
+    p_meter = sub.add_parser(
+        "meter", help="card-meter every camera once and write an exposure lock (pool §5.2)")
+    p_meter.add_argument("--out", required=True, help="new folder for the metering shots + lock")
+    p_meter.add_argument("--card", default=None, help="card YAML (default: the V1 rig card)")
+    p_meter.add_argument("--target", type=float, default=0.80,
+                         help="brightest card channel as a fraction of full scale")
+    p_meter.add_argument("--cameras", default=None,
+                         help="comma-separated camera subset (default: all enabled)")
+    p_meter.add_argument("--max-shutter-us", type=int, default=16667,
+                         help="gain priority: lowest gain, shutter up to this cap (default 1/60 s),"
+                              " then gain; 0 = no cap")
+    p_meter.set_defaults(func=_cmd_meter)
 
     return parser
 
@@ -104,6 +142,20 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
         return 2
 
     subset = [c.strip() for c in args.cameras.split(",") if c.strip()] if args.cameras else None
+    lock = None
+    if args.exposure_lock:
+        from .capture.exposure_lock import load_lock
+        try:
+            lock = load_lock(args.exposure_lock)
+        except (OSError, ValueError) as exc:
+            print(f"[nereus-rig] exposure lock error: {exc}", file=sys.stderr)
+            return 2
+    from .sensors.depth import build_depth_sensor
+    try:
+        depth = build_depth_sensor(args.depth)
+    except ValueError as exc:
+        print(f"[nereus-rig] {exc}", file=sys.stderr)
+        return 2
     outcome = run_experiment(
         cfg,
         args.type,
@@ -112,6 +164,9 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
         camera_names=subset,
         analysis=not args.no_analysis,
         raw=True if args.raw else None,
+        exposure_lock=lock,
+        depth_sensor=depth,
+        exposure_sweep=_sweep_arg(args),
     )
 
     print(f"[nereus-rig] experiment {outcome.record.experiment_id}")
@@ -124,6 +179,11 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
             if c.analysis is not None:
                 note = f" · analysis={c.analysis.status} tags={c.analysis.tags_detected}"
             print(f"  [ok]   {c.camera_name}: {dims}{r.size_bytes} bytes{note}")
+            if c.sweep:
+                done = sum(1 for _, r in c.sweep if r.ok)
+                pick = (outcome.record.exposure_sweeps.get(c.camera_name) or {}).get("pick") or {}
+                print(f"         sweep: {done}/{len(c.sweep)} RAWs, pick "
+                      f"{pick.get('shutter_us')} us — {pick.get('reason', 'not scored')}")
             if c.raw_result is not None:
                 rr = c.raw_result
                 print(f"         raw: {rr.image_format} {rr.size_bytes} bytes" if rr.ok else
@@ -137,6 +197,66 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
     # Exit 0 only when every included camera captured. Analysis finding no card does
     # NOT fail the run (expected during mechanical bring-up).
     return 0 if outcome.status == "completed" else 1
+
+
+def _sweep_arg(args: argparse.Namespace):
+    """CLI → the coordinator's exposure_sweep override (None = profiles decide; off by default)."""
+    if not args.exposure_sweep:
+        return None
+    out: dict = {"enabled": True}
+    if args.sweep_shutters_us:
+        lad: dict = {}
+        for item in args.sweep_shutters_us:
+            cam, _, vals = item.rpartition("=")
+            lad[cam or "*"] = [int(v) for v in vals.split(",") if v.strip()]
+        out["shutters_us"] = lad["*"] if list(lad) == ["*"] else {
+            k: v for k, v in lad.items() if k != "*"}
+        if "*" in lad and len(lad) > 1:
+            out["shutters_us"]["_default"] = lad["*"]
+    if args.sweep_repeats:
+        out["repeats"] = args.sweep_repeats
+    if args.sweep_tolerance is not None:
+        out["tolerance"] = args.sweep_tolerance
+    if args.sweep_roi:
+        rois: dict = {}
+        for item in args.sweep_roi:
+            cam, _, box = item.rpartition("=")
+            rois[cam or "*"] = [int(v) for v in box.split(",")]
+        out["roi"] = rois["*"] if list(rois) == ["*"] else {k: v for k, v in rois.items()
+                                                             if k != "*"}
+    return out
+
+
+def _cmd_meter(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from . import config as config_mod
+    from .capture.exposure_lock import DEFAULT_CARD, meter_cameras
+
+    try:
+        cfg = config_mod.load_rig_config(args.config)
+    except config_mod.ConfigError as exc:
+        print(f"[nereus-rig] config error: {exc}", file=sys.stderr)
+        return 2
+    cams = config_mod.enabled_cameras(cfg)
+    if args.cameras:
+        want = [c.strip() for c in args.cameras.split(",") if c.strip()]
+        missing = [c for c in want if c not in cams]
+        if missing:
+            print(f"[nereus-rig] unknown/disabled cameras: {missing}", file=sys.stderr)
+            return 2
+        cams = {c: cams[c] for c in want}
+    try:
+        lock = meter_cameras(cams, Path(args.out), card=Path(args.card) if args.card else
+                             DEFAULT_CARD, target=args.target,
+                             max_shutter_us=args.max_shutter_us)
+    except FileExistsError:
+        print(f"[nereus-rig] {args.out} exists: metering never overwrites", file=sys.stderr)
+        return 2
+    locked = [n for n, e in lock["cameras"].items() if e["locked"]]
+    print(f"[nereus-rig] exposure lock: {Path(args.out) / 'exposure_lock.json'}")
+    print(f"             locked {len(locked)}/{len(lock['cameras'])}: {locked}")
+    return 0 if len(locked) == len(lock["cameras"]) else 1
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
