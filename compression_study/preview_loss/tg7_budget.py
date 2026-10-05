@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
