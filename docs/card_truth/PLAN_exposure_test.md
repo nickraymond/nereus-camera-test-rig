@@ -1,6 +1,14 @@
-# PLAN, not approved: auto exposure vs gain pinned at 1.12, both cards in frame, dimmed LEDs
+# PLAN (run 2026-10-06 on Nick's GO): auto exposure vs gain pinned at 1.12, both cards in frame
 
-Draft, 2026-10-06. **Do not run until the EM relays Nick's GO.** It changes no rig config: it
+**Run 2026-10-06 ~21:50Z on Nick's GO.** Results: `docs/card_truth/exposure_test_20261006/score.json` and sheet https://claude.ai/artifact/ArVgXEqcE53NcSwNAWe8ND.
+
+Deviations from the draft:
+- LEDs off (ambient light, Lux 85–88).
+- Arms interleaved over 3 rounds.
+- Photon-starved arms added (14.5 / 29 / 58 ms).
+- Direct `rpicam-still` calls with focus locked at 1.094 dpt, instead of the sweep tool.
+
+The draft follows. It changes no rig config: it
 uses the existing exposure-sweep tool from PR #91, deployed to a side folder on nereus002.
 
 ## Question
