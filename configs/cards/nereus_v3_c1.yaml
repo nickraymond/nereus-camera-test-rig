@@ -80,3 +80,43 @@ patches:                           # box: [x, y, w, h] in canonical px (= card m
   - {id: cyan, group: color, label: cyan, box: [1515, 1850, 545, 810], truth: [0, 165, 205]}
   - {id: blue, group: color, label: blue, box: [2140, 1850, 545, 810], truth: [30, 80, 170]}
   - {id: magenta, group: color, label: magenta, box: [2765, 1850, 545, 810], truth: [195, 45, 135]}
+
+measured:
+  source: measured_imx708_colorchecker_classic_24_2026-10-08_dry
+  method: IMX708 RAW (locked exposure, lowest gain), flat-fielded, camera RGB -> XYZ D50 fitted on colorchecker_classic_24 (rootpoly2), Bradford D50 -> D65, sRGB; median over frames
+  condition: dry
+  date_utc: '2026-10-08T19:42:51Z'
+  chart: {config: configs/charts/colorchecker_classic_24.yaml, reference: configs/charts/colorchecker_classic_24_post2014_lab_d50.csv, reference_sha256: 359ec2fb2dbc8cb1, illuminant: D50, observer: 2}
+  light: {description: '2 LEDs 5300 K full brightness + daylight through closed blinds/door glass; paper flat-field (3 frames per camera) taken minutes before, same light'}
+  frames: [stop_+0_r0.dng, stop_+0_r1.dng, stop_+0_r2.dng]
+  flat_frames: [stop_+0_r0.dng, stop_+0_r1.dng, stop_+0_r2.dng]
+  flat_spread_pct_p95_p5: 69.5
+  fit: {model: rootpoly2, chart_patches: 24, held_out_de2000_median: 1.24, p90: 2.15, max: 3.4}
+  out_of_srgb: []   # clipped to 0 in values; lab exact
+  over_range: []   # capped at 300: check light, exposure
+  values:                # sRGB 8-bit scale (D65); what card.py reads as the truth
+    gray_black: [86.3, 88.2, 88.1]
+    gray_light: [196.3, 196.7, 195.7]
+    gray_light2: [169.4, 168.7, 169.5]
+    gray_mid: [140.4, 142.7, 143.6]
+    red: [198.1, 90.0, 90.1]
+    red_orange: [227.7, 111.2, 85.5]
+    orange: [234.3, 151.4, 85.7]
+    yellow: [237.6, 198.1, 90.3]
+    green: [109.6, 158.7, 118.5]
+    cyan: [87.1, 169.8, 204.2]
+    blue: [76.8, 103.8, 167.0]
+    magenta: [189.6, 79.4, 137.7]
+  lab_d50:
+    gray_black: [37.31, -0.80, -0.21]
+    gray_light: [79.36, -0.27, 0.45]
+    gray_light2: [69.20, 0.37, -0.36]
+    gray_mid: [59.10, -0.73, -0.80]
+    red: [52.43, 44.06, 22.08]
+    red_orange: [60.96, 44.80, 36.45]
+    orange: [70.34, 27.62, 47.39]
+    yellow: [81.89, 5.79, 57.99]
+    green: [61.04, -23.54, 15.59]
+    cyan: [65.38, -18.64, -25.77]
+    blue: [44.05, 4.33, -37.68]
+    magenta: [50.20, 49.62, -9.58]
