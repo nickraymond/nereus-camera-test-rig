@@ -174,7 +174,12 @@ def flat_of(paths) -> np.ndarray | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=Path, required=True)
-    ap.add_argument("--stills", type=Path, required=True)
+    ap.add_argument(
+        "--stills",
+        type=Path,
+        default=None,
+        help="normal-settings stills experiment (Part B); omit for the truth only",
+    )
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--flat", action="store_true", help="divide by <root>/<cam>/flat frames")
     ap.add_argument(
@@ -384,73 +389,77 @@ def main() -> int:
                 "red_snr_db": snr,
                 "level_gray_light": round(float(med(v3["gray_light"]).max()), 3),
             }
-        # Part B: the camera's own processed still (normal settings), via its RAW geometry
-        sd = a.stills / "captures" / still_dir
-        jpg = next(p for p in sd.iterdir() if p.name.endswith(".jpg") and "image" in p.name)
-        raw_n = next(p for p in sd.iterdir() if p.suffix in (".dng", ".bayer"))
-        img = cv2.imread(str(jpg))[..., ::-1].astype(np.float64)
-        fr_n = read(raw_n)
-        Hn, _ = locate(fr_n, card)
-        sj = img.shape[1] / fr_n.active()[0].shape[1]
-        Sx = np.diag([sj, sj, 1.0])
-        jv = [
-            p
-            for p in chart.patches
-            if inside(Hn, cc_boxes[p.id], fr_n.active()[0].shape[1], fr_n.active()[0].shape[0])
-        ]
-        jm = {p.label: np.asarray(sample(img, Sx @ Hn, cc_boxes[p.id])["mean"]) for p in jv}
-        lab_j = {k: srgb8_to_lab50(v) for k, v in jm.items()}
-        greys = [k for k in ("neutral_8", "neutral_65", "neutral_5", "neutral_35") if k in lab_j]
-        # one lightness offset on the mid greys (exposure), no colour change
-        dl = np.mean([ref[k]["lab"][0] - lab_j[k][0] for k in greys]) if greys else 0.0
-        de_j = {
-            k: round(float(delta_e2000(lab_j[k] + [dl, 0, 0], np.array(ref[k]["lab"]))), 2)
-            for k in lab_j
-        }
-        lin_n, sat_n, cfa_n = normalize(fr_n)
-        bn, cn = bin2x2(lin_n, cfa_n, sat_n)
-        Hbn = mosaic_to_binned(fr_n.valid_crop) @ Hn
-        clip_raw_normal = sorted(
-            {
-                p.id
-                for p in list(card.patches) + jv
-                if max(
-                    sample(bn, Hbn, cc_boxes[p.id] if p.id in cc_boxes else p.box, clip=cn).get(
-                        "clip_frac"
-                    )
-                    or [0]
-                )
-                > 0.001
+        if a.stills is not None:
+            # Part B: the camera's own processed still (normal settings), via its RAW geometry
+            sd = a.stills / "captures" / still_dir
+            jpg = next(p for p in sd.iterdir() if p.name.endswith(".jpg") and "image" in p.name)
+            raw_n = next(p for p in sd.iterdir() if p.suffix in (".dng", ".bayer"))
+            img = cv2.imread(str(jpg))[..., ::-1].astype(np.float64)
+            fr_n = read(raw_n)
+            Hn, _ = locate(fr_n, card)
+            sj = img.shape[1] / fr_n.active()[0].shape[1]
+            Sx = np.diag([sj, sj, 1.0])
+            jv = [
+                p
+                for p in chart.patches
+                if inside(Hn, cc_boxes[p.id], fr_n.active()[0].shape[1], fr_n.active()[0].shape[0])
+            ]
+            jm = {p.label: np.asarray(sample(img, Sx @ Hn, cc_boxes[p.id])["mean"]) for p in jv}
+            lab_j = {k: srgb8_to_lab50(v) for k, v in jm.items()}
+            greys = [
+                k for k in ("neutral_8", "neutral_65", "neutral_5", "neutral_35") if k in lab_j
+            ]
+            # one lightness offset on the mid greys (exposure), no colour change
+            dl = np.mean([ref[k]["lab"][0] - lab_j[k][0] for k in greys]) if greys else 0.0
+            de_j = {
+                k: round(float(delta_e2000(lab_j[k] + [dl, 0, 0], np.array(ref[k]["lab"]))), 2)
+                for k in lab_j
             }
-        )
-        clip_jpg = sorted(k for k, v in jm.items() if v.max() >= 254)
-        r["processed"] = {
-            "jpeg": jpg.name,
-            "patches": len(jm),
-            "de2000_median": round(float(np.median(list(de_j.values()))), 2),
-            "de2000_colours": round(
-                float(
-                    np.median(
-                        [
-                            v
-                            for k, v in de_j.items()
-                            if "neutral" not in k and k not in ("white", "black")
-                        ]
-                        or [math.nan]
+            lin_n, sat_n, cfa_n = normalize(fr_n)
+            bn, cn = bin2x2(lin_n, cfa_n, sat_n)
+            Hbn = mosaic_to_binned(fr_n.valid_crop) @ Hn
+            clip_raw_normal = sorted(
+                {
+                    p.id
+                    for p in list(card.patches) + jv
+                    if max(
+                        sample(bn, Hbn, cc_boxes[p.id] if p.id in cc_boxes else p.box, clip=cn).get(
+                            "clip_frac"
+                        )
+                        or [0]
                     )
+                    > 0.001
+                }
+            )
+            clip_jpg = sorted(k for k, v in jm.items() if v.max() >= 254)
+            r["processed"] = {
+                "jpeg": jpg.name,
+                "patches": len(jm),
+                "de2000_median": round(float(np.median(list(de_j.values()))), 2),
+                "de2000_colours": round(
+                    float(
+                        np.median(
+                            [
+                                v
+                                for k, v in de_j.items()
+                                if "neutral" not in k and k not in ("white", "black")
+                            ]
+                            or [math.nan]
+                        )
+                    ),
+                    2,
                 ),
-                2,
-            ),
-            "grey_ab": {k: lab_j[k][1:].round(1).tolist() for k in greys},
-            "per_patch": de_j,
-            "clipped_jpeg": clip_jpg,
-            "clipped_raw_normal": clip_raw_normal,
-            "exposure_normal": json.loads((sd / "capture.json").read_text()).get(
-                "sensor_metadata", {}
-            ),
-        }
+                "grey_ab": {k: lab_j[k][1:].round(1).tolist() for k in greys},
+                "per_patch": de_j,
+                "clipped_jpeg": clip_jpg,
+                "clipped_raw_normal": clip_raw_normal,
+                "exposure_normal": json.loads((sd / "capture.json").read_text()).get(
+                    "sensor_metadata", {}
+                ),
+            }
         out["cams"][cam] = r
         s0 = r["stops"]["stop_+0"]
+        pr = r.get("processed", {})
         print(
             cam,
             r["cc_coverage"],
@@ -461,11 +470,9 @@ def main() -> int:
             "SNR",
             s0["red_snr_db"],
             "| processed dE",
-            r["processed"]["de2000_median"],
-            "clip jpg",
-            clip_jpg,
+            pr.get("de2000_median"),
             "clip raw normal",
-            clip_raw_normal,
+            pr.get("clipped_raw_normal"),
         )
     # cross-check: N6 / AE3 V3 Lab vs the IMX708's
     ref_lab = out["cams"]["imx708"]["stops"]["stop_+0"]["v3_lab"]
