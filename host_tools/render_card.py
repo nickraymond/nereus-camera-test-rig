@@ -97,7 +97,8 @@ def front(card: Card, spec: dict) -> Side:
     dark, light = tuple(lay["tag_dark_rgb"]), tuple(lay["tag_light_rgb"])
     rects: list[Rect] = []
     for p in card.patches:
-        rects.append(Rect(p.box.x / px, p.box.y / px, p.box.w / px, p.box.h / px, p.truth, p.id))
+        rects.append(Rect(p.box.x / px, p.box.y / px, p.box.w / px, p.box.h / px,
+                          p.design or p.truth, p.id))  # print the DESIGN, never a measurement
     d = opencv_dictionary(card.tag_family)
     for tid, tag in sorted(card.tags.items()):
         edge = float(spec["tags"][tid]["edge_mm"])

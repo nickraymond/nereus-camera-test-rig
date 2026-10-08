@@ -16,7 +16,8 @@ Card-metered (S3/S4; needs the rig venv for the card finder):
    quick probe shot reads back the gain the camera really applies — the sensor clamps to its
    range (IMX708 on ``nereus002``: 1.0 → 1.1228, 2026-09-28) — and that gain is used. Shutter
    = metered exposure × metered gain / applied gain (the same total exposure), then × 2^stop
-   for each ``--stops``; WB fixed to the metered ColourGains, focus to the metered LensPosition.
+   for each ``--stops``; WB fixed to the metered ColourGains, focus to the metered LensPosition
+   (or to ``--lens-position`` dioptres when given).
    With ``--card``, the probe is also a RAW: the card is found on it and stop 0 is scaled so the
    card's brightest channel lands on ``--target`` (scene metering left the V1 card's white at
    0.14 of full scale in the 2026-09-28 run-through); stop 0 is then checked on the card.
@@ -109,6 +110,9 @@ def main(argv=None) -> int:
                     "(needs the rig venv: .venv/bin/python)")
     ap.add_argument("--target", type=float, default=0.80,
                     help="with --card: brightest card channel at stop 0, fraction of full scale")
+    ap.add_argument("--lens-position", type=float, default=None,
+                    help="lock focus here (dioptres = 1/m, e.g. 1.09 for 0.914 m) instead of "
+                         "the metering shot's autofocus position")
     args = ap.parse_args(argv)
     w, h = (int(v) for v in args.mode.split(":")[:2])
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -125,6 +129,8 @@ def main(argv=None) -> int:
     total_us = float(m["ExposureTime"]) * float(m["AnalogueGain"])  # exposure × gain
     red, blue = (float(v) for v in m["ColourGains"])
     lens = m.get("LensPosition")
+    if args.lens_position is not None:      # fixed focus (dioptres = 1 / metres), not the AF's
+        lens = args.lens_position
     locks = ["--awb", "custom", "--awbgains", f"{red:.4f},{blue:.4f}"]
     if lens is not None:
         locks += ["--autofocus-mode", "manual", "--lens-position", f"{float(lens):.4f}"]

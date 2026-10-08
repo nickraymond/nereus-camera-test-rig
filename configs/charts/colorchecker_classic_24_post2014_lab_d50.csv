@@ -1,0 +1,28 @@
+# ColorChecker Classic (X-Rite / Calibrite), post-November-2014 formulation. CIELAB D50, 2 deg.
+# Source: X-Rite data, babelcolor.com/index_htm_files/ColorChecker24_After_Nov2014.txt (i1Pro 2, M0).
+# Row-major as framed upright (dark skin top-left ... black bottom-right) = configs/charts/colorchecker_classic_24.yaml.
+name,L,a,b
+dark_skin,37.54,14.37,14.92
+light_skin,64.66,19.27,17.50
+blue_sky,49.32,-3.82,-22.54
+foliage,43.46,-12.74,22.72
+blue_flower,54.94,9.61,-24.79
+bluish_green,70.48,-32.26,-0.37
+orange,62.73,35.83,56.50
+purplish_blue,39.43,10.75,-45.17
+moderate_red,50.57,48.64,16.67
+purple,30.10,22.54,-20.87
+yellow_green,71.77,-24.13,58.19
+orange_yellow,71.51,18.24,67.37
+blue,28.37,15.42,-49.80
+green,54.38,-39.72,32.27
+red,42.43,51.05,28.62
+yellow,81.80,2.67,80.41
+magenta,50.63,51.28,-14.12
+cyan,49.57,-29.71,-28.32
+white,95.19,-1.03,2.93
+neutral_8,81.29,-0.57,0.44
+neutral_65,66.89,-0.75,-0.06
+neutral_5,50.76,-0.13,0.14
+neutral_35,35.63,-0.46,-0.48
+black,20.64,0.07,-0.46

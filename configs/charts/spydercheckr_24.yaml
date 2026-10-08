@@ -1,0 +1,20 @@
+# Datacolor SpyderCheckr 24 — the absolute colour reference for card truth (Nick, 2026-10-05;
+# SPEC §4 S4 decision 1, OQ-27). 24 patches, 4 rows x 6 columns as framed (upright, as in the
+# session's phone photo). The reference values are NOT stored here: they are Nick's export from
+# the Spyder software (CSV, Lab D50 / 2°), named by the session (`chart.reference`) and mapped
+# to these cells row by row by `chart.order`. Labels are cell positions only.
+
+chart_id: spydercheckr_24
+grid: {rows: 4, cols: 6}
+truth:
+  source: spyder_software_export   # per session: chart.reference
+
+patches:
+  - [{group: color, label: r1c1}, {group: color, label: r1c2}, {group: color, label: r1c3},
+     {group: color, label: r1c4}, {group: color, label: r1c5}, {group: color, label: r1c6}]
+  - [{group: color, label: r2c1}, {group: color, label: r2c2}, {group: color, label: r2c3},
+     {group: color, label: r2c4}, {group: color, label: r2c5}, {group: color, label: r2c6}]
+  - [{group: color, label: r3c1}, {group: color, label: r3c2}, {group: color, label: r3c3},
+     {group: color, label: r3c4}, {group: color, label: r3c5}, {group: color, label: r3c6}]
+  - [{group: color, label: r4c1}, {group: color, label: r4c2}, {group: color, label: r4c3},
+     {group: color, label: r4c4}, {group: color, label: r4c5}, {group: color, label: r4c6}]

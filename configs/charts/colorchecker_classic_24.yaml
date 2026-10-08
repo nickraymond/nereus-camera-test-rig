@@ -1,0 +1,21 @@
+# Calibrite (X-Rite) ColorChecker Classic, 24 patches — the absolute card-truth reference (Nick,
+# ordered 2026-10-05, arriving 2026-10-06). 4 rows x 6 columns as framed, chart upright: dark
+# skin top-left, white bottom-left, black bottom-right. Reference values: the published
+# post-November-2014 formulation, Lab D50 / 2 deg, in colorchecker_classic_24_post2014_lab_d50.csv
+# (X-Rite data as distributed by BabelColor, "ColorChecker24_After_Nov2014.txt"; the same set as
+# colour-science's "ColorChecker24 - After November 2014"). The CSV is in this row-major order.
+
+chart_id: colorchecker_classic_24
+grid: {rows: 4, cols: 6}
+truth:
+  source: xrite_post_nov2014_lab_d50   # colorchecker_classic_24_post2014_lab_d50.csv
+
+patches:
+  - [{group: color, label: dark_skin}, {group: color, label: light_skin}, {group: color, label: blue_sky},
+     {group: color, label: foliage}, {group: color, label: blue_flower}, {group: color, label: bluish_green}]
+  - [{group: color, label: orange}, {group: color, label: purplish_blue}, {group: color, label: moderate_red},
+     {group: color, label: purple}, {group: color, label: yellow_green}, {group: color, label: orange_yellow}]
+  - [{group: color, label: blue}, {group: color, label: green}, {group: color, label: red},
+     {group: color, label: yellow}, {group: color, label: magenta}, {group: color, label: cyan}]
+  - [{group: grey, label: white}, {group: grey, label: neutral_8}, {group: grey, label: neutral_65},
+     {group: grey, label: neutral_5}, {group: grey, label: neutral_35}, {group: grey, label: black}]

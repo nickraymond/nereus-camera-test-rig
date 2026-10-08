@@ -78,6 +78,9 @@ def main() -> int:
     ap.add_argument("--stops", type=float, nargs="+", default=[],
                     help="after the locked shot: a series at locked exposure x 2^stop")
     ap.add_argument("--repeat", type=int, default=1, help="frames per --stops entry")
+    ap.add_argument("--exposure-us", type=int, default=None,
+                    help="skip card metering and lock this exposure at the floor gain (e.g. "
+                         "flat-field frames, where the card is covered)")
     args = ap.parse_args()
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -89,7 +92,12 @@ def main() -> int:
     cam = OpenMvUsbCamera(serial_number=args.serial or SERIALS[args.board], board=args.board)
     try:
         settings: dict = {"warmup_ms": args.warmup_ms}
-        for n in range(MAX_METER_SHOTS):
+        meter_shots = 0 if args.exposure_us else MAX_METER_SHOTS
+        if args.exposure_us:          # fixed exposure: no card on the frame (flat-field)
+            settings = {"warmup_ms": 300, "exposure_us": int(args.exposure_us),
+                        "gain_db": MIN_GAIN_DB}
+            summary["fixed_exposure_us"] = int(args.exposure_us)
+        for n in range(meter_shots):
             side = shot(cam, out / f"meter_{n}.bayer", settings)
             ref = card_reference(card_levels(read_openmv_bayer(out / f"meter_{n}.bayer"), card))
             # Same total exposure at the floor gain, then scaled onto the target.
@@ -105,7 +113,8 @@ def main() -> int:
             if not plan["remeter"]:
                 break
         else:
-            raise RuntimeError(f"card still clipped after {MAX_METER_SHOTS} meter shots")
+            if meter_shots:
+                raise RuntimeError(f"card still clipped after {MAX_METER_SHOTS} meter shots")
 
         side = shot(cam, out / "locked.bayer", settings)
         if side["exposure_us"] < (1 - TOL_EXPOSURE) * settings["exposure_us"]:
@@ -118,7 +127,14 @@ def main() -> int:
             settings = {**settings, "exposure_us": side["exposure_us"],
                         "gain_db": round(MIN_GAIN_DB + deficit_db, 3)}
             side = shot(cam, out / "locked.bayer", settings)
-        ref = card_reference(card_levels(read_openmv_bayer(out / "locked.bayer"), card))
+        if args.exposure_us:          # no card to check: report the frame's clip fraction
+            fr = read_openmv_bayer(out / "locked.bayer")
+            clip = float((fr.active()[0] >= fr.white_level).mean())
+            import numpy as np
+            ref = {"patch": "frame", "channel": "all", "level": float(np.percentile(
+                fr.active()[0], 99.5) / fr.white_level), "clipped": clip > 0.001}
+        else:
+            ref = card_reference(card_levels(read_openmv_bayer(out / "locked.bayer"), card))
         series = []
         for stop in args.stops:
             for n in range(args.repeat):
@@ -145,7 +161,8 @@ def main() -> int:
     checks = {
         "exposure_readback": abs(side["exposure_us"] - want_us) <= TOL_EXPOSURE * want_us,
         "gain_readback": abs(side["gain_db"] - settings["gain_db"]) <= TOL_GAIN_DB,
-        "card_on_target": abs(ref["level"] / args.target - 1) <= TOL_TARGET,
+        "card_on_target": (True if args.exposure_us
+                           else abs(ref["level"] / args.target - 1) <= TOL_TARGET),
         "card_unclipped": not ref["clipped"],
     }
     if series:
