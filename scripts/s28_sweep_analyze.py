@@ -46,7 +46,7 @@ def binned(path: str):
     return fr, b, clip
 
 
-def hp_noise(b: np.ndarray, Hb: np.ndarray, box) -> float | None:
+def hp_noise(b: np.ndarray, Hb: np.ndarray, box, ch: int = 1) -> float | None:
     """Pixel noise on one grey patch: std of (green - its 5x5 local mean) / mean green, over
     the central 50 % of the patch (axis-aligned in the image; the camera faces the card).
     The local mean removes the light gradient across the patch, so this is noise, not shading."""
@@ -57,11 +57,17 @@ def hp_noise(b: np.ndarray, Hb: np.ndarray, box) -> float | None:
     (u0, v0), (u1, v1) = cv2.perspectiveTransform(c, Hb).reshape(-1, 2)
     u0, u1 = sorted((int(u0), int(u1)))
     v0, v1 = sorted((int(v0), int(v1)))
-    g = b[v0:v1, u0:u1, 1].astype(np.float32)
+    g = b[v0:v1, u0:u1, ch].astype(np.float32)
     if g.shape[0] < 12 or g.shape[1] < 12 or g.mean() <= 0:
         return None
     res = (g - cv2.blur(g, (5, 5)))[2:-2, 2:-2]
     return float(res.std() * np.sqrt(25 / 24) / g.mean())
+
+
+def red_snr_db(b: np.ndarray, Hb: np.ndarray, card) -> float | str:
+    """Red-channel SNR on the V3 red patch, single frame: 20 log10(1 / high-pass noise CV)."""
+    n = hp_noise(b, Hb, card.patch("red").box, ch=0)
+    return round(float(20 * np.log10(1 / n)), 2) if n else ""
 
 
 def tag_sharpness(b: np.ndarray, Hb: np.ndarray, card) -> float:
@@ -317,6 +323,17 @@ def analyse(
                 "cc_grey_noise_cv": round(float(np.mean(nz)), 5) if (nz and cc_ok) else "",
                 "cc_grey_row_ok": cc_ok,
                 "tag_sharpness": tag_sharpness(bb, Hb, card),
+                # red signal in the DNG (Nick 2026-10-08: the goal is red detail, not JPEG looks)
+                "red_raw_level": round(float(raw_s["red"]["mean"][0]), 5),
+                "red_snr_db": red_snr_db(bb, Hb, card),
+                "clip_frac_g_frame": round(float(clip[..., 1].mean()), 6),
+                "clip_frac_b_frame": round(float(clip[..., 2].mean()), 6),
+                "clip_frac_g_card_max": round(
+                    max(float(s["clip_frac"][1]) for s in raw_s.values() if s.get("clip_frac")), 4
+                ),
+                "clip_frac_b_card_max": round(
+                    max(float(s["clip_frac"][2]) for s in raw_s.values() if s.get("clip_frac")), 4
+                ),
                 "v3_clipped_patches": ";".join(
                     k for k, s in raw_s.items() if max(s.get("clip_frac") or [0]) > 0.001
                 ),
