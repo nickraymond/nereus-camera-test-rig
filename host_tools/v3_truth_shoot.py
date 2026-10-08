@@ -212,6 +212,12 @@ def main() -> int:
     Hm, _ = locate(g, card)
     lin, sat, cfa = normalize(g)
     b, _ = bin2x2(lin, cfa, sat)
+    if a.flat:
+        # uneven light (daylight + LEDs, 2026-10-08) defeats the finder's threshold: find the
+        # chart on the flat-corrected frame, the same light field the flat measured
+        fl = flat_of(sorted((a.root / "imx708" / "flat").glob("**/stop_*.dng")))
+        if fl is not None:
+            b = b / np.maximum(fl, 1e-3)
     Hb = mosaic_to_binned(g.valid_crop) @ Hm
     cc_boxes = find_chart(
         b, Hb, sample(b, Hb, card.patch("gray_light").box)["mean"], chart, (-1500, 2700, 5700, 7000)
@@ -258,9 +264,15 @@ def main() -> int:
                 "chart": [round(min(gv), 3), round(max(gv), 3)],
                 "card": [round(min(gc), 3), round(max(gc), 3)],
             }
+            # evenness of the light on the CARD (the flat's green, inside the card outline)
+            cq = cv2.perspectiveTransform(
+                np.array([[[0, 0]], [[4200, 0]], [[4200, 2700]], [[0, 2700]]], float), Hb
+            ).reshape(-1, 2)
+            cm = np.zeros(flat.shape[:2], np.uint8)
+            cv2.fillPoly(cm, [np.round(cq).astype(np.int32)], 1)
+            fg = flat[..., 1][cm.astype(bool)]
             r["flat_spread_pct_p95_p5"] = round(
-                float(100 * (np.percentile(flat[..., 1], 95) / np.percentile(flat[..., 1], 5) - 1)),
-                1,
+                float(100 * (np.percentile(fg, 95) / np.percentile(fg, 5) - 1)), 1
             )
         by_stop: dict[str, list] = {}
         for p in files:
