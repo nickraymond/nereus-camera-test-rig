@@ -7,7 +7,8 @@
 #                          C --shutter 250000 --gain 1.12, D --ev 1   (full res, --raw, focus 1.094)
 #   hand-off (selected slots: every slot 06:00-08:00, then every 3rd slot to 10:30), only if
 #     CmaFree >= CMA_MIN_KB, >= 6 min left in the slot, and video is not disabled:
-#     1. card-grey WB on B's DNG (scripts/s28_card_wb.py, single-scale detect, ulimit -v 1,000,000):
+#     1. card-grey WB on B's DNG (scripts/s28_card_wb.py, lean crop-first, single-scale detect,
+#        ulimit -v 1,000,000, oom_score_adj 1000):
 #        red_gain = G/R, blue_gain = G/B of gray_mid; too dark / no card -> the last good gains
 #        ("held"), or auto WB if there are none yet
 #     2. clip_card: 30 s (300 frames) 1280x720 10 fps H.264, floor gain, --awb custom R,B
@@ -79,7 +80,9 @@ while [ "$t" -le "$end" ]; do
     elif [ "$(cma)" -lt "$CMA_MIN_KB" ]; then log "slot $slot video SKIP: CmaFree $(cma) kB < $CMA_MIN_KB"
     else
       SEL=$((SEL + 1))
-      wbj=$(/bin/sh -c 'ulimit -v 1000000; exec "$0" "$@"' "$PY" "$RIG/scripts/s28_card_wb.py" \
+      # oom_score_adj 1000: only this child can be OOM-killed; a killed card-wb (rc 137)
+      # falls through to the held / auto gains below, never a skipped still
+      wbj=$(/bin/sh -c 'echo 1000 > /proc/self/oom_score_adj; ulimit -v 1000000; exec "$0" "$@"' "$PY" "$RIG/scripts/s28_card_wb.py" \
             "s${slot}_lowgain.dng" --geometry "$GEOM" 2> "s${slot}_wb.err")
       wbrc=$?
       echo "$wbj" > "s${slot}_wb.json"

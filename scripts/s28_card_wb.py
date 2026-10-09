@@ -17,6 +17,7 @@ the clip with auto WB or skips it.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 import tempfile
@@ -29,8 +30,8 @@ import numpy as np
 from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.jpeg_geometry import JpegMap
 from nereus_camera_test_rig.color.locate import _detect, _record, tag_geometry, tag_spec
-from nereus_camera_test_rig.color.patches import homography, sample
-from nereus_camera_test_rig.color.raw_io import bin2x2, demosaic_bilinear, normalize, read_dng
+from nereus_camera_test_rig.color.patches import homography, mosaic_to_binned, sample
+from nereus_camera_test_rig.color.raw_io import demosaic_bilinear, normalize, read_dng
 
 CROP = (1504, 846, 1600, 900)
 CARD = Path(__file__).resolve().parents[1] / "configs/cards/nereus_v3_c1.yaml"
@@ -59,9 +60,14 @@ def main() -> int:
     card = load_card(CARD)
     spec = tag_spec(card)
     fr = read_dng(a.dng)
-    lin, sat, cfa = normalize(fr)
     x, y, w, h = CROP
-    crop = demosaic_bilinear(lin[y : y + h, x : x + w], cfa)  # x, y even: CFA phase unchanged
+    # lean path (T0.4, 2026-10-08): crop the integer mosaic FIRST (x, y even: same CFA phase
+    # and black-level positions), so no full-frame float array is ever made (~146 MB peak)
+    full_valid = fr.valid_crop
+    fr = dataclasses.replace(fr, mosaic=fr.mosaic[y : y + h, x : x + w].copy(), valid_crop=None)
+    lin, _, cfa = normalize(fr)
+    crop = demosaic_bilinear(lin, cfa)
+    del lin
     t1 = time.perf_counter()
     g = crop[..., 1]
     view = np.clip(g / max(float(np.percentile(g, 99.5)), 1e-6), 0, 1) ** (1 / 2.2) * 255 + 0.5
@@ -92,10 +98,15 @@ def main() -> int:
         s = sample(crop, H, card.patch(a.patch).box, clip=None)
         out["source"] = "detected"
     elif a.geometry is not None:
-        # fixed sunrise-run geometry: canonical -> binned full frame
+        # fixed sunrise-run geometry (canonical -> binned full frame), moved into crop px:
+        # binned -> full mosaic px (inverse of mosaic_to_binned), then minus the crop origin
         Hb = np.asarray(json.loads(a.geometry.read_text())["Hb"], float)
-        b, _ = bin2x2(lin, cfa, sat)
-        s = sample(b, Hb, card.patch(a.patch).box, clip=None)
+        H = (
+            np.array([[1, 0, -x], [0, 1, -y], [0, 0, 1]], float)
+            @ np.linalg.inv(mosaic_to_binned(full_valid))
+            @ Hb
+        )
+        s = sample(crop, H, card.patch(a.patch).box, clip=None)
         out["source"] = "fixed_geometry"
     else:
         out.update(source="none", reason=rec.get("reason"), vmhwm_kib=vmhwm())
