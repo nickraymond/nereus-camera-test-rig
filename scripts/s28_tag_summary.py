@@ -25,6 +25,9 @@ def pct(v, q):
 
 def main() -> int:
     rows = list(csv.DictReader(open(sys.argv[1])))
+    for r in rows:  # one table per detector mode x input
+        if r.get("mode"):
+            r["input"] = f"{r['mode']} / {r['input']}"
     ok = [r for r in rows if r.get("tags") not in ("", None)]
     fails = [r for r in rows if r.get("tags") in ("", None)]
     print(f"{len(rows)} detections, {len(fails)} child failures"

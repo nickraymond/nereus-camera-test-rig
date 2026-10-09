@@ -36,9 +36,9 @@ t0 = time.perf_counter()
 import numpy as np, cv2
 from nereus_camera_test_rig.color.card import load_card
 from nereus_camera_test_rig.color.jpeg_geometry import JpegMap
-from nereus_camera_test_rig.color.locate import locate_frame, tag_geometry, tag_spec
+from nereus_camera_test_rig.color.locate import _detect, _record, locate_frame, tag_geometry, tag_spec
 card = load_card(sys.argv[3])
-kind, path = sys.argv[1], sys.argv[2]
+kind, path, mode = sys.argv[1], sys.argv[2], sys.argv[4]
 t_imp = time.perf_counter()
 with tempfile.TemporaryDirectory() as td:
     if kind == "dng_crop":
@@ -55,8 +55,16 @@ with tempfile.TemporaryDirectory() as td:
     else:
         view = Path(path)
     t_prep = time.perf_counter()
-    rec = locate_frame(None, view, card.corner_map, JpegMap.offset(0, 0),
-                       geometry=tag_geometry(card), spec=tag_spec(card))
+    spec = tag_spec(card)
+    if mode == "single":
+        # T0.3 bar: one native-scale pass (no 1/2x, 1/4x or 2x), then the same quad checks
+        gray = cv2.imread(str(view), cv2.IMREAD_GRAYSCALE)
+        found = _detect(gray, set(card.corner_map.values()), (1.0,), family=spec.family)
+        rec = _record({i: (det, s, "img") for i, (det, s) in found.items()}, card.corner_map,
+                      JpegMap.offset(0, 0), "apriltag", tag_geometry(card), spec.ratio_range)
+    else:
+        rec = locate_frame(None, view, card.corner_map, JpegMap.offset(0, 0),
+                           geometry=tag_geometry(card), spec=spec)
     t_det = time.perf_counter()
 try:
     hwm = next(int(l.split()[1]) for l in open("/proc/self/status") if l.startswith("VmHWM:"))
@@ -78,6 +86,11 @@ def main() -> int:
         "--card",
         default=str(Path(__file__).resolve().parents[1] / "configs/cards/nereus_v3_c1.yaml"),
     )
+    ap.add_argument(
+        "--modes",
+        default="single",
+        help="single (T0.3 bar: one native-scale pass), multi (locate_frame), or single,multi",
+    )
     a = ap.parse_args()
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"))
     rows = []
@@ -85,7 +98,11 @@ def main() -> int:
         stem = os.path.basename(dng)[:-4]
         slot, arm = stem[1:].split("_", 1)
         meta = json.loads(Path(dng[:-4] + ".json").read_text())
-        for kind, src in (("dng_crop", dng), ("jpeg", dng[:-4] + ".jpg")):
+        for mode, kind, src in [
+            (m, k, s)
+            for m in a.modes.split(",")
+            for k, s in (("dng_crop", dng), ("jpeg", dng[:-4] + ".jpg"))
+        ]:
             t0 = time.perf_counter()
             p = subprocess.run(
                 [
@@ -98,6 +115,7 @@ def main() -> int:
                     kind,
                     src,
                     a.card,
+                    mode,
                 ],
                 capture_output=True,
                 text=True,
@@ -109,6 +127,7 @@ def main() -> int:
                 "slot": slot,
                 "arm": arm,
                 "input": kind,
+                "mode": mode,
                 "lux": round(meta.get("Lux", 0), 3),
                 "exposure_us": meta.get("ExposureTime"),
                 "again": round(meta.get("AnalogueGain", 0), 3),
@@ -127,6 +146,7 @@ def main() -> int:
             rows.append(row)
             print(
                 stem,
+                mode,
                 kind,
                 row.get("tags"),
                 row.get("detect_s"),
