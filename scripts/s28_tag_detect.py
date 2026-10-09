@@ -41,13 +41,21 @@ card = load_card(sys.argv[3])
 kind, path, mode = sys.argv[1], sys.argv[2], sys.argv[4]
 t_imp = time.perf_counter()
 with tempfile.TemporaryDirectory() as td:
-    if kind == "dng_crop":
+    if kind in ("dng_crop", "dng_crop_lean"):
         from nereus_camera_test_rig.color.raw_io import read_dng, normalize, demosaic_bilinear
         fr = read_dng(path)
         x, y, w, h = %s
-        lin, sat, cfa = normalize(fr)
-        crop = lin[y:y + h, x:x + w]          # x, y even: the CFA phase is unchanged
-        del lin, sat
+        if kind == "dng_crop_lean":
+            # T0.4 lean path: crop the integer mosaic FIRST (x, y even: same CFA phase and
+            # black-level positions), so no full-frame float array is ever made
+            import dataclasses
+            fr = dataclasses.replace(fr, mosaic=fr.mosaic[y:y + h, x:x + w].copy(), valid_crop=None)
+            crop, sat, cfa = normalize(fr)
+            del sat
+        else:
+            lin, sat, cfa = normalize(fr)
+            crop = lin[y:y + h, x:x + w]          # x, y even: the CFA phase is unchanged
+            del lin, sat
         g = demosaic_bilinear(crop, cfa)[..., 1]
         g = np.clip(g / max(float(np.percentile(g, 99.5)), 1e-6), 0, 1) ** (1 / 2.2)
         view = Path(td) / "view.png"
@@ -101,7 +109,7 @@ def main() -> int:
         for mode, kind, src in [
             (m, k, s)
             for m in a.modes.split(",")
-            for k, s in (("dng_crop", dng), ("jpeg", dng[:-4] + ".jpg"))
+            for k, s in (("dng_crop", dng), ("dng_crop_lean", dng), ("jpeg", dng[:-4] + ".jpg"))
         ]:
             t0 = time.perf_counter()
             p = subprocess.run(
