@@ -300,14 +300,22 @@ def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
            "experiment", "--type", "pool", "--env", "pool", "--raw", "--no-analysis",
            "--cameras", ",".join(cameras), "--notes", f"pool_capture {run_id} set {n}"]
     line: dict = {}
+    # Own process group: on a timeout the whole group is killed, so an rpicam-still or serial
+    # grandchild cannot outlive the set and hold a camera into the next one (QE #97).
+    proc = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
-        proc = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True,
-                              timeout=SET_TIMEOUT_S)
+        out, err = proc.communicate(timeout=SET_TIMEOUT_S)
         line["exit_code"] = proc.returncode
         if proc.returncode != 0:  # 1 = a camera failed; a traceback lands here too
-            line["stderr_tail"] = proc.stderr.strip().splitlines()[-8:]
-            line["stdout_tail"] = proc.stdout.strip().splitlines()[-8:]
+            line["stderr_tail"] = err.strip().splitlines()[-8:]
+            line["stdout_tail"] = out.strip().splitlines()[-8:]
     except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.communicate()
         line["exit_code"] = "timeout"
     new = sorted(set(run_dir.glob("*/exp_*")) - before)
     if new:

@@ -838,7 +838,8 @@ def spotter_section(ctx: Ctx, crops: list[dict], spotter: list[dict], notes: lis
     head = ["Production frame = native px x=1504 y=846 w=1600 h=900 of the 4608x2592 frame; "
             "all crops here are 1:1 (no resampling).",
             "Spotter units: lens 0.8 manual. This rig: LensPosition from its rpicam metadata "
-            f"= {lens if lens else 'n/a'} (AF; per frame in the captions)."]
+            f"= {lens if lens else 'n/a'} (as the camera reported it: manual when the run's "
+            "profile locks it, AF otherwise; per frame in the captions)."]
     blocks = []
     ours = best_of(crops)
     if ours is not None:
@@ -1004,7 +1005,10 @@ def title_lines(runs, n_sets, rows, seconds, args) -> list[str]:
             "'scaled to NN %' = resized for display; '1:1 crop' = native pixels, no resampling "
             "(1 image px per CSS px at 100 % browser zoom).",
             "IMX708 Mac DNG render: no lens shading / denoise / sharpening / tone curve - corners "
-            "darker and contrast flatter than the rpicam JPEG by design."]
+            "darker and contrast flatter than the rpicam JPEG by design.",
+            f"Status legend (luma of the scored image): FAIL = clip_hi > {FAIL_CLIP_HI_PCT:g} % "
+            f"(luma >= {CLIP_HI_LEVEL}) or mean < {FAIL_MEAN:g} or unreadable; WARN = clip_hi > "
+            f"{WARN_CLIP_HI_PCT:g} % or mean < {WARN_MEAN_LO:g} or > {WARN_MEAN_HI:g}; else PASS."]
 
 
 # --- main ----------------------------------------------------------------------------------------
@@ -1176,6 +1180,12 @@ def _run(ctx: Ctx, args, argv, runs: list[Path], root: Optional[Path], t_start: 
     status = 0
     if n_rendered == 0:
         LOG.error("ERROR: zero frames rendered (no DNG/Bayer render and no production crop)")
+        status = 1
+    dng_tried = [r for r in rows if r["camera"] == "imx708" and r.get("raw_file")
+                 and r.get("selected_rank")]
+    if dng_tried and not ctx.timings["dng_render_s"]:
+        LOG.error("ERROR: every IMX708 DNG render failed (%d picked) — see warnings",
+                  len(dng_tried))
         status = 1
     return status
 

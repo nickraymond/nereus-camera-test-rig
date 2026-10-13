@@ -59,6 +59,9 @@ command -v lifepo4wered-cli >/dev/null || refuse "lifepo4wered-cli not found"
 RUNNING=$(get PI_RUNNING); VIN=$(get VIN); VBAT=$(get VBAT); THR=$(get VIN_THRESHOLD)
 BOOT=$(get VBAT_BOOT); AUTO=$(get AUTO_BOOT); UP=$(cut -d. -f1 /proc/uptime)
 say "UPS: PI_RUNNING=$RUNNING VIN=${VIN}mV VBAT=${VBAT}mV (boot >= ${BOOT}) AUTO_BOOT=$AUTO uptime=${UP}s"
+for v in RUNNING VIN VBAT THR BOOT AUTO; do  # an empty read must refuse, never skip a guard
+  [ -n "${!v}" ] || refuse "UPS register read for $v came back empty"
+done
 [ "$RUNNING" = "1" ] || refuse "UPS does not report PI_RUNNING=1 (got '$RUNNING')"
 # Nick's pi/field/power_cycle.py guard: AUTO_BOOT must be 2 (VBAT smart) or the rig stays dark.
 [ "$AUTO" = "2" ] || refuse "AUTO_BOOT is '$AUTO', must be 2 or the rig will not come back"

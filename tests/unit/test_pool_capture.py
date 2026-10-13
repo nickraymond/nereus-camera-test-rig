@@ -161,3 +161,32 @@ def test_light_pull_defers_dngs_and_render_picks_them(tmp_path):
         "imx708": [f"pool009_x/{exp.name}/imx708_raw_x.jpg"], "openmv_n6": []}}))
     assert pool_pull.dng_list_for_render(render, tmp_path) == {
         "pool009_x": [f"2026-10-14/{exp.name}/captures/imx708/imx708_raw_x.dng"]}
+
+
+def test_pull_exit_codes_ok_unverified_bad(tmp_path, monkeypatch):
+    run = tmp_path / "pool010_x"
+    exp = _make_set(run)
+    pool_capture.write_sha256sums(exp)
+    cut = _make_set(run / "late")  # a set cut short at power-off: no SHA256SUMS
+    cut.rename(run / "2026-10-14" / "exp_20261014T170100Z_pool")
+    args = ["--verify-only", "--dest", str(tmp_path), "--run", "pool010_x"]
+    assert pool_pull.main(args) == 3  # UNVERIFIED, not OK
+    (run / "2026-10-14" / "exp_20261014T170100Z_pool" / "experiment.json").unlink()
+    import shutil
+    shutil.rmtree(run / "2026-10-14" / "exp_20261014T170100Z_pool")
+    assert pool_pull.main(args) == 0  # every set verified
+    (exp / "captures/openmv_ae3/openmv_ae3_raw_x.bayer").write_bytes(b"x")
+    assert pool_pull.main(args) == 1  # BAD
+    report = json.loads((tmp_path / "pull_report.json").read_text())
+    assert report["runs"][0]["bad"]
+
+
+def test_dng_pick_ignores_openmv_only_selections(tmp_path):
+    run = tmp_path / "pool011_x"
+    exp = _make_set(run)
+    pool_capture.write_sha256sums(exp)
+    render = tmp_path / "r"
+    render.mkdir()
+    (render / "render_manifest.json").write_text(json.dumps({"selected": {
+        "imx708": [], "openmv_n6": [f"pool011_x/{exp.name}/openmv_n6_raw_x.bayer"]}}))
+    assert pool_pull.dng_list_for_render(render, tmp_path) == {}

@@ -20,11 +20,16 @@ Hosts: ``pi@192.168.1.35`` on the bench LAN (default), ``pi@10.42.0.1`` when the
 Outputs
     <dest>/<run>/...            exact copy of the Pi run folder (default dest
                                 ~/NereusPool/<YYYYMMDD>/nereus002, next to the Spotter pulls)
-    <dest>/pull_report.json     per run: sets, files, bytes, verified/bad/missing, seconds, MB/s
-Exit 0 = every set verified; 1 = a checksum mismatch or missing file; 2 = nothing to pull.
+    <dest>/pull_report.json     latest pass: per run sets, files, bytes, verified/bad/missing,
+                                rsync seconds, MB/s of bytes actually transferred (also kept as
+                                pull_report_<time>.json, one per pass)
+Exit 0 = OK, every set verified; 1 = BAD (checksum mismatch or missing file); 2 = nothing to
+    pull; 3 = UNVERIFIED: no mismatch, but a set has no SHA256SUMS — normally the last set, cut
+    short when the rig was powered off (its files are checked against experiment.json where it
+    exists) or a set still in flight. Look at the named set before trusting it.
 
-Limitations: a set killed mid-capture has no SHA256SUMS — reported as ``unverified`` (its
-    experiment.json hashes are still checked when present).
+Limitations: run-level files (run_manifest.json, sets.jsonl, power.csv, pool.log) change while
+    a run is live and are not hashed; a file the Pi did not list in SHA256SUMS is not flagged.
 """
 
 from __future__ import annotations
@@ -52,20 +57,25 @@ def remote_runs(host: str, remote: str) -> list[str]:
 
 
 def rsync_run(host: str, remote: str, run: str, dest: Path, no_dng: bool = False,
-              files_from: Path | None = None) -> float:
-    """Copy one run folder (resumable, keeps partial files). Returns seconds. ``no_dng`` skips
-    the 24 MB DNGs (~80 % of the bytes; measured ~2 MB/s over the bench Wi-Fi on 2026-10-13);
-    ``files_from`` copies only the listed run-relative paths."""
+              files_from: Path | None = None) -> tuple[float, int]:
+    """Copy one run folder (resumable, keeps partial files). Returns (seconds, bytes moved).
+    ``no_dng`` skips the 24 MB DNGs (~80 % of the bytes; ~2 MB/s measured over the bench Wi-Fi
+    on 2026-10-13); ``files_from`` copies only the listed run-relative paths."""
     t0 = time.monotonic()
     extra = (["--exclude", "*.dng"] if no_dng else []) + (
         ["--files-from", str(files_from)] if files_from else [])
-    cmd = ["rsync", "-a", "--partial", "--stats", *extra, "-e", "ssh " + " ".join(SSH_OPTS),
-           f"{host}:{remote}/{run}/", str(dest / run) + "/"]
+    cmd = ["rsync", "-a", "--partial", "--stats", "--timeout=60", *extra,
+           "-e", "ssh " + " ".join(SSH_OPTS), f"{host}:{remote}/{run}/", str(dest / run) + "/"]
     print(f"[pool_pull] rsync {host}:{remote}/{run} -> {dest / run}", flush=True)
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
-        raise SystemExit(f"[pool_pull] rsync failed ({res.returncode}): {res.stderr.strip()}")
-    return time.monotonic() - t0
+        raise SystemExit(f"[pool_pull] rsync failed ({res.returncode}): {res.stderr.strip()} "
+                         "— re-run the same command to resume (--partial)")
+    moved = 0
+    for line in res.stdout.splitlines():  # "Total transferred file size: 1,234 bytes"
+        if line.startswith("Total transferred file size:"):
+            moved = int("".join(ch for ch in line.split(":", 1)[1] if ch.isdigit()) or 0)
+    return time.monotonic() - t0, moved
 
 
 def _sha256(path: Path) -> str:
@@ -141,16 +151,15 @@ def dng_list_for_render(render_dir: Path, dest: Path) -> dict[str, list[str]]:
     SHA256SUMS in the light copy, so no guessing of the date folder or timestamp."""
     man = json.loads((render_dir / "render_manifest.json").read_text())
     want: dict[str, set] = {}
-    for entries in (man.get("selected") or {}).values():
-        for entry in entries:
-            run, set_name = entry.split("/")[:2]
-            for exp in (dest / run).glob(f"*/{set_name}"):
-                sums = exp / "SHA256SUMS"
-                rels = [ln.partition("  ")[2] for ln in sums.read_text().splitlines()] \
-                    if sums.is_file() else []
-                for rel in rels:
-                    if rel.endswith(".dng"):
-                        want.setdefault(run, set()).add(f"{exp.parent.name}/{exp.name}/{rel}")
+    for entry in (man.get("selected") or {}).get("imx708", []):  # only IMX708 picks need a DNG
+        run, set_name = entry.split("/")[:2]
+        for exp in (dest / run).glob(f"*/{set_name}"):
+            sums = exp / "SHA256SUMS"
+            rels = [ln.partition("  ")[2] for ln in sums.read_text().splitlines()] \
+                if sums.is_file() else []
+            for rel in rels:
+                if rel.endswith(".dng"):
+                    want.setdefault(run, set()).add(f"{exp.parent.name}/{exp.name}/{rel}")
     return {run: sorted(paths) for run, paths in want.items()}
 
 
@@ -194,27 +203,34 @@ def main(argv=None) -> int:
             files_from = dest / f".dng_list_{run}.txt"
             files_from.write_text("\n".join(picked[run]) + "\n")
             print(f"[pool_pull] {run}: {len(picked[run])} DNG(s) picked by the render", flush=True)
-        secs = 0.0 if args.verify_only else rsync_run(args.host, args.remote, run, dest,
-                                                      args.no_dng, files_from)
+        secs, moved = (0.0, 0) if args.verify_only else rsync_run(
+            args.host, args.remote, run, dest, args.no_dng, files_from)
         t_v = time.monotonic()
         r = verify_run(dest / run, (".dng",) if (args.no_dng or args.dng_for_render) else ())
         r.update({"rsync_seconds": round(secs, 1),
                   "verify_seconds": round(time.monotonic() - t_v, 1),
-                  "mb_per_s": round(r["bytes"] / 1e6 / secs, 2) if secs > 0 else None})
+                  "bytes_transferred": moved,
+                  "mb_per_s": round(moved / 1e6 / secs, 2) if secs > 0 else None})
         report["runs"].append(r)
-        status = "OK" if not r["bad"] and not r["missing"] else "BAD"
+        status = ("BAD" if r["bad"] or r["missing"] else
+                  "UNVERIFIED" if r["unverified_sets"] else "OK")
         print(f"[pool_pull] {status} {run}: {r['sets']} sets, {r['files']} files, "
               f"{r['bytes'] / 1e9:.2f} GB, {r['files_verified']} verified"
               + (f", {r['files_deferred']} DNG deferred" if r["files_deferred"] else "")
               + (f", {len(r['bad'])} BAD {r['bad'][:3]}" if r["bad"] else "")
               + (f", {len(r['missing'])} MISSING {r['missing'][:3]}" if r["missing"] else "")
-              + (f", unverified sets {r['unverified_sets']}" if r["unverified_sets"] else "")
-              + f" · rsync {secs:.0f} s · stop {r['stop_reason']}", flush=True)
+              + (f", UNVERIFIED sets (no SHA256SUMS: cut short at power-off or in flight) "
+                 f"{r['unverified_sets']}" if r["unverified_sets"] else "")
+              + f" · rsync {secs:.0f} s, {moved / 1e6:.0f} MB moved · stop {r['stop_reason']}",
+              flush=True)
     report["total_seconds"] = round(time.monotonic() - t_all, 1)
-    (dest / "pull_report.json").write_text(json.dumps(report, indent=1) + "\n")
+    text = json.dumps(report, indent=1) + "\n"
+    (dest / "pull_report.json").write_text(text)
+    (dest / f"pull_report_{datetime.now().strftime('%Y%m%dT%H%M%S')}.json").write_text(text)
     print(f"[pool_pull] report {dest / 'pull_report.json'} ({report['total_seconds']:.0f} s)")
-    bad = any(r["bad"] or r["missing"] for r in report["runs"])
-    return 1 if bad else 0
+    if any(r["bad"] or r["missing"] for r in report["runs"]):
+        return 1
+    return 3 if any(r["unverified_sets"] for r in report["runs"]) else 0
 
 
 if __name__ == "__main__":

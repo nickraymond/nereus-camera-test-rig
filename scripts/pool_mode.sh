@@ -14,17 +14,19 @@
 # From the Mac (the Mac's clock is recorded as the run's time anchor):
 #   ssh pi@nereus002.local "bash ~/nereus-rig-poolcam/scripts/pool_mode.sh start --mac-time $(date -Iseconds)"
 #
-# Arm does two reversible things (Nick OK 2026-10-13 3:05 PM): it touches ~/.no_dive_autostart
+# Arm does two reversible things (Nick OK 2026-10-13 3:05 PM): it creates ~/.no_dive_autostart
 #   — Nick's own stand-down switch for dive-autostart.service, so the workbench's ci-record does
-#   not take the cameras at boot — and adds one marked @reboot line to the pi crontab (backup in
-#   ~/pool_backup/<ts>/). Disarm removes both and checks the crontab matches the backup.
+#   not take the cameras at boot (only if absent; its pre-arm state is recorded and a flag Nick
+#   made himself is never modified) — and adds one marked @reboot line to the pi crontab (backup
+#   in ~/pool_backup/<ts>/). Disarm restores both and fails if the crontab differs from the backup.
 # No root needed. Never touches Nick's services, the workbench or its recipes.
 #
 # Supervisor ("watchdog"): the loop runs under `supervise`, which restarts it (new run folder)
 #   if it dies abnormally, at most MAX_RESTARTS times. A clean stop (STOP file, duration, disk,
 #   battery) or a refusal (exit 3 storage / 4 battery) is final.
 set -uo pipefail
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# POOL_MODE_PATH_PREFIX: tests put fake crontab / lifepo4wered-cli first (tests/unit).
+export PATH="${POOL_MODE_PATH_PREFIX:+$POOL_MODE_PATH_PREFIX:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="${POOL_PYTHON:-$HOME/nereus-camera-test-rig/.venv/bin/python}"
@@ -63,27 +65,32 @@ cmd_arm() {
   "$PY" "$ROOT/scripts/pool_capture.py" run --help >/dev/null || die "pool_capture.py does not load"
   local bk="$HOME/pool_backup/$(ts)"; mkdir -p "$bk"
   if crontab -l >"$bk/crontab_before.txt" 2>/dev/null; then :; else : >"$bk/crontab_before.txt"; fi
-  # Flag: create it with our marker; an EMPTY flag is the one this session touched on 10/13 to
-  # stop ci-record, so it is adopted too. A flag with other content is Nick's; left alone.
-  if [ ! -e "$DIVE_FLAG" ] || [ ! -s "$DIVE_FLAG" ]; then
-    echo "$FLAG_MARK $(ts)" >"$DIVE_FLAG"
+  # Flag pre-arm state, recorded so disarm restores exactly it (QE #97): "absent" -> pool mode
+  # creates it (with the marker) and disarm removes it; "ours" (marker from an earlier arm) ->
+  # same; "nick" (any flag without our marker, including an empty `touch`) -> never modified.
+  local flag_state="absent"
+  if [ -e "$DIVE_FLAG" ]; then
+    if grep -q "$FLAG_MARK" "$DIVE_FLAG"; then flag_state="ours"; else flag_state="nick"; fi
   fi
+  echo "$flag_state $(sha256sum "$DIVE_FLAG" 2>/dev/null | cut -d' ' -f1)" >"$bk/dive_flag_before.txt"
+  [ "$flag_state" = "absent" ] && echo "$FLAG_MARK $(ts)" >"$DIVE_FLAG"
   { grep -v "$CRON_MARK" "$bk/crontab_before.txt"
     echo "@reboot /bin/bash $ROOT/scripts/pool_mode.sh boot >>$POOL/boot.log 2>&1 $CRON_MARK"
   } | crontab - || die "crontab install failed"
   mkdir -p "$POOL"
-  printf '%s\n' "${args[@]}" >"$ARMED"
+  : >"$ARMED"  # one arg per line; no args = an empty file (never a blank line)
+  [ "${#args[@]}" -gt 0 ] && printf '%s\n' "${args[@]}" >"$ARMED"
   echo "$bk" >>"$ARMED.backups"
   # Clock anchor while the Pi still has NTP: Pi clock vs the UPS RTC (the RTC keeps running on
   # the battery in the pool; the Pi clock does not survive a power-off).
-  echo "{\"armed_pi_utc\": \"$(date -u -Iseconds)\", \"pi_epoch\": $(date +%s), \"ups_rtc_epoch\": $(lifepo4wered-cli get RTC_TIME 2>/dev/null | awk -F= '{print $2+0}'), \"ntp\": \"$(timedatectl show -p NTPSynchronized --value 2>/dev/null)\"}" >"$POOL/arm_clock_$(ts).json"
-  say "ARMED: boot-start on; args: ${args[*]:-(defaults)}; crontab backup $bk"
+  echo "{\"armed_pi_utc\": \"$(date -u -Iseconds)\", \"pi_epoch\": $(date +%s), \"ups_rtc_epoch\": $(lifepo4wered-cli get RTC_TIME 2>/dev/null | tr -dc '0-9' || echo null), \"ntp\": \"$(timedatectl show -p NTPSynchronized --value 2>/dev/null)\"}" >"$POOL/arm_clock_$(ts).json"
+  say "ARMED: boot-start on; args: ${args[*]+${args[*]}}; crontab backup $bk"
   crontab -l | grep "$CRON_MARK"
-  say "dive-autostart stood down: $DIVE_FLAG ($(head -c 80 "$DIVE_FLAG"))"
+  say "dive-autostart stood down: $DIVE_FLAG (pre-arm: $flag_state; $(head -c 80 "$DIVE_FLAG"))"
 }
 
 cmd_disarm() {
-  local bk; bk="$(tail -1 "$ARMED.backups" 2>/dev/null)"
+  local bk rc=0; bk="$(tail -1 "$ARMED.backups" 2>/dev/null)"
   crontab -l 2>/dev/null | grep -v "$CRON_MARK" >"/tmp/pool_cron.$$"
   if [ -s "/tmp/pool_cron.$$" ]; then crontab "/tmp/pool_cron.$$"; else crontab -r 2>/dev/null; fi
   rm -f "/tmp/pool_cron.$$"
@@ -91,16 +98,19 @@ cmd_disarm() {
     if diff -q <(crontab -l 2>/dev/null | grep -v "$CRON_MARK") <(grep -v "$CRON_MARK" "$bk/crontab_before.txt") >/dev/null; then
       say "crontab restored (matches $bk/crontab_before.txt)"
     else
-      say "WARN: crontab differs from $bk/crontab_before.txt — check by hand"
+      say "FAIL: crontab differs from $bk/crontab_before.txt — check by hand"; rc=1
     fi
   fi
-  if [ -e "$DIVE_FLAG" ] && grep -q "$FLAG_MARK" "$DIVE_FLAG"; then
-    rm -f "$DIVE_FLAG"; say "removed $DIVE_FLAG (dive-autostart will run ci-record at the next boot)"
+  # Restore the flag's pre-arm state. Pre-arm "nick" (or no record of it) -> never touched.
+  local before; before="$(cut -d' ' -f1 "$bk/dive_flag_before.txt" 2>/dev/null)"
+  if [ -e "$DIVE_FLAG" ] && grep -q "$FLAG_MARK" "$DIVE_FLAG" && { [ "$before" = "absent" ] || [ "$before" = "ours" ]; }; then
+    rm -f "$DIVE_FLAG"; say "removed $DIVE_FLAG (pre-arm: $before; dive-autostart runs ci-record at the next boot)"
   elif [ -e "$DIVE_FLAG" ]; then
-    say "left $DIVE_FLAG alone (not created by pool mode)"
+    say "left $DIVE_FLAG as it was (pre-arm: ${before:-unknown}; not pool mode's to remove)"
   fi
   rm -f "$ARMED"
   say "DISARMED${bk:+ (backup $bk)}; a running loop is NOT stopped — use: pool_mode.sh stop"
+  return $rc
 }
 
 cmd_supervise() {  # runs detached; restarts an abnormal exit
@@ -129,14 +139,14 @@ launch() {  # launch <started-by> [extra args]
     ""|idle|failed) ;;
     *) die "the workbench runner is '$st' (a recipe owns the cameras) — stop it on :8088 first" ;;
   esac
-  local saved=(); [ -f "$ARMED" ] && mapfile -t saved <"$ARMED"
+  local saved=(); [ -f "$ARMED" ] && mapfile -t saved < <(grep -v '^$' "$ARMED")
   mkdir -p "$POOL"
   rm -f "$NO_RESTART"
-  setsid nohup /bin/bash "$ROOT/scripts/pool_mode.sh" supervise "${saved[@]}" --started-by "$by" "$@" \
+  setsid nohup /bin/bash "$ROOT/scripts/pool_mode.sh" supervise ${saved[@]+"${saved[@]}"} --started-by "$by" "$@" \
     >>"$POOL/supervisor.log" 2>&1 </dev/null &
   sleep 3
   [ -n "$(running_pid)" ] || die "loop did not start — see $POOL/supervisor.log"
-  say "STARTED (supervisor pid $(running_pid)); args: ${saved[*]} $*"
+  say "STARTED (supervisor pid $(running_pid)); args: ${saved[*]+${saved[*]}} $*"
   sleep 5; local r; r="$(newest_run)"; [ -n "$r" ] && say "run folder: $r"
 }
 

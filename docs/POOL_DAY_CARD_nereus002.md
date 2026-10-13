@@ -117,6 +117,14 @@ Then:
    Then re-run step 3 to add the full-resolution DNG renders.
 5. Everything, as the archive (resumable; ~24 MB/set): `.venv/bin/python -m host_tools.pool_pull --host pi@<rig>`.
 
+`pool_pull` results:
+
+- `OK` (exit 0): every file verified.
+- `UNVERIFIED` (exit 3): no mismatch, but a set has no SHA256SUMS. Normally that is the last
+  set, cut short at power-off; the pull prints its name.
+- `BAD` (exit 1): a checksum mismatch or a missing file. Re-run the pull (it resumes), then
+  look at the named file.
+
 Open `~/NereusPool/<date>/nereus002/pool<NNN>_*_render/best_images.html`. On the sheet:
 
 - "1:1" crops are native pixels.
