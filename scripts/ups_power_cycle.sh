@@ -20,8 +20,12 @@
 #   (shutdown ~20-60 s + wake timer + ~40 s boot). lsusb device numbers change = boards were
 #   power-cycled. Log: ~/ups_power_cycle.log (+ syslog tag ups_power_cycle).
 #
+# Prior art: Nick's ~/ADIN_SPI_OpenMV/pi/field/power_cycle.py does the same cycle with
+#   RTC_WAKE_TIME + `sudo -n systemctl poweroff` (5/5 on 2026-09-07; on battery a cycle took ~7 min
+#   vs ~2.5 with the charger). This script needs no sudo (the root daemon powers off on PI_RUNNING=0)
+#   and lives in the rig repo so the pool loop can call it.
 # Guards (refuses unless all hold):
-#   - the UPS answers and reports PI_RUNNING=1;
+#   - the UPS answers and reports PI_RUNNING=1, and AUTO_BOOT=2 (Nick's guard);
 #   - on battery, VBAT >= MIN_VBAT_MV (3300): below VBAT_BOOT (3150 here) the UPS will not boot
 #     the Pi again, and Nick measured boot-load resets on a 3.23 V cell (dive_autostart.sh);
 #   - uptime >= MIN_UPTIME_S (300) unless --force: a caller at boot can never make a cycle loop;
@@ -56,6 +60,8 @@ RUNNING=$(get PI_RUNNING); VIN=$(get VIN); VBAT=$(get VBAT); THR=$(get VIN_THRES
 BOOT=$(get VBAT_BOOT); AUTO=$(get AUTO_BOOT); UP=$(cut -d. -f1 /proc/uptime)
 say "UPS: PI_RUNNING=$RUNNING VIN=${VIN}mV VBAT=${VBAT}mV (boot >= ${BOOT}) AUTO_BOOT=$AUTO uptime=${UP}s"
 [ "$RUNNING" = "1" ] || refuse "UPS does not report PI_RUNNING=1 (got '$RUNNING')"
+# Nick's pi/field/power_cycle.py guard: AUTO_BOOT must be 2 (VBAT smart) or the rig stays dark.
+[ "$AUTO" = "2" ] || refuse "AUTO_BOOT is '$AUTO', must be 2 or the rig will not come back"
 if [ "$VIN" -lt "$THR" ] && [ "$VBAT" -lt "$MIN_VBAT_MV" ]; then
   refuse "on battery at ${VBAT} mV < ${MIN_VBAT_MV} mV: it might not boot again"
 fi

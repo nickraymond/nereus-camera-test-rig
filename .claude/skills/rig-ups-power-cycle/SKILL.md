@@ -12,6 +12,11 @@ connections."
 The script is `scripts/ups_power_cycle.sh` (deployed with the repo, e.g.
 `~/nereus-rig-poolcam/scripts/` or `~/nereus-camera-test-rig/scripts/` on the Pi).
 
+Prior art: Nick's `~/ADIN_SPI_OpenMV/pi/field/power_cycle.py`. It produces the same cycle
+with `RTC_WAKE_TIME` + `sudo -n systemctl poweroff` and went 5/5 on 2026-09-07. On battery a
+cycle took **~7 min**, against ~2.5 min with the charger. Prefer his tool where passwordless
+sudo exists. This script needs no sudo and is the one the pool loop calls.
+
 ## How it works (verified on nereus002, 2026-10-13 3:24 PM)
 
 1. `lifepo4wered-cli set WAKE_TIME <min>`: the UPS powers the Pi back on that many minutes
@@ -60,7 +65,8 @@ Measured on the 3:24 PM cycle (`--wake-min 1`, charger connected):
 
 ## Guards (built into the script)
 
-- **UPS state:** the UPS must answer and report `PI_RUNNING=1`.
+- **UPS state:** the UPS must answer and report `PI_RUNNING=1` and `AUTO_BOOT=2`. With any
+  other `AUTO_BOOT` the rig does not come back (Nick's guard).
 - **Battery:** on battery (VIN below `VIN_THRESHOLD`), VBAT must be ≥ 3300 mV. Below
   `VBAT_BOOT` (3150 mV here) the UPS will not boot the Pi again. A 3.23 V cell reset under
   boot load (Nick, `dive_autostart.sh`).
