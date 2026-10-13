@@ -190,3 +190,23 @@ def test_dng_pick_ignores_openmv_only_selections(tmp_path):
     (render / "render_manifest.json").write_text(json.dumps({"selected": {
         "imx708": [], "openmv_n6": [f"pool011_x/{exp.name}/openmv_n6_raw_x.bayer"]}}))
     assert pool_pull.dng_list_for_render(render, tmp_path) == {}
+
+
+def test_run_ids_never_repeat_even_if_the_counter_is_lost(tmp_path, monkeypatch):
+    monkeypatch.setattr(pool_capture, "POOL_ROOT", tmp_path)
+    a = pool_capture.next_run_id()
+    (tmp_path / a).mkdir()
+    (tmp_path / ".run_counter").write_text("")  # a hard cut emptied it
+    b = pool_capture.next_run_id()
+    assert a.startswith("pool001_") and b.startswith("pool002_")
+    (tmp_path / b).mkdir()
+    (tmp_path / ".run_counter").write_text("\x00\x00garbage")
+    assert pool_capture.next_run_id().startswith("pool003_")
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_durable_write_replaces_atomically(tmp_path):
+    f = tmp_path / "run_manifest.json"
+    pool_capture.atomic_json(f, {"sets": 1})
+    pool_capture.atomic_json(f, {"sets": 2})
+    assert json.loads(f.read_text()) == {"sets": 2} and not list(tmp_path.glob("*.tmp"))

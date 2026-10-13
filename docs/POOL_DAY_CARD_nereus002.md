@@ -14,17 +14,17 @@ Every ~45 s it captures one **set**:
 
 Exposure and white balance are on auto everywhere.
 
-It keeps going until power-off, 6 h, a full disk or a low battery (3.05 V). No network is
+It keeps going until switch-off, 6 h, a full disk or a low battery (3.05 V). No network is
 needed.
 
-If a board fails, the IMX708 keeps going. The board is retried every 5 sets, and one
-automatic UPS power cycle (~2.5 min on the charger, up to ~7 min on battery) clears a
-wedged board.
+If a board fails, the IMX708 keeps going and the board is retried every 5 sets. The
+automatic UPS power cycle is **OFF** for the pool (Nick, 4:35 PM: `--ups-recover-after 0`).
+A board that stays wedged is fixed by a switch off/on.
 
 ## Night before / morning (bench)
 
-The rig is left **armed and powered OFF**, on the charger. Armed means it starts the
-capture loop by itself when it powers on.
+The rig is left **armed and switched OFF**. Armed means it starts the capture loop by itself
+when it is switched on.
 
 To check it, power it on and run:
 
@@ -34,15 +34,15 @@ ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh status'
 
 You should see:
 
-- `armed: YES (--hours 6 --lens-position 0.8)`
+- `armed: YES (--hours 6 --lens-position 0.8 --ups-recover-after 0)`
 - `crontab: 1 pool line(s)`
 - `dive flag: present`
 
-If you power it on to check, a run starts. That is harmless; it is a new folder.
+If you switch it on to check, a run starts. That is harmless; it is a new folder.
 
 ## Start (pool)
 
-1. **Power on the UPS** with its touch button, the same as for a dive. Unverified: tap = on.
+1. **Switch ON.**
 2. About 20 s after boot, the loop starts and creates `pool<NNN>_<time>`. The first set
    takes ~45 s.
 3. **Optional, if a Mac is connected** (rig AP or LAN), so the run records the Mac clock:
@@ -81,8 +81,9 @@ Watch it live (Wi-Fi): `ssh pi@<rig> 'tail -f ~/nereus-rig-poolcam/results/pool/
 
 ## Stop
 
-- **Power off** with the UPS button. Unverified: hold. The set in flight may be cut short;
-  it is recorded as such, and every completed set is fsynced and checksummed.
+- **Switch OFF.** This is a hard power cut. Every completed set is already on the card,
+  fsynced and checksummed. **The last set may be UNVERIFIED (cut mid-set); that's
+  expected.** `pool_pull` names it and exits 3.
 - Or, on Wi-Fi: `bash ~/nereus-rig-poolcam/scripts/pool_mode.sh stop`. This finishes the
   set in flight and gives a clean stop.
 - Never use `sudo reboot`: on this Pi it can become a power-off. To reboot, use
@@ -98,7 +99,7 @@ Network:
 
 Then:
 
-1. Stop the new run that started at boot, and disarm:
+1. After switch-on, stop the new run that started at boot:
    ```bash
    ssh pi@<rig> 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh stop'
    ```
@@ -121,7 +122,7 @@ Then:
 
 - `OK` (exit 0): every file verified.
 - `UNVERIFIED` (exit 3): no mismatch, but a set has no SHA256SUMS. Normally that is the last
-  set, cut short at power-off; the pull prints its name.
+  set, cut short at switch-off; the pull prints its name.
 - `BAD` (exit 1): a checksum mismatch or a missing file. Re-run the pull (it resumes), then
   look at the named file.
 
@@ -148,7 +149,7 @@ again at the next boot.
 | No new `pool<NNN>` after power-on | `cat ~/nereus-rig-poolcam/results/pool/boot.log`. `not armed` → `pool_mode.sh arm --hours 6 --lens-position 0.8`. `workbench runner is 'live'` → a recipe holds the cameras; stop it on :8088 |
 | `REFUSED: on battery at … mV` | Charge it. It refuses to start below 3.25 V on battery (Nick's dive-autostart lesson) |
 | A board `benched` every set | Expected for a dead board. One automatic UPS power cycle per run, at most 2 a day. After that, replug or power-cycle by hand |
-| Pi gone > 10 min after a UPS cycle | Press the UPS touch button |
+| Pi gone > 10 min after a UPS cycle (manual `ups_power_cycle.sh` only) | Switch off/on |
 | Disk | Stops by itself at a 2 GB reserve (≈ 59 GB free = 30+ h of sets) |
 
 Source of truth: `scripts/pool_capture.py`, `scripts/pool_mode.sh`, `scripts/ups_power_cycle.sh`,
