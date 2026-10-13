@@ -287,7 +287,8 @@ def ups_power_cycle(reason: str) -> int:
     @reboot start then begins a new run). The loop's own daily cap is 2 (the script's is 3)."""
     env = {**os.environ, "MAX_PER_DAY": "2"}
     return subprocess.run(["bash", str(ROOT / "scripts" / "ups_power_cycle.sh"), "--yes",
-                           "--wake-min", "1", "--tag", "pool_auto", "--reason", reason], env=env,
+                           "--wake-min", "1", "--tag", os.environ.get("POOL_UPS_TAG", "pool_auto"),
+                           "--reason", reason], env=env,
                           capture_output=True, text=True, timeout=60).returncode
 
 
