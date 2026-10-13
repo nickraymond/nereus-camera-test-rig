@@ -31,6 +31,11 @@ Outputs (one self-contained run folder, never deleted or edited afterwards)
       <date>/exp_<UTC>_pool/   one set: experiment.json, captures/<camera>/..., SHA256SUMS
     Stop: ``touch <run>/STOP`` (or pool_mode.sh stop); the set in flight finishes first.
 
+Hard power cuts (the rig is switched off by a physical switch): every completed set is fsynced
+    (files + directories) before its SHA256SUMS is written, and sets.jsonl / run_manifest.json /
+    the run counter are written durably, so a cut loses at most the set in flight — which then
+    has no SHA256SUMS and pulls as UNVERIFIED (expected).
+
 Timestamps: the pool has no NTP. Every set records a monotonic set number, CLOCK_MONOTONIC and
     seconds since boot, the Pi wall clock (restored from disk at boot — wrong after a power-off),
     the LiFePO4wered RTC (keeps running on the battery; measured ~97 s behind the Pi clock on
@@ -148,10 +153,31 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def atomic_json(path: Path, data: dict) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=1) + "\n")
+def fsync_path(path: Path) -> None:
+    """Flush one file's or directory's data and metadata to the SD card. The rig is switched off
+    by a physical switch (a hard power cut, Nick 2026-10-13): without this a "completed" set can
+    come back as zero-length files after ext4 replays its journal."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def write_durable(path: Path, text: str) -> None:
+    """Write via a temp file + fsync + rename + directory fsync: after a hard cut the file is
+    either the old or the new content, never empty or half-written."""
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
     os.replace(tmp, path)
+    fsync_path(path.parent)
+
+
+def atomic_json(path: Path, data: dict) -> None:
+    write_durable(path, json.dumps(data, indent=1) + "\n")
 
 
 # -- run setup ---------------------------------------------------------------------------------
@@ -160,8 +186,18 @@ def next_run_id() -> str:
     clock is wrong after a power-off."""
     POOL_ROOT.mkdir(parents=True, exist_ok=True)
     counter = POOL_ROOT / ".run_counter"
-    n = int(_read(str(counter)) or 0) + 1
-    counter.write_text(f"{n}\n")
+    try:
+        n = int(_read(str(counter)) or 0)
+    except ValueError:  # garbled by a hard cut: fall back to the folders on disk
+        n = 0
+    # Never reuse a number, even if the counter was lost: start past every existing run folder.
+    for d in POOL_ROOT.glob("pool[0-9][0-9][0-9]*"):
+        try:
+            n = max(n, int(d.name[4:7]))
+        except ValueError:
+            pass
+    n += 1
+    write_durable(counter, f"{n}\n")
     return f"pool{n:03d}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
 
 
@@ -246,7 +282,10 @@ def write_sha256sums(exp_dir: Path) -> int:
         if p.is_file() and p.name != "SHA256SUMS":
             lines.append(f"{sha256(p)}  {p.relative_to(exp_dir)}")
             total += p.stat().st_size
-    (exp_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+            fsync_path(p)  # hard-cut safe: the bytes we just hashed are on the card
+    for d in sorted({p.parent for p in exp_dir.rglob("*")} | {exp_dir, exp_dir.parent}):
+        fsync_path(d)
+    write_durable(exp_dir / "SHA256SUMS", "\n".join(lines) + "\n")
     return total
 
 
