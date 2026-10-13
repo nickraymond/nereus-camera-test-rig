@@ -546,11 +546,33 @@ def run(args) -> int:
     return 0
 
 
+def read_sets(run_dir: Path) -> tuple[list, list]:
+    """sets.jsonl → (parsed lines, raw lines that did not parse). A switch-off (hard cut) can
+    leave the last line torn; it is reported, never fatal."""
+    good, torn = [], []
+    path = run_dir / "sets.jsonl"
+    for raw in (path.read_text(errors="replace").splitlines() if path.is_file() else []):
+        if not raw.strip():
+            continue
+        try:
+            good.append(json.loads(raw))
+        except ValueError:
+            torn.append(raw[:80])
+    return good, torn
+
+
 def summary(args) -> int:
     run_dir = Path(args.run_dir)
-    lines = [json.loads(s) for s in (run_dir / "sets.jsonl").read_text().splitlines() if s]
-    man = json.loads((run_dir / "run_manifest.json").read_text())
-    print(f"{man['run_id']}: {len(lines)} sets, stop {man.get('stop_reason')}")
+    lines, torn = read_sets(run_dir)
+    try:
+        man = json.loads((run_dir / "run_manifest.json").read_text())
+    except (OSError, ValueError):
+        man = {"run_id": run_dir.name}
+    print(f"{man.get('run_id', run_dir.name)}: {len(lines)} sets, stop "
+          f"{man.get('stop_reason') or 'none recorded (switched off / cut?)'}"
+          + (f"; {len(torn)} torn line(s) skipped (hard cut mid-write)" if torn else ""))
+    if not lines:
+        return 0
     secs = sorted(ln["set_seconds"] for ln in lines)
     if secs:
         print(f"  set seconds: median {secs[len(secs) // 2]}, min {secs[0]}, max {secs[-1]}")
