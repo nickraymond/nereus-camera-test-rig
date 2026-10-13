@@ -210,3 +210,17 @@ def test_durable_write_replaces_atomically(tmp_path):
     pool_capture.atomic_json(f, {"sets": 1})
     pool_capture.atomic_json(f, {"sets": 2})
     assert json.loads(f.read_text()) == {"sets": 2} and not list(tmp_path.glob("*.tmp"))
+
+
+def test_summary_survives_a_torn_last_line(tmp_path, capsys):
+    run = tmp_path / "pool012_x"
+    run.mkdir()
+    good = {"set": 1, "set_seconds": 44.0, "cameras": {}, "pi_after": {
+        "cpu_temp_c": 47.0, "throttled": "0x0", "mem_available_mb": 230, "disk_free_gb": 55.0}}
+    (run / "sets.jsonl").write_text(json.dumps(good) + "\n" + '{"set": 2, "set_secon')
+    (run / "run_manifest.json").write_text(json.dumps({"run_id": "pool012_x"}))
+    lines, torn = pool_capture.read_sets(run)
+    assert [ln["set"] for ln in lines] == [1] and len(torn) == 1
+    assert pool_capture.summary(argparse.Namespace(run_dir=str(run))) == 0
+    out = capsys.readouterr().out
+    assert "1 sets" in out and "1 torn line(s) skipped" in out and "switched off" in out
