@@ -4,6 +4,7 @@ loop's fail-soft depth path. No hardware."""
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -50,3 +51,15 @@ def test_loop_depth_is_fail_soft(monkeypatch):
     assert pool_capture.depth_text(ok) == " · depth +1.00m 18.5C"
     assert pool_capture.depth_text({"ok": True, "pressure_mbar": 985.0, "temp_c": 20.0,
                                     "depth_m_run_start": 0.0}) == " · depth +0.00m 20.0C"
+
+
+def test_read_depth_rejects_non_dict_and_bad_ok(monkeypatch, tmp_path):
+    """A depth script that prints valid JSON of the wrong shape must still be fail-soft."""
+    (tmp_path / "scripts").mkdir()
+    monkeypatch.setattr(pool_capture, "DEPTH_PY", sys.executable)
+    monkeypatch.setattr(pool_capture, "ROOT", tmp_path)
+    for body, why in (('print("[1, 2]")', "not a JSON object"),
+                      ('print(\'{"ok": true, "pressure_mbar": "x"}\')', "numeric")):
+        (tmp_path / "scripts" / "depth_ms5837.py").write_text(body + "\n")
+        d = pool_capture.read_depth(None)
+        assert d["ok"] is False and why in d["error"]
