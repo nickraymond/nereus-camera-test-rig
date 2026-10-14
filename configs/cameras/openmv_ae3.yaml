@@ -38,4 +38,8 @@ raw: false
 # gain and white balance, 2 s settle). The board reads a TOP-LEVEL jpeg_quality; the nested
 # image.jpeg_quality above is not read and the board fell back to its default 90. Nick
 # 2026-10-14: best quality the board can do. q98 is the AE3's highest WORKING setting: q99 -> 'Compression Failed!' on the board, q100 -> a broken JPEG (zero quantization tables, decodes as flat grey); measured 2026-10-14.
-jpeg_quality: 98
+# QE #109 pre-arm worst case (2026-10-14 9:03 AM): q98 FAILED on a dark max-gain frame (lens
+# covered, gain 24 dB: "Compression Failed!", likely the encoder's output buffer); q95 passed it
+# (305 kB) and a detailed checkerboard (279 kB). Pre-agreed fallback -> q95. N6 q100 passed both
+# (607 kB dark, 639 kB detail; bar < 800 kB).
+jpeg_quality: 95
