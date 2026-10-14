@@ -335,12 +335,13 @@ def wait_for_boards(timeout_s: float) -> dict:
         time.sleep(2)
 
 
-def read_depth(ref_mbar: float | None) -> dict:
+def read_depth(ref_mbar: float | None, bus: int = 1) -> dict:
     """One fail-soft MS5837 reading (scripts/depth_ms5837.py in a subprocess with a timeout): a
     missing sensor, bus error or hang becomes {"ok": false, "error": ...} and nothing else."""
     # 1 sample: one short session (reset, PROM, 2 conversions); the >= 3 s gap between sessions
     # is enforced inside the script (pool_led.bar30_session).
-    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "1"]
+    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "1",
+           "--bus", str(bus)]
     if ref_mbar:
         cmd += ["--ref-mbar", f"{ref_mbar:.2f}"]
     try:
@@ -529,17 +530,21 @@ def run(args) -> int:
     if args.power_period > 0 and power0:
         power = LockedPowerLog(run_dir / "power.csv", args.power_period)
         power.start()
-    led = pool_led.LedDriver()  # C (steady) until the first set says otherwise
-    led.start()
-    # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the firmware
-    # default at interpreter exit if the normal stop below never ran (QE #101).
-    atexit.register(lambda: None if led.stopped else led.stop())
+    # Nick 2026-10-13 ~9:25 PM: "remove any custom LED flashing sequence". The LED codes (#101)
+    # are opt-in (--led-codes); by default the loop never touches the LED (firmware default).
+    led = pool_led.LedDriver() if args.led_codes else None
+    if led:
+        led.start()
+        # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the
+        # firmware default at interpreter exit if the normal stop below never ran (QE #101).
+        atexit.register(lambda: None if led.stopped else led.stop())
     vbat_hist: list[int] = []
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False
     ref = surface_ref() if args.depth else {}
     ref_mbar, run0_mbar, depth_errors, ups_unknown = ref.get("pressure_mbar"), None, 0, 0
-    manifest["depth"] = {"enabled": args.depth, "sensor": "MS5837-30BA (Bar30) at 0x76",
+    manifest["depth"] = {"enabled": args.depth, "bus": args.depth_bus,
+                         "sensor": "MS5837-30BA (Bar30) at 0x76",
                          "surface_ref": ref or None, "rho_kg_m3": 997.0}
     stop = None
     while stop is None:
@@ -584,10 +589,10 @@ def run(args) -> int:
         line = {"set": n, "run_id": run_id, "clock": clocks(), "run_s": round(t0 - t_start, 1),
                 "usb_before": present, "benched": benched, "pi_before": pi_health(run_dir)}
         read_now = args.depth and depth_errors < DEPTH_DISABLE_AFTER
-        depth = {"start": read_depth(ref_mbar)} if read_now else {}
+        depth = {"start": read_depth(ref_mbar, args.depth_bus)} if read_now else {}
         line.update(run_one_set(n, run_dir, run_config, run_id, cams_now))
         if read_now:
-            depth["end"] = read_depth(ref_mbar)
+            depth["end"] = read_depth(ref_mbar, args.depth_bus)
             for d in depth.values():
                 if d.get("ok"):
                     run0_mbar = run0_mbar or d["pressure_mbar"]
@@ -626,9 +631,10 @@ def run(args) -> int:
             vbat_hist.append(p_now["vbat_mv"])
         else:
             vbat_hist.clear()
-        led.set_mode(pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")),
-                                     len(good) == 3, args.low_vbat_mv))
-        line["led"] = led.mode
+        if led:
+            led.set_mode(pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")),
+                                         len(good) == 3, args.low_vbat_mv))
+            line["led"] = led.mode
         say(health_text(line))
         if line.get("exit_code") not in (0,) and line.get("stderr_tail"):
             say("    stderr: " + " | ".join(line["stderr_tail"][-3:])[:400])
@@ -661,7 +667,9 @@ def run(args) -> int:
         f"({manifest['ok_counts']} OK) in {manifest['run_seconds']:.0f} s")
     # Back to the firmware's steady-on (Nick's spec), except a battery stop keeps B showing:
     # the truest signal, and the firmware takes over the LED at shutdown anyway.
-    led.stop(final=pool_led.LED_FLASHING if stop == "battery_low" else pool_led.FIRMWARE_DEFAULT)
+    if led:
+        led.stop(final=pool_led.LED_FLASHING if stop == "battery_low"
+                 else pool_led.FIRMWARE_DEFAULT)
     os.sync()
     return 0
 
@@ -752,6 +760,11 @@ def main() -> int:
                         "row (0 = off; max one per run, two per day, never in the first 10 min)")
     r.add_argument("--power-period", type=float, default=10.0,
                    help="UPS log period s (0 = off); 4 registers per sample")
+    r.add_argument("--depth-bus", type=int, default=1,
+                   help="I2C bus of the Bar30 (default 1, shared with the UPS; Nick is moving it "
+                        "to its own bus)")
+    r.add_argument("--led-codes", action="store_true",
+                   help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
     r.add_argument("--no-depth", dest="depth", action="store_false",
                    help="skip the MS5837 depth/temperature read at the start and end of each set")
     s = sub.add_parser("summary")

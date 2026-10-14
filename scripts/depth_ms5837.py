@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -129,11 +130,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--model", default="30BA", choices=("30BA", "02BA"))
     ap.add_argument("--samples", type=int, default=1)
+    ap.add_argument("--bus", type=int, default=int(os.environ.get("POOL_BAR30_BUS", "1")),
+                    help="I2C bus number (default 1 or $POOL_BAR30_BUS)")
     ap.add_argument("--ref-mbar", type=float, default=None,
                     help="surface pressure for depth (the arm-time reading)")
     args = ap.parse_args(argv)
     try:
-        out = read(args.model, args.samples)
+        out = read(args.model, args.samples, args.bus)
+        out["bus"] = args.bus
         if args.ref_mbar:
             out["ref_mbar"] = args.ref_mbar
             out["depth_m"] = depth_m(out["pressure_mbar"], args.ref_mbar)
