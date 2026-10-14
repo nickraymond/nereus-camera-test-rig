@@ -57,7 +57,7 @@ Measured on the 3:24 PM cycle (`--wake-min 1`, charger connected):
    - `journalctl -b -1 | grep -i poweroff` shows `systemd-poweroff`, so the shutdown was clean.
    - `lifepo4wered-cli get WAKE_TIME` reads 0.
    - The boards are back: `ls /dev/serial/by-id/` lists both serials. The N6 is
-     `020023000450433547373200` and the AE3 is `0829c14000000000`.
+     `10003500025043364d343000` (the new N6, fitted 2026-10-13) and the AE3 is `0829c14000000000`.
    - Each board answers `get_device_info`. A board that boots into the REPL instead of the
      rig service needs `mpremote connect <by-id path> reset`.
 6. **Log.** `~/ups_power_cycle.log` gets one `CYCLE` line per request and a `REFUSED` line for
