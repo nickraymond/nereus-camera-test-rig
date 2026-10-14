@@ -24,6 +24,11 @@ a Spotter unit folder — raw captures are evidence)
     <run>/<set>/          renders: IMX708 DNG -> sRGB 16-bit TIFF + 8-bit PNG; OpenMV Bayer ->
                           sRGB PNG + 16-bit TIFF + the board JPEG copied unmodified; production
                           crops (PNG lossless + JPEG q95 re-encode)
+    *_captioned.png|.jpg  a COPY of every 8-bit render / crop / board JPEG (and of the rpicam
+                          JPEG shown on the sheet) at full resolution with a black caption bar
+                          appended BELOW it (time Pacific, depth, water temp, camera, W x H,
+                          source file; see host_tools/pool_caption.py). PNG for PNGs, JPEG q95
+                          for JPEGs. The sheet shows the captioned versions.
 
 Example
     .venv/bin/python -m host_tools.pool_render ~/NereusPool/20261014/pool_<run> \\
@@ -51,7 +56,9 @@ Known limitations
     - Spotter 1600x900 JPEGs are used only when their sidecar ScalerCrop proves they are the
       native (1504, 846) crop; otherwise skipped (a downscaled full frame is not comparable 1:1).
     - 1:1 on the sheet means one image pixel per CSS pixel at 100 % browser zoom (a Retina
-      display still doubles it); the PNG sheet is exact.
+      display still doubles it); the PNG sheet is exact. A 1:1 tile is the unresampled crop
+      with a caption bar appended below it (the bar is not part of the crop).
+    - 16-bit TIFFs are not captioned (data products; the 8-bit PNG of the same render is).
 """
 
 from __future__ import annotations
@@ -71,12 +78,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 REPO = Path(__file__).resolve().parents[1]
-if str(REPO / "src") not in sys.path:
-    sys.path.insert(0, str(REPO / "src"))
+for _p in (REPO, REPO / "src"):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
+from host_tools import pool_caption as pc  # noqa: E402
 from nereus_camera_test_rig.color.metrics import SRGB_TO_XYZ  # noqa: E402
 from nereus_camera_test_rig.color.raw_io import (  # noqa: E402
     demosaic_bilinear,
@@ -135,6 +144,16 @@ METHOD = {
              "crops are array slices (no resampling) of the sharpest block (max Laplacian "
              "variance on a block/4 grid) of the scored image; for IMX708 the Mac DNG render "
              "is cut at the same native coordinates (same 4608x2592 geometry, ScalerCrop full).",
+    "caption": "every 8-bit image this tool writes or shows gets a COPY <stem>_captioned.png "
+               "(PNG) / .jpg (JPEG q95) = the image unchanged at full resolution + a black bar "
+               "appended below: capture time in America/Los_Angeles (sets.jsonl clock.pi_utc; + "
+               "run_manifest mac_time_at_start - start_clock.pi_utc when both exist = "
+               "'Mac-anchored', else 'Pi clock'; fallbacks experiment.json timestamp, then the "
+               "exp_<UTC> folder name), depth = mean of the ok Bar30 start/end depth_m (vs the "
+               "arm-time surface; else depth_m_run_start, 'vs run start'; fresh-water pressure "
+               "proxy computed on the Pi), water = mean Bar30 temp_c, camera, the captioned "
+               "image's own W x H, source file. 'n/a' when absent. Font = width/32 px (min 14; "
+               "down to width/36 to keep 2 lines); long names wrap or are middle-ellipsized.",
     "spotter": "each 4608x2592 JPEG under <spotter-root>/bmcam*/ is cut at the production "
                "coordinates and scored with the same metrics; best per unit by "
                "sharpness_lapvar (non-FAIL first). 1600x900 JPEGs only when the sidecar "
@@ -148,7 +167,7 @@ SCORE_FIELDS = ["run", "set", "set_rel", "camera", "scored_role", "file", "bytes
                 "status", "reason", "selected_rank", "rendered"]
 CROP_FIELDS = ["run", "set", "source", "source_bytes", "lens_position", "mean_luma",
                "clip_hi_pct", "clip_lo_pct", "sharpness_lapvar", "tenengrad", "status",
-               "reason", "png", "jpg"]
+               "reason", "png", "jpg", "png_captioned", "jpg_captioned"]
 
 
 # --- context: warnings, inputs, outputs ---------------------------------------------------
@@ -160,6 +179,8 @@ class Ctx:
     inputs: dict[str, dict] = field(default_factory=dict)
     outputs: list[dict] = field(default_factory=list)
     timings: dict[str, Any] = field(default_factory=lambda: {"per_set_s": {}, "dng_render_s": {}})
+    run_meta: dict[Path, pc.RunMeta] = field(default_factory=dict)  # caption sources per run
+    captions: dict[Path, pc.SetCaption] = field(default_factory=dict)  # per set folder
 
     def warn(self, msg: str) -> None:
         self.warnings.append(msg)
@@ -451,6 +472,31 @@ def rgb_to_bgr(rgb: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(rgb[..., ::-1])
 
 
+# --- caption bars (see host_tools/pool_caption.py) ------------------------------------------
+
+def set_caption(ctx: Ctx, run: Path, set_dir: Path) -> pc.SetCaption:
+    """Caption values for a set (time / depth / water), read once per run and set."""
+    if run not in ctx.run_meta:
+        ctx.run_meta[run] = pc.load_run(run, ctx.warn)
+    if set_dir not in ctx.captions:
+        ctx.captions[set_dir] = pc.set_caption(ctx.run_meta[run], set_dir, ctx.warn)
+    return ctx.captions[set_dir]
+
+
+def captioned_path(path: Path) -> Path:
+    """``<stem>_captioned.png`` next to a PNG, ``<stem>_captioned.jpg`` next to a JPEG."""
+    ext = ".jpg" if path.suffix.lower() in (".jpg", ".jpeg") else ".png"
+    return path.with_name(f"{path.stem}_captioned{ext}")
+
+
+def write_captioned(ctx: Ctx, path: Path, captioned: np.ndarray, kind: str) -> Path:
+    """Write an already captioned array next to ``path`` (the uncaptioned output)."""
+    dst = captioned_path(path)
+    if dst.suffix == ".jpg":
+        return write_jpg(ctx, dst, captioned, f"{kind}_captioned", 95)
+    return write_png(ctx, dst, captioned, f"{kind}_captioned")
+
+
 # --- pass 1: score every set ----------------------------------------------------------------
 
 def _set_out(ctx: Ctx, run: Path, set_dir: Path) -> Path:
@@ -542,6 +588,10 @@ def crop_rows(ctx: Ctx, run: Path, set_dir: Path, files: dict, records: dict,
         out_dir = _set_out(ctx, run, set_dir)
         png = write_png(ctx, out_dir / f"{stem}.png", crop, "imx708_prod_crop_png")
         jpg = write_jpg(ctx, out_dir / f"{stem}.jpg", crop, "imx708_prod_crop_jpg_q95")
+        cap = pc.add_caption(crop, set_caption(ctx, run, set_dir), "imx708",
+                             f"production crop x{PROD_CROP[0]} y{PROD_CROP[1]} of {path.name}")
+        cpng = write_captioned(ctx, png, cap, "imx708_prod_crop_png")
+        cjpg = write_captioned(ctx, jpg, cap, "imx708_prod_crop_jpg_q95")
         m = frame_metrics(to_gray(crop))
         status, reason = classify(m["mean_luma"], m["clip_hi_pct"])
         meta = _imx708_meta(files, role, records, ctx)
@@ -549,7 +599,10 @@ def crop_rows(ctx: Ctx, run: Path, set_dir: Path, files: dict, records: dict,
                      "source_bytes": path.stat().st_size,
                      "lens_position": meta.get("LensPosition"), **m, "status": status,
                      "reason": reason, "png": str(png.relative_to(ctx.out)),
-                     "jpg": str(jpg.relative_to(ctx.out)), "_png": png})
+                     "jpg": str(jpg.relative_to(ctx.out)),
+                     "png_captioned": str(cpng.relative_to(ctx.out)),
+                     "jpg_captioned": str(cjpg.relative_to(ctx.out)), "_png": png,
+                     "_cap_png": cpng, "_cap_wh": (cap.shape[1], cap.shape[0])})
     return rows
 
 
@@ -620,18 +673,30 @@ def _tile(ctx: Ctx, img_bgr: np.ndarray, name: str, label: str) -> Tile:
     return Tile(path, label, img_bgr.shape[1], img_bgr.shape[0])
 
 
-def thumb_tile(ctx: Ctx, bgr: np.ndarray, width: int, name: str, what: str) -> Tile:
+def thumb_tile(ctx: Ctx, bgr: np.ndarray, width: int, name: str, what: str,
+               bar_h: int = 0) -> Tile:
+    """Scaled full frame; ``bar_h`` = rows of caption bar at the bottom of ``bgr``."""
     h, w = bgr.shape[:2]
     tw = min(width, w)
     th = max(1, round(h * tw / w))
     small = bgr if tw == w else cv2.resize(bgr, (tw, th), interpolation=cv2.INTER_AREA)
-    return _tile(ctx, small, name, f"{what}: full frame {w}x{h}, scaled to {100 * tw / w:.1f} %")
+    bar = " + caption bar" if bar_h else ""
+    return _tile(ctx, small, name,
+                 f"{what}: full frame {w}x{h - bar_h}{bar}, scaled to {100 * tw / w:.1f} %")
 
 
-def crop_tile(ctx: Ctx, bgr: np.ndarray, box: tuple, name: str, what: str) -> Tile:
+def crop_tile(ctx: Ctx, bgr: np.ndarray, box: tuple, name: str, what: str,
+              cap: Optional[tuple] = None) -> Tile:
+    """1:1 array slice (no resampling); ``cap`` = (SetCaption, camera, source file name) appends
+    a caption bar below the slice (the bar is not part of the crop)."""
     x, y, w, h = box
-    return _tile(ctx, np.ascontiguousarray(bgr[y:y + h, x:x + w]), name,
-                 f"{what}: 1:1 crop, native px {x},{y},{w},{h}")
+    crop = np.ascontiguousarray(bgr[y:y + h, x:x + w])
+    if cap is None:
+        return _tile(ctx, crop, name, f"{what}: 1:1 crop, native px {x},{y},{w},{h}")
+    info, camera, src = cap
+    tile = pc.add_caption(crop, info, camera, f"1:1 crop x{x} y{y} of {src}")
+    return _tile(ctx, tile, name, f"{what}: 1:1 crop, native px {x},{y},{w},{h} "
+                                  "(+ caption bar below, not part of the crop)")
 
 
 def _fmt(v, nd=1) -> str:
@@ -658,6 +723,7 @@ def caption(row: dict) -> list[str]:
 def render_imx708_row(ctx: Ctx, row: dict, rank: Optional[int]) -> Optional[Block]:
     files, records = row["_files"], row["_records"]
     set_out = _set_out(ctx, row["_run"], row["_set_dir"])
+    cinfo = set_caption(ctx, row["_run"], row["_set_dir"])
     dng_bgr = None
     if files.get("dng"):
         meta = _imx708_meta(files, "raw_jpg", records, ctx)
@@ -675,7 +741,9 @@ def render_imx708_row(ctx: Ctx, row: dict, rank: Optional[int]) -> Optional[Bloc
             write_tiff16(ctx, set_out / f"{stem}_16bit.tif", srgb16, "imx708_dng_render_tiff16")
             dng_bgr = rgb_to_bgr(to8(srgb16))
             del srgb16
-            write_png(ctx, set_out / f"{stem}_8bit.png", dng_bgr, "imx708_dng_render_png8")
+            png = write_png(ctx, set_out / f"{stem}_8bit.png", dng_bgr, "imx708_dng_render_png8")
+            write_captioned(ctx, png, pc.add_caption(dng_bgr, cinfo, "imx708", files["dng"].name),
+                            "imx708_dng_render_png8")
             secs = round(time.monotonic() - t0, 2)
             ctx.timings["dng_render_s"][f"{row['run']}/{row['set']}"] = secs
             ctx.timings.setdefault("dng_render_info", {})[f"{row['run']}/{row['set']}"] = info
@@ -687,11 +755,18 @@ def render_imx708_row(ctx: Ctx, row: dict, rank: Optional[int]) -> Optional[Bloc
         return None
     bgr = cv2.imread(str(row["_path"]), JPEG_FLAGS)
     box = sharpest_block(to_gray(bgr), BLOCK["imx708"])
-    pre = f"imx708_r{rank}"
-    tiles = [thumb_tile(ctx, bgr, THUMB_W["imx708"], f"{pre}_full.png", "rpicam JPEG"),
-             crop_tile(ctx, bgr, box, f"{pre}_crop_jpeg.png", "rpicam JPEG")]
+    pre, jpg_name = f"imx708_r{rank}", row["_path"].name
+    # The rpicam JPEG is an original (never copied); its captioned copy is what the sheet shows.
+    cap = pc.add_caption(bgr, cinfo, "imx708", jpg_name)
+    write_captioned(ctx, set_out / jpg_name, cap, "imx708_rpicam_jpeg")
+    tiles = [thumb_tile(ctx, cap, THUMB_W["imx708"], f"{pre}_full.png", "rpicam JPEG",
+                        bar_h=cap.shape[0] - bgr.shape[0]),
+             crop_tile(ctx, bgr, box, f"{pre}_crop_jpeg.png", "rpicam JPEG",
+                       (cinfo, "imx708", jpg_name))]
+    del cap
     if dng_bgr is not None and dng_bgr.shape[:2] == bgr.shape[:2]:
-        tiles.append(crop_tile(ctx, dng_bgr, box, f"{pre}_crop_dng.png", "Mac DNG render"))
+        tiles.append(crop_tile(ctx, dng_bgr, box, f"{pre}_crop_dng.png", "Mac DNG render",
+                               (cinfo, "imx708", files["dng"].name)))
     elif dng_bgr is not None:
         ctx.warn(f"{row['set']}: DNG render {dng_bgr.shape[1]}x{dng_bgr.shape[0]} != JPEG; "
                  "no same-coordinate DNG crop")
@@ -701,31 +776,41 @@ def render_imx708_row(ctx: Ctx, row: dict, rank: Optional[int]) -> Optional[Bloc
 def render_openmv_row(ctx: Ctx, row: dict, rank: Optional[int]) -> Optional[Block]:
     files, camera = row["_files"], row["camera"]
     set_out = _set_out(ctx, row["_run"], row["_set_dir"])
+    cinfo = set_caption(ctx, row["_run"], row["_set_dir"])
     srgb16, info = render_openmv(files["bayer"], ctx)
     stem = f"{files['bayer'].stem}_mac_grayworld"
     bgr = rgb_to_bgr(to8(srgb16))
-    write_png(ctx, set_out / f"{stem}_8bit.png", bgr, f"{camera}_bayer_render_png8")
+    png = write_png(ctx, set_out / f"{stem}_8bit.png", bgr, f"{camera}_bayer_render_png8")
+    cap = pc.add_caption(bgr, cinfo, camera, files["bayer"].name)
+    write_captioned(ctx, png, cap, f"{camera}_bayer_render_png8")
     write_tiff16(ctx, set_out / f"{stem}_16bit.tif", srgb16, f"{camera}_bayer_render_tiff16")
-    board = files.get("board_jpg")
+    board, board_cap = files.get("board_jpg"), None
     if board is not None:
         dst = set_out / f"{board.stem}_board_isp_render.jpg"
         shutil.copy2(board, dst)
         ctx.use(board, row["_records"])
         ctx.wrote(dst, f"{camera}_board_isp_jpeg_copy")
+        board_bgr = cv2.imread(str(board), JPEG_FLAGS)
+        if board_bgr is None:
+            ctx.warn(f"{row['set']}: {board.name} unreadable; no captioned board JPEG")
+        else:
+            board_cap = pc.add_caption(board_bgr, cinfo, camera, board.name)
+            write_captioned(ctx, dst, board_cap, f"{camera}_board_isp_jpeg")
+            board_bar = board_cap.shape[0] - board_bgr.shape[0]
     else:
         ctx.warn(f"{row['set']}: {camera} has no board JPEG to copy")
     row["rendered"] = True
     ctx.timings.setdefault("openmv_render_info", {})[f"{row['run']}/{row['set']}/{camera}"] = info
     if rank is None:
         return None
-    pre = f"{camera}_r{rank}"
-    tiles = [thumb_tile(ctx, bgr, THUMB_W[camera], f"{pre}_full.png", "Mac gray-world AWB render"),
+    pre, what = f"{camera}_r{rank}", "Mac gray-world AWB render"
+    tiles = [thumb_tile(ctx, cap, THUMB_W[camera], f"{pre}_full.png", what,
+                        bar_h=cap.shape[0] - bgr.shape[0]),
              crop_tile(ctx, bgr, sharpest_block(to_gray(bgr), BLOCK[camera]), f"{pre}_crop.png",
-                       "Mac gray-world AWB render")]
-    board_bgr = cv2.imread(str(board), JPEG_FLAGS) if board is not None else None
-    if board_bgr is not None:
-        tiles.append(thumb_tile(ctx, board_bgr, THUMB_W[camera], f"{pre}_board_full.png",
-                                "board ISP render (board JPEG, auto AWB)"))
+                       what, (cinfo, camera, files["bayer"].name))]
+    if board_cap is not None:
+        tiles.append(thumb_tile(ctx, board_cap, THUMB_W[camera], f"{pre}_board_full.png",
+                                "board ISP render (board JPEG, auto AWB)", bar_h=board_bar))
     return Block(f"{camera} #{rank}", caption(row), tiles)
 
 
@@ -828,6 +913,12 @@ def spotter_best(ctx: Ctx, root: Path) -> tuple[list[dict], list[str]]:
         crop, _note = spotter_crop(pick["path"])  # re-decode the winner only (memory)
         out = ctx.out / "spotter" / f"{unit}__{pick['path'].stem}_prodcrop.png"
         pick["png"] = write_png(ctx, out, crop, "spotter_prod_crop_png")
+        src = pick["path"].name
+        cap = pc.add_caption(crop, pc.unknown_caption(f"Spotter {unit} file"), f"IMX708 {unit}",
+                             src if pick["note"].startswith("native") else
+                             f"production crop x{PROD_CROP[0]} y{PROD_CROP[1]} of {src}")
+        pick["cap_png"] = write_captioned(ctx, out, cap, "spotter_prod_crop_png")
+        pick["cap_wh"] = (cap.shape[1], cap.shape[0])
         best.append(pick)
     return best, notes
 
@@ -843,7 +934,6 @@ def spotter_section(ctx: Ctx, crops: list[dict], spotter: list[dict], notes: lis
     blocks = []
     ours = best_of(crops)
     if ours is not None:
-        png = ours["_png"]
         blocks.append(Block("this rig: best IMX708 production crop",
                             [f"{ours['run']} / {ours['set']} / {ours['source']} "
                              f"({ours['source_bytes']} B)",
@@ -851,7 +941,8 @@ def spotter_section(ctx: Ctx, crops: list[dict], spotter: list[dict], notes: lis
                              f"{_fmt(ours['sharpness_lapvar'])}, mean {_fmt(ours['mean_luma'])}, "
                              f"clip hi {_fmt(ours['clip_hi_pct'], 2)} %, {ours['status']}"
                              f"{_fallback_note(ours)}"],
-                            [Tile(png, "rig IMX708: 1:1 production crop", *PROD_CROP[2:])]))
+                            [Tile(ours["_cap_png"], "rig IMX708: 1:1 production crop "
+                                  "(+ caption bar below)", *ours["_cap_wh"])]))
     else:
         head.append("this rig: no 4608x2592 IMX708 JPEG to crop")
     if root is None:
@@ -868,8 +959,8 @@ def spotter_section(ctx: Ctx, crops: list[dict], spotter: list[dict], notes: lis
                              f"mean {_fmt(s['mean_luma'])}, "
                              f"clip hi {_fmt(s['clip_hi_pct'], 2)} %, {s['status']}"
                              f"{_fallback_note(s)}"],
-                            [Tile(s["png"], f"{s['unit']}: 1:1 production crop",
-                                  *PROD_CROP[2:])]))
+                            [Tile(s["cap_png"], f"{s['unit']}: 1:1 production crop "
+                                  "(+ caption bar below)", *s["cap_wh"])]))
     if not spotter:
         head.append(f"no Spotter files found under {root}")
     return head, blocks
@@ -990,7 +1081,7 @@ def run_inputs(ctx: Ctx, run: Path) -> None:
             ctx.use(run / name)
 
 
-def title_lines(runs, n_sets, rows, seconds, args) -> list[str]:
+def title_lines(runs, n_sets, rows, seconds, args, run_meta=None) -> list[str]:
     per_cam = []
     for c in CAMERAS:
         cam = [r for r in rows if r["camera"] == c]
@@ -1008,7 +1099,13 @@ def title_lines(runs, n_sets, rows, seconds, args) -> list[str]:
             "darker and contrast flatter than the rpicam JPEG by design.",
             f"Status legend (luma of the scored image): FAIL = clip_hi > {FAIL_CLIP_HI_PCT:g} % "
             f"(luma >= {CLIP_HI_LEVEL}) or mean < {FAIL_MEAN:g} or unreadable; WARN = clip_hi > "
-            f"{WARN_CLIP_HI_PCT:g} % or mean < {WARN_MEAN_LO:g} or > {WARN_MEAN_HI:g}; else PASS."]
+            f"{WARN_CLIP_HI_PCT:g} % or mean < {WARN_MEAN_LO:g} or > {WARN_MEAN_HI:g}; else PASS.",
+            "Caption bar (appended below each image, never over it): capture time Pacific "
+            "(Pi clock or Mac-anchored), depth = Bar30 fresh-water pressure proxy vs the "
+            "arm-time surface (else 'vs run start'), water temp = Bar30, camera, image W x H "
+            "px, source file; 'n/a' = not recorded."] + [
+            f"Caption times {m.run.name}: {'; '.join(m.notes)}"
+            for m in (run_meta or {}).values()]
 
 
 # --- main ----------------------------------------------------------------------------------------
@@ -1071,6 +1168,11 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+    try:
+        pc.font(pc.MIN_FONT_PX)  # caption font: fail before the run, not after 90 s of work
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
     out.mkdir(parents=True, exist_ok=True)
     setup_logging(out)
     try:
@@ -1087,6 +1189,9 @@ def _run(ctx: Ctx, args, argv, runs: list[Path], root: Optional[Path], t_start: 
     if root is not None and out.is_relative_to(root):
         ctx.warn(f"output folder is inside --spotter-root {root} (outside its bmcam* unit folders)")
 
+    for run in runs:
+        ctx.run_meta[run] = pc.load_run(run, ctx.warn)
+        LOG.info("  captions %s: %s", run.name, "; ".join(ctx.run_meta[run].notes))
     sets = [(run, s) for run in runs for s in discover_sets(run)]
     LOG.info("found %d set(s)", len(sets))
     rows, crops = [], []
@@ -1131,7 +1236,7 @@ def _run(ctx: Ctx, args, argv, runs: list[Path], root: Optional[Path], t_start: 
     head, sblocks = spotter_section(ctx, crops, spotter, notes, root, rig_lens)
     sections.append(("IMX708 vs Spotter production crop", head, sblocks))
     t0 = time.monotonic()
-    title = title_lines(runs, len(sets), rows, time.monotonic() - t_start, args)
+    title = title_lines(runs, len(sets), rows, time.monotonic() - t_start, args, ctx.run_meta)
     sheet_html(ctx, title, sections)
     sheet_png(ctx, title, sections)
     ctx.timings["sheet_s"] = round(time.monotonic() - t0, 2)
@@ -1166,6 +1271,7 @@ def _run(ctx: Ctx, args, argv, runs: list[Path], root: Optional[Path], t_start: 
                      "fallback_all_fail": s.get("fallback_all_fail"),
                      "lens_position": s["meta"].get("LensPosition")} for s in spotter],
         "spotter_notes": notes,
+        "captions": {m.run.name: m.summary() for m in ctx.run_meta.values()},
         "timings": ctx.timings,
         "inputs": list(ctx.inputs.values()),
         "outputs": ctx.outputs,
