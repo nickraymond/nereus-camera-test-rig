@@ -142,7 +142,7 @@ def main(argv=None) -> int:
             out["ref_mbar"] = args.ref_mbar
             out["depth_m"] = depth_m(out["pressure_mbar"], args.ref_mbar)
     except Exception as exc:  # fail-soft by contract: the caller logs it, capture goes on
-        out = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        out = {"ok": False, "error": f"{type(exc).__name__}: {exc}", "bus": args.bus}
     print(json.dumps(out), flush=True)
     return 0
 

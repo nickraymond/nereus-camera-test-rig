@@ -760,9 +760,9 @@ def main() -> int:
                         "row (0 = off; max one per run, two per day, never in the first 10 min)")
     r.add_argument("--power-period", type=float, default=10.0,
                    help="UPS log period s (0 = off); 4 registers per sample")
-    r.add_argument("--depth-bus", type=int, default=1,
-                   help="I2C bus of the Bar30 (default 1, shared with the UPS; Nick is moving it "
-                        "to its own bus)")
+    r.add_argument("--depth-bus", type=int, default=int(os.environ.get("POOL_BAR30_BUS", "1")),
+                   help="I2C bus of the Bar30 (default $POOL_BAR30_BUS or 1; 1 is shared with "
+                        "the UPS and Nick is moving it to its own bus)")
     r.add_argument("--led-codes", action="store_true",
                    help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
     r.add_argument("--no-depth", dest="depth", action="store_false",

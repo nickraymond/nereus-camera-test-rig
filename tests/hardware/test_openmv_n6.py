@@ -30,7 +30,7 @@ from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 
 # The N6 on the nereus002 rig (OpenMV v5.0.1; Phase 3's N6 was 005537493543). Override via
 # the N6_SERIAL env var.
-N6_SERIAL = os.environ.get("N6_SERIAL", "020023000450433547373200")
+N6_SERIAL = os.environ.get("N6_SERIAL", "10003500025043364d343000")
 
 
 def _n6_port():

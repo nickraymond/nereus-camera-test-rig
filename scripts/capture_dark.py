@@ -30,7 +30,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT)]
 
 from nereus_camera_test_rig.color.raw_io import read_dng, read_openmv_bayer  # noqa: E402
 
-SERIALS = {"n6": "020023000450433547373200", "ae3": "0829c14000000000"}  # nereus002
+SERIALS = {"n6": "10003500025043364d343000", "ae3": "0829c14000000000"}  # nereus002
 MIN_GAIN_DB = 3.152157
 
 

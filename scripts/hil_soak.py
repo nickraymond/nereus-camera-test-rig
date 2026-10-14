@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERIALS = {"openmv_n6": "020023000450433547373200", "openmv_ae3": "0829c14000000000"}
+SERIALS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c14000000000"}
 CYCLE_TIMEOUT_S = 600  # a healthy cycle takes ~90-110 s on nereus002
 
 

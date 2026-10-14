@@ -4,6 +4,7 @@ and never removes a stand-down flag Nick made himself; other crontab lines survi
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -37,6 +38,8 @@ def sandbox(tmp_path):
     (fake / "lifepo4wered-cli").write_text("#!/bin/bash\necho 1791930000\n")
     if shutil.which("sha256sum") is None:  # macOS: shasum has the same output format
         (fake / "sha256sum").write_text('#!/bin/bash\nexec shasum -a 256 "$@"\n')
+    if shutil.which("timeout") is None:  # macOS has no coreutils timeout: run without a limit
+        (fake / "timeout").write_text('#!/bin/bash\nshift\nexec "$@"\n')
     for f in fake.iterdir():
         f.chmod(0o755)
     env = {**os.environ, "HOME": str(home), "POOL_MODE_PATH_PREFIX": str(fake),
@@ -83,3 +86,14 @@ def test_rearm_keeps_ownership_of_pool_modes_flag(sandbox):
     assert run("arm", "--hours", "2").returncode == 0  # second arm: flag is "ours"
     assert run("disarm").returncode == 0
     assert not (home / ".no_dive_autostart").exists()
+
+
+def test_arm_surface_read_uses_the_depth_bus_both_forms(sandbox, tmp_path):
+    """--depth-bus N and --depth-bus=N both reach the arm-time surface read (QE #104)."""
+    home, run = sandbox
+    for args in (["--depth-bus", "3"], ["--depth-bus=3"]):
+        r = run("arm", *args)
+        assert r.returncode == 0, r.stdout + r.stderr
+        ref = json.loads((ROOT / "results" / "pool" / "surface_ref.json").read_text())
+        assert ref.get("bus") == 3, ref  # the requested bus, recorded even when the read fails
+        assert run("disarm").returncode == 0

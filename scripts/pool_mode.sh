@@ -87,8 +87,13 @@ cmd_arm() {
   ntp="$(timedatectl show -p NTPSynchronized --value 2>/dev/null)"
   echo "{\"armed_pi_utc\": \"$(date -u -Iseconds)\", \"pi_epoch\": $(date +%s), \"ups_rtc_epoch\": ${rtc:-null}, \"ntp\": \"${ntp:-unknown}\"}" >"$POOL/arm_clock_$(ts).json"
   # Surface pressure for depth (fail-soft: an error is recorded, the loop then uses its run start).
-  local dbus=1 i; for ((i = 0; i < ${#args[@]}; i++)); do  # the run's --depth-bus, if given
-    [ "${args[$i]}" = "--depth-bus" ] && dbus="${args[$((i + 1))]:-1}"; done
+  local dbus="${POOL_BAR30_BUS:-1}" i  # the run's --depth-bus N / --depth-bus=N, if given
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    case "${args[$i]}" in
+      --depth-bus) dbus="${args[$((i + 1))]:-$dbus}" ;;
+      --depth-bus=*) dbus="${args[$i]#--depth-bus=}" ;;
+    esac
+  done
   timeout 15 /usr/bin/python3 "$ROOT/scripts/depth_ms5837.py" --samples 5 --bus "$dbus" >"$POOL/surface_ref.json" 2>/dev/null \
     || echo '{"ok": false, "error": "depth script failed"}' >"$POOL/surface_ref.json"
   say "surface ref (depth zero): $(head -c 160 "$POOL/surface_ref.json")"
@@ -130,8 +135,9 @@ cmd_supervise() {  # runs detached; restarts an abnormal exit
       0) say "loop ended cleanly"; break ;;
       3|4) say "loop refused to start (rc=$rc), not restarting"; break ;;
     esac
-    # Abnormal exit: the loop may have died mid LED pattern; back to the firmware default.
-    lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true
+    # Abnormal exit mid LED pattern: back to the firmware default, but ONLY if this run drives
+    # the LED (--led-codes); otherwise pool mode never touches the LED (Nick, 2026-10-13).
+    case " $* " in *" --led-codes "*) lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true ;; esac
     [ -e "$NO_RESTART" ] && { say "stop requested, not restarting (rc=$rc)"; break; }
     restarts=$((restarts + 1))
     [ "$restarts" -gt "$MAX_RESTARTS" ] && { say "FAIL: $MAX_RESTARTS restarts used, giving up"; break; }

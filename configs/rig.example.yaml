@@ -15,7 +15,7 @@ cameras:
     enabled: true
     driver: "openmv_usb"
     board: "n6"
-    serial_number: "020023000450433547373200"   # USB serial (nereus002, OpenMV v5.0.1); NOT /dev/ttyACM* (§12)
+    serial_number: "10003500025043364d343000"   # USB serial: NEW N6 fitted 2026-10-13 (old 020023000450433547373200 retired; same fw v5.0.1); NOT /dev/ttyACM* (§12)
     profile: "configs/cameras/openmv_n6.yaml"
   openmv_ae3:
     enabled: true
