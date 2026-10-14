@@ -45,8 +45,14 @@ def sandbox(tmp_path):
     env = {**os.environ, "HOME": str(home), "POOL_MODE_PATH_PREFIX": str(fake),
            "POOL_PYTHON": sys.executable}
 
+    # Run a COPY of scripts/ so the script's ROOT (and results/pool/) is inside tmp_path:
+    # nothing is ever written into the checkout (QE #105).
+    repo = tmp_path / "repo"
+    shutil.copytree(ROOT / "scripts", repo / "scripts")
+    script = repo / "scripts" / "pool_mode.sh"
+
     def run(*args):
-        return subprocess.run(["bash", str(SCRIPT), *args], env=env, capture_output=True,
+        return subprocess.run(["bash", str(script), *args], env=env, capture_output=True,
                               text=True, timeout=60)
     return home, run
 
@@ -94,6 +100,7 @@ def test_arm_surface_read_uses_the_depth_bus_both_forms(sandbox, tmp_path):
     for args in (["--depth-bus", "3"], ["--depth-bus=3"]):
         r = run("arm", *args)
         assert r.returncode == 0, r.stdout + r.stderr
-        ref = json.loads((ROOT / "results" / "pool" / "surface_ref.json").read_text())
+        ref = json.loads((tmp_path / "repo" / "results" / "pool" / "surface_ref.json")
+                         .read_text())
         assert ref.get("bus") == 3, ref  # the requested bus, recorded even when the read fails
         assert run("disarm").returncode == 0
