@@ -84,6 +84,10 @@ cmd_arm() {
   # Clock anchor while the Pi still has NTP: Pi clock vs the UPS RTC (the RTC keeps running on
   # the battery in the pool; the Pi clock does not survive a power-off).
   echo "{\"armed_pi_utc\": \"$(date -u -Iseconds)\", \"pi_epoch\": $(date +%s), \"ups_rtc_epoch\": $(lifepo4wered-cli get RTC_TIME 2>/dev/null | tr -dc '0-9' || echo null), \"ntp\": \"$(timedatectl show -p NTPSynchronized --value 2>/dev/null)\"}" >"$POOL/arm_clock_$(ts).json"
+  # Surface pressure for depth (fail-soft: an error is recorded, the loop then uses its run start).
+  /usr/bin/python3 "$ROOT/scripts/depth_ms5837.py" --samples 5 >"$POOL/surface_ref.json" 2>/dev/null \
+    || echo '{"ok": false, "error": "depth script failed"}' >"$POOL/surface_ref.json"
+  say "surface ref (depth zero): $(head -c 160 "$POOL/surface_ref.json")"
   say "ARMED: boot-start on; args: ${args[*]+${args[*]}}; crontab backup $bk"
   crontab -l | grep "$CRON_MARK"
   say "dive-autostart stood down: $DIVE_FLAG (pre-arm: $flag_state; $(head -c 80 "$DIVE_FLAG"))"
