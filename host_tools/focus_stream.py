@@ -225,7 +225,7 @@ def _raise_keyboard_interrupt(signum, frame):
 
 
 def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
-        http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT):
+        http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT, fps=0.0):
     import serial
 
     dev = port or find_port(serial_number)
@@ -237,6 +237,8 @@ def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=
     command_id = "focus-stream"
     # max_seconds caps each board-side stream segment; the reader re-requests to stay live.
     settings = {"framesize": framesize, "jpeg_quality": quality, "max_seconds": max_seconds}
+    if fps:
+        settings["fps"] = fps  # board-side cap; boards with older code ignore unknown keys
 
     state = StreamState()
     reader = threading.Thread(
@@ -282,11 +284,14 @@ def main(argv=None):
                         help="per-segment board stream cap; reader re-requests to stay live")
     parser.add_argument("--http-host", default="0.0.0.0")
     parser.add_argument("--http-port", type=int, default=DEFAULT_HTTP_PORT)
+    parser.add_argument("--fps", type=float, default=0.0,
+                        help="board-side frame-rate cap (0 = unlimited; e.g. 10 for the N6 to "
+                             "match the AE3 and draw less current)")
     args = parser.parse_args(argv)
     try:
         run(serial_number=args.serial_number, port=args.port, framesize=args.framesize,
             quality=args.quality, max_seconds=args.max_seconds,
-            http_host=args.http_host, http_port=args.http_port)
+            http_host=args.http_host, http_port=args.http_port, fps=args.fps)
     except RuntimeError as exc:
         print("focus stream failed: %s" % exc, file=sys.stderr)
         return 1

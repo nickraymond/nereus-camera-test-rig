@@ -374,6 +374,10 @@ def stream_frames(usb, command_id, board_config, settings):
     )
     quality = int(settings.get("jpeg_quality", board_config.STREAM_DEFAULT_QUALITY))
     max_seconds = int(settings.get("max_seconds", board_config.STREAM_MAX_SECONDS))
+    # Optional frame-rate cap (0 = as fast as the board can, the old behaviour). Fewer frames
+    # = less CPU/USB activity and current: Nick 2026-10-13, N6 at 10 fps like the AE3.
+    fps = float(settings.get("fps", 0) or 0)
+    period_ms = int(1000 / fps) if fps > 0 else 0
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -392,6 +396,7 @@ def stream_frames(usb, command_id, board_config, settings):
             break
         if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
             break
+        t_frame = time.ticks_ms()
         img = sensor.snapshot()
         img.compress(quality=quality)
         data = img.bytearray()
@@ -401,5 +406,9 @@ def stream_frames(usb, command_id, board_config, settings):
         ))
         usb.write(data)
         seq += 1
+        if period_ms:
+            rest = period_ms - time.ticks_diff(time.ticks_ms(), t_frame)
+            if rest > 0:
+                time.sleep_ms(rest)
 
     usb.write(cp.encode_message(cp.completed_response(command_id, {"frames": seq})))
