@@ -182,6 +182,13 @@ def test_crop_rows_on_full_native_jpeg(tmp_path):
     src = cv2.imread(str(set_dir / f"captures/imx708/imx708_raw_{TS}.jpg"), pr.JPEG_FLAGS)
     assert np.array_equal(png, src[846:846 + 900, 1504:1504 + 1600])  # PNG is lossless
     assert (tmp_path / "out" / crops[0]["jpg"]).stat().st_size > 0
+    # captioned copies: same pixels on top, black bar appended below, full resolution
+    cap = cv2.imread(str(tmp_path / "out" / crops[0]["png_captioned"]))
+    assert crops[0]["png_captioned"].endswith("_prodcrop_1504_846_1600x900_captioned.png")
+    assert cap.shape[1] == 1600 and cap.shape[0] > 900
+    assert cap[:900].tobytes() == png.tobytes()
+    cjpg = cv2.imread(str(tmp_path / "out" / crops[0]["jpg_captioned"]))
+    assert crops[0]["jpg_captioned"].endswith("_captioned.jpg") and cjpg.shape == cap.shape
 
 
 # --- selection ----------------------------------------------------------------------------------
@@ -305,6 +312,53 @@ def test_main_end_to_end_synthetic(tmp_path):
     ).read_bytes()
 
 
+def test_main_captioned_outputs_and_sheet(tmp_path):
+    run = tmp_path / "pool_run"
+    set_dir = _make_set(run, cameras=("imx708", "openmv_n6"))
+    (run / "run_manifest.json").write_text(json.dumps({
+        "mac_time_at_start": "2026-10-14T10:00:30-07:00",
+        "start_clock": {"pi_utc": "2026-10-14T17:00:00+00:00"}}))
+    ok = {"ok": True, "pressure_mbar": 1130.0, "temp_c": 21.0, "depth_m": 1.5}
+    line = {"set": 1, "experiment": f"2026-10-14/exp_{TS}_pool",
+            "clock": {"pi_utc": "2026-10-14T17:00:00+00:00"}, "depth": {"start": ok, "end": ok}}
+    (run / "sets.jsonl").write_text(json.dumps(line) + "\n" + '{"set": 2, "exp')  # torn tail
+    before = _tree(run)
+    assert pr.main([str(run)]) == 0
+    assert _tree(run) == before  # originals byte-identical, nothing added to the run
+    out = tmp_path / "pool_run_render"
+    set_out = out / "pool_run" / set_dir.name
+    pairs = [(f"imx708_raw_{TS}_mac_srgb_8bit.png", f"imx708_raw_{TS}_mac_srgb_8bit_captioned.png"),
+             (f"openmv_n6_raw_{TS}_mac_grayworld_8bit.png",
+              f"openmv_n6_raw_{TS}_mac_grayworld_8bit_captioned.png")]
+    for plain, captioned in pairs:
+        a, b = cv2.imread(str(set_out / plain)), cv2.imread(str(set_out / captioned))
+        assert b.shape[1] == a.shape[1] and b.shape[0] > a.shape[0], captioned
+        assert b[:a.shape[0]].tobytes() == a.tobytes(), captioned
+    for jpg in (f"openmv_n6_image_{TS}_board_isp_render_captioned.jpg",
+                f"imx708_raw_{TS}_captioned.jpg"):  # board JPEG copy + the rpicam JPEG shown
+        assert cv2.imread(str(set_out / jpg)) is not None, jpg
+    manifest = json.loads((out / "render_manifest.json").read_text())
+    cap = manifest["captions"]["pool_run"]
+    assert cap["time_basis"] == "Mac-anchored" and cap["mac_minus_pi_s"] == 30
+    assert cap["sets_jsonl_bad_lines"] == 1 and cap["sets_with_depth"] == 1
+    kinds = {o["kind"] for o in manifest["outputs"]}
+    assert {"imx708_dng_render_png8_captioned", "openmv_n6_bayer_render_png8_captioned",
+            "openmv_n6_board_isp_jpeg_captioned", "imx708_rpicam_jpeg_captioned"} <= kinds
+    assert "caption" in manifest["method"]
+    html_text = (out / "best_images.html").read_text()
+    assert "+ caption bar" in html_text and "Caption bar" in html_text
+    assert "Mac-anchored: mac - pi = +30 s" in html_text
+    # sheet tiles are the captioned images: taller than the scaled frame / the 1:1 slice
+    imgs = dict((src, (int(w), int(h))) for src, w, h in
+                re.findall(r"<img src='([^']+)' width='(\d+)' height='(\d+)'", html_text))
+    assert imgs["sheet/openmv_n6_r1_full.png"][1] > 40   # 64x40 frame + bar
+    assert imgs["sheet/imx708_r1_crop_jpeg.png"][1] > 32  # 48x32 1:1 slice + bar
+    # the 1:1 region of the tile is the unresampled source (whole 48x32 JPEG here: box 0,0,48,32)
+    tile = cv2.imread(str(out / "sheet/imx708_r1_crop_jpeg.png"))
+    src = cv2.imread(str(set_dir / f"captures/imx708/imx708_raw_{TS}.jpg"), pr.JPEG_FLAGS)
+    assert tile[:32].tobytes() == src.tobytes()
+
+
 def test_main_zero_rendered_exits_nonzero(tmp_path):
     run = tmp_path / "empty_run"
     (run / "2026-10-14" / f"exp_{TS}_pool").mkdir(parents=True)
@@ -329,6 +383,9 @@ def test_spotter_best_ignores_non_unit_folders_and_unproven_1600x900(tmp_path):
     best, notes = pr.spotter_best(ctx, root)
     assert [b["unit"] for b in best] == ["bmcam003"]
     assert cv2.imread(str(best[0]["png"])).shape == (900, 1600, 3)
+    cap = cv2.imread(str(best[0]["cap_png"]))
+    assert best[0]["cap_png"].name.endswith("_prodcrop_captioned.png")
+    assert cap.shape[1] == 1600 and cap.shape[0] > 900 and best[0]["cap_wh"] == (1600, cap.shape[0])
     assert any("bmcam004: skipped 1 JPEG(s): 1600x900" in n for n in notes)
     assert _tree(root) == before  # read only
     assert pr.spotter_best(ctx, tmp_path / "out") == (
