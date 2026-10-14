@@ -72,17 +72,21 @@ class RunMeta:
     """What one run folder says about time and depth (see the module docstring)."""
     run: Path
     sets: dict[str, dict] = field(default_factory=dict)  # experiment -> sets.jsonl line
-    offset: Optional[timedelta] = None                   # mac - pi; None = Pi clock
+    offset: Optional[timedelta] = None                   # mac - pi; None = no Mac anchor
+    rtc_offset_s: Optional[float] = None                 # pi - UPS RTC at arm time (NTP up)
     bad_lines: int = 0
     notes: list[str] = field(default_factory=list)
 
     @property
     def basis(self) -> str:
-        return "Mac-anchored" if self.offset is not None else "Pi clock"
+        if self.offset is not None:
+            return "Mac-anchored"
+        return "UPS-RTC-anchored" if self.rtc_offset_s is not None else "Pi clock, unanchored"
 
     def summary(self) -> dict:
         return {"time_basis": self.basis,
                 "mac_minus_pi_s": None if self.offset is None else self.offset.total_seconds(),
+                "pi_minus_rtc_at_arm_s": self.rtc_offset_s,
                 "sets_jsonl_lines": len(self.sets), "sets_jsonl_bad_lines": self.bad_lines,
                 "sets_with_depth": sum(isinstance(v.get("depth"), dict)
                                        for v in self.sets.values()),
@@ -142,6 +146,19 @@ def mac_offset(manifest: dict) -> tuple[Optional[timedelta], str]:
     return off, f"Mac-anchored: mac - pi = {off.total_seconds():+.0f} s"
 
 
+def rtc_anchor(manifest: dict) -> tuple[Optional[float], str]:
+    """(pi - UPS RTC seconds at arm time, note) from run_manifest.json ``arm_clock``. Valid only
+    if NTP was synchronised when armed: then pi_epoch was real time and the offset turns the
+    UPS RTC (which keeps running through power-offs) back into real time."""
+    a = manifest.get("arm_clock")
+    if not isinstance(a, dict):
+        return None, "no arm_clock in the manifest: no UPS-RTC anchor"
+    pi, rtc = a.get("pi_epoch"), a.get("ups_rtc_epoch")
+    if a.get("ntp") != "yes" or not (_num(pi) and _num(rtc)):
+        return None, f"arm_clock not usable (ntp={a.get('ntp')!r}, rtc={rtc!r}): no UPS-RTC anchor"
+    return float(pi - rtc), f"UPS-RTC-anchored: pi - rtc at arm = {pi - rtc:+.0f} s"
+
+
 def load_run(run: Path, warn: Warn = _quiet) -> RunMeta:
     """Read run_manifest.json + sets.jsonl (both optional) for captions."""
     meta = RunMeta(run)
@@ -152,7 +169,10 @@ def load_run(run: Path, warn: Warn = _quiet) -> RunMeta:
             manifest = json.loads(man_path.read_text())
         except (OSError, ValueError) as exc:
             warn(f"{man_path}: unreadable ({exc}); caption times are the Pi clock")
-    meta.offset, note = mac_offset(manifest if isinstance(manifest, dict) else {})
+    man = manifest if isinstance(manifest, dict) else {}
+    meta.offset, note = mac_offset(man)
+    meta.notes.append(note)
+    meta.rtc_offset_s, note = rtc_anchor(man)
     meta.notes.append(note)
     sets_path = run / "sets.jsonl"
     if sets_path.is_file():
@@ -191,7 +211,12 @@ def set_time(meta: RunMeta, set_dir: Path, line: Optional[dict]) -> str:
         return "time n/a"
     if meta.offset is not None:
         dt += meta.offset
-    return f"{local_time_text(dt)} ({meta.basis}{via})"
+        return f"{local_time_text(dt)} (Mac-anchored{via})"
+    rtc = ((line or {}).get("clock") or {}).get("ups_rtc_epoch")
+    if meta.rtc_offset_s is not None and _num(rtc):
+        real = datetime.fromtimestamp(rtc + meta.rtc_offset_s, tz=timezone.utc)
+        return f"{local_time_text(real)} (UPS-RTC-anchored)"
+    return f"{local_time_text(dt)} (Pi clock, unanchored{via})"
 
 
 def _num(v) -> bool:

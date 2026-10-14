@@ -72,7 +72,7 @@ def test_depth_present_mean_of_ok_readings_and_torn_last_line_skipped(tmp_path):
     # the torn line's set: no line -> time from the folder name, depth n/a, and a warning
     c = pc.set_caption(meta, run / SET_C, warnings.append)
     assert (c.depth, c.water) == ("depth n/a", "water n/a")
-    assert c.time == "2026-10-13 3:27:24 PM PDT (Pi clock via folder name)"
+    assert c.time == "2026-10-13 3:27:24 PM PDT (Pi clock, unanchored via folder name)"
     assert any("no sets.jsonl line" in w for w in warnings)
     assert meta.summary()["sets_with_depth"] == 2
 
@@ -96,7 +96,8 @@ def test_no_depth_at_all_like_pool002(tmp_path):
     run = _run(tmp_path, [_line(SET_A, "2026-10-13T22:25:48+00:00")],
                {"mac_time_at_start": None, "start_clock": {"pi_utc": PI_START}})
     cap = pc.set_caption(pc.load_run(run), run / SET_A)
-    assert cap == pc.SetCaption("2026-10-13 3:25:48 PM PDT (Pi clock)", "depth n/a", "water n/a")
+    assert cap == pc.SetCaption("2026-10-13 3:25:48 PM PDT (Pi clock, unanchored)",
+                                "depth n/a", "water n/a")
 
 
 # --- time ---------------------------------------------------------------------------------------
@@ -106,8 +107,9 @@ def test_mac_anchored_vs_pi_clock(tmp_path):
     pi_only = _run(tmp_path / "a", lines, {"mac_time_at_start": None,
                                            "start_clock": {"pi_utc": PI_START}})
     meta = pc.load_run(pi_only)
-    assert meta.offset is None and meta.basis == "Pi clock"
-    assert pc.set_caption(meta, pi_only / SET_A).time == "2026-10-13 3:30:00 PM PDT (Pi clock)"
+    assert meta.offset is None and meta.basis == "Pi clock, unanchored"
+    assert pc.set_caption(meta, pi_only / SET_A).time == \
+        "2026-10-13 3:30:00 PM PDT (Pi clock, unanchored)"
 
     # Mac clock 97 s ahead of the Pi clock at start (date -Iseconds format, with offset)
     anchored = _run(tmp_path / "b", lines, {"mac_time_at_start": "2026-10-13T15:27:25-07:00",
@@ -250,3 +252,39 @@ def test_middle_ellipsize_keeps_head_and_tail():
 
     assert pc.middle_ellipsize("abcdefghijklmnop.dng", fits) == "abcde…p.dng"
     assert pc.middle_ellipsize("abc", lambda s: False) == pc.ELLIPSIS
+
+
+def test_ups_rtc_anchor_after_a_power_off(tmp_path):
+    """Boot-started run in the pool: no Mac time, Pi clock wrong; the UPS RTC (97 s behind real
+    time, measured at arm with NTP up) gives the real capture time."""
+    real = datetime(2026, 10, 14, 18, 5, 0, tzinfo=timezone.utc)          # 11:05:00 AM PDT
+    rtc = int(real.timestamp()) - 97                                       # RTC lags real by 97 s
+    line = _line(SET_A, "2026-10-14T04:00:00+00:00")                       # stale Pi clock
+    line["clock"]["ups_rtc_epoch"] = rtc
+    arm = {"pi_epoch": 1791929324, "ups_rtc_epoch": 1791929227, "ntp": "yes"}  # pi - rtc = +97
+    meta = pc.load_run(_run(tmp_path, [line], {"arm_clock": arm}))
+    assert meta.basis == "UPS-RTC-anchored" and meta.rtc_offset_s == 97
+    assert pc.set_caption(meta, meta.run / SET_A).time == \
+        "2026-10-14 11:05:00 AM PDT (UPS-RTC-anchored)"
+
+
+@pytest.mark.parametrize("arm", [
+    {"pi_epoch": 1791929324, "ups_rtc_epoch": 1791929227, "ntp": "no"},     # no NTP at arm
+    {"pi_epoch": 1791929324, "ups_rtc_epoch": None, "ntp": "yes"},          # RTC unread
+    "garbage",
+])
+def test_unusable_anchor_falls_back_to_unanchored_pi_clock(tmp_path, arm):
+    line = _line(SET_A, PI_START)
+    line["clock"]["ups_rtc_epoch"] = 1791929227
+    meta = pc.load_run(_run(tmp_path, [line], {"arm_clock": arm}))
+    assert meta.basis == "Pi clock, unanchored"
+    assert pc.set_caption(meta, meta.run / SET_A).time.endswith("(Pi clock, unanchored)")
+
+
+def test_mac_anchor_still_wins_over_rtc(tmp_path):
+    line = _line(SET_A, PI_START)
+    line["clock"]["ups_rtc_epoch"] = 1791929227
+    man = {"mac_time_at_start": "2026-10-13T15:25:48-07:00", "start_clock": {"pi_utc": PI_START},
+           "arm_clock": {"pi_epoch": 1791929324, "ups_rtc_epoch": 1791929227, "ntp": "yes"}}
+    meta = pc.load_run(_run(tmp_path, [line], man))
+    assert pc.set_caption(meta, meta.run / SET_A).time.endswith("(Mac-anchored)")
