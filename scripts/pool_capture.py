@@ -36,6 +36,13 @@ Hard power cuts (the rig is switched off by a physical switch): every completed 
     the run counter are written durably, so a cut loses at most the set in flight — which then
     has no SHA256SUMS and pulls as UNVERIFIED (expected).
 
+Depth (SPEC_pool_codec_test §5.1): a fail-soft MS5837 (Bar30, I2C 0x76) reading at the start and
+    end of every set (scripts/depth_ms5837.py in a subprocess, 5 s timeout): pressure mbar, water
+    temperature, depth vs the surface pressure `pool_mode.sh arm` recorded and vs the run's first
+    reading. Errors are logged in the set line only; after 3 failed sets in a row depth is
+    disabled for the rest of the run (the bus is shared with the UPS). An unreadable UPS =
+    battery UNKNOWN: logged loudly every set, capture continues (see the loop).
+
 Timestamps: the pool has no NTP. Every set records a monotonic set number, CLOCK_MONOTONIC and
     seconds since boot, the Pi wall clock (restored from disk at boot — wrong after a power-off),
     the LiFePO4wered RTC (keeps running on the battery; measured ~97 s behind the Pi clock on
@@ -74,6 +81,12 @@ from hil_soak import SERIALS, PowerLog, pi_health  # noqa: E402  (reuse, not a c
 
 POOL_ROOT = ROOT / "results" / "pool"
 SET_TIMEOUT_S = 300          # a healthy set is ~40-60 s; a hung one is killed and logged
+DEPTH_PY = os.environ.get("POOL_DEPTH_PYTHON", "/usr/bin/python3")  # has smbus2; the venv not
+DEPTH_TIMEOUT_S = 3          # a depth read is ~0.5-1 s; a stuck one is cut off, capture goes on
+# A Bar30 that fails this many sets in a row is switched off for the rest of the run: the bus is
+# shared with the UPS (0x43), and a wet/damaged sensor holding SDA low would otherwise keep
+# blinding the low-battery guard (QE #100).
+DEPTH_DISABLE_AFTER = 3
 BENCH_AFTER = 2              # consecutive failed sets before a board is benched (backoff)
 SET_MB_PLAN = 32             # planning size per set (DNG 24 MB + JPEGs ~3-5 MB + 2x1 MB Bayer)
 CAMERAS = ("imx708", "openmv_n6", "openmv_ae3")
@@ -301,6 +314,44 @@ def wait_for_boards(timeout_s: float) -> dict:
         time.sleep(2)
 
 
+def read_depth(ref_mbar: float | None) -> dict:
+    """One fail-soft MS5837 reading (scripts/depth_ms5837.py in a subprocess with a timeout): a
+    missing sensor, bus error or hang becomes {"ok": false, "error": ...} and nothing else."""
+    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "3"]
+    if ref_mbar:
+        cmd += ["--ref-mbar", f"{ref_mbar:.2f}"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=DEPTH_TIMEOUT_S)
+        d = json.loads(out.stdout.strip().splitlines()[-1])
+        if not isinstance(d, dict):
+            raise ValueError(f"not a JSON object: {d!r}"[:80])
+        if d.get("ok") and not isinstance(d.get("pressure_mbar"), (int, float)):
+            raise ValueError("ok reading without a numeric pressure_mbar")
+        return d
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError) as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"[:200]}
+
+
+def surface_ref() -> dict:
+    """The surface pressure recorded by ``pool_mode.sh arm`` (results/pool/surface_ref.json)."""
+    try:
+        ref = json.loads((POOL_ROOT / "surface_ref.json").read_text())
+        return ref if ref.get("ok") else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def depth_text(d: dict) -> str:
+    """Health-line field: 'depth 1.23m 18.5C' (vs the arm-time surface), else the run-start ref."""
+    if not d:
+        return ""
+    if not d.get("ok"):
+        return " · depth ERR"
+    m = d.get("depth_m", d.get("depth_m_run_start"))
+    return (f" · depth {m:+.2f}m" if m is not None else f" · {d['pressure_mbar']:.0f}mbar") \
+        + f" {d['temp_c']:.1f}C"
+
+
 def cameras_for_set(n: int, fails_in_row: dict, retry_every: int) -> tuple[list, list]:
     """Backoff: a board that failed ``BENCH_AFTER`` sets in a row is only retried every
     ``retry_every`` sets, so a dead board (each failure costs ~60-130 s of USB timeouts) cannot
@@ -393,6 +444,7 @@ def health_text(line: dict) -> str:
     return (f"[set {line['set']:03d} | run+{int(line['run_s']) // 60:3d}m | boot+{up // 60}m] "
             f"{'OK' if len(ok) == 3 else 'PARTIAL' if ok else 'FAIL'} {len(ok)}/3 · "
             + " · ".join(parts)
+            + depth_text((line.get("depth") or {}).get("end") or {})
             + f" · {line['set_seconds']:.0f}s · cpu {h['cpu_temp_c']}C thr {h['throttled']} · "
               f"mem {h['mem_available_mb']}MB cma {line.get('cma_free_mb')}MB · "
               f"disk {h['disk_free_gb']}GB{pw}")
@@ -456,6 +508,10 @@ def run(args) -> int:
     ups_set_led(2)
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False
+    ref = surface_ref() if args.depth else {}
+    ref_mbar, run0_mbar, depth_errors, ups_unknown = ref.get("pressure_mbar"), None, 0, 0
+    manifest["depth"] = {"enabled": args.depth, "sensor": "MS5837-30BA (Bar30) at 0x76",
+                         "surface_ref": ref or None, "rho_kg_m3": 997.0}
     stop = None
     while stop is None:
         if _stop_signal["name"]:
@@ -474,6 +530,16 @@ def run(args) -> int:
             stop = "disk_reserve"
             break
         p = ups_power()
+        if not p:
+            # Battery UNKNOWN (UPS unreadable: I2C bus held, e.g. by a wet Bar30, or the CLI
+            # failed). Decision: keep capturing. A blind guard adds no new failure mode, since
+            # the end of a session is already a hard cut (Nick's switch), and #98 makes that
+            # lose at most the set in flight. Stopping would throw away the session.
+            ups_unknown += 1
+            say(f"  WARN: battery UNKNOWN — UPS unreadable ({ups_unknown} set(s) in a row); "
+                "low-battery stop is blind, capture continues")
+        else:
+            ups_unknown = 0
         if p.get("on_battery") and p.get("vbat_mv", 9999) < args.min_vbat_mv:
             stop = "battery_low"
             break
@@ -488,7 +554,23 @@ def run(args) -> int:
         cams_now, benched = cameras_for_set(n, fails_in_row, args.retry_every)
         line = {"set": n, "run_id": run_id, "clock": clocks(), "run_s": round(t0 - t_start, 1),
                 "usb_before": present, "benched": benched, "pi_before": pi_health(run_dir)}
+        read_now = args.depth and depth_errors < DEPTH_DISABLE_AFTER
+        depth = {"start": read_depth(ref_mbar)} if read_now else {}
         line.update(run_one_set(n, run_dir, run_config, run_id, cams_now))
+        if read_now:
+            depth["end"] = read_depth(ref_mbar)
+            for d in depth.values():
+                if d.get("ok"):
+                    run0_mbar = run0_mbar or d["pressure_mbar"]
+                    d["depth_m_run_start"] = round((d["pressure_mbar"] - run0_mbar) * 100.0
+                                                   / (997.0 * 9.80665), 3)
+            depth_errors = 0 if all(d.get("ok") for d in depth.values()) else depth_errors + 1
+            line["depth"] = depth
+            manifest["depth"]["run_start_mbar"] = run0_mbar
+            if depth_errors >= DEPTH_DISABLE_AFTER:
+                manifest["depth"]["disabled_at_set"] = n
+                say(f"  WARN: depth DISABLED for this run after {depth_errors} failed sets "
+                    f"({(depth.get('end') or {}).get('error')}); the Bar30 shares the UPS bus")
         line["set_seconds"] = round(time.monotonic() - t0, 1)
         line["pi_after"] = pi_health(run_dir)
         line["cma_free_mb"] = cma_free_mb()
@@ -627,6 +709,8 @@ def main() -> int:
                    help="UPS power cycle when an N6/AE3 failed this many attempted sets in a "
                         "row (0 = off; max one per run, two per day, never in the first 10 min)")
     r.add_argument("--power-period", type=float, default=5.0, help="UPS log period s (0 = off)")
+    r.add_argument("--no-depth", dest="depth", action="store_false",
+                   help="skip the MS5837 depth/temperature read at the start and end of each set")
     s = sub.add_parser("summary")
     s.add_argument("run_dir")
     args = ap.parse_args()
