@@ -407,8 +407,12 @@ def stream_frames(usb, command_id, board_config, settings):
         usb.write(data)
         seq += 1
         if period_ms:
-            rest = period_ms - time.ticks_diff(time.ticks_ms(), t_frame)
-            if rest > 0:
-                time.sleep_ms(rest)
+            # Sleep the rest of the period in <= 50 ms slices so a host stop byte is still seen
+            # promptly even with a tiny --fps (QE #107).
+            while not usb.any():
+                rest = period_ms - time.ticks_diff(time.ticks_ms(), t_frame)
+                if rest <= 0:
+                    break
+                time.sleep_ms(min(rest, 50))
 
     usb.write(cp.encode_message(cp.completed_response(command_id, {"frames": seq})))
