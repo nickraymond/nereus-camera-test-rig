@@ -224,6 +224,16 @@ def _raise_keyboard_interrupt(signum, frame):
     raise KeyboardInterrupt
 
 
+def stream_settings(framesize="VGA", quality=70, max_seconds=3600, fps=0.0) -> dict:
+    """The ``start_stream`` settings. max_seconds caps each board-side segment (the reader
+    re-requests to stay live); ``fps`` is a board-side cap, sent only when non-zero (boards on
+    older code ignore unknown keys)."""
+    settings = {"framesize": framesize, "jpeg_quality": quality, "max_seconds": max_seconds}
+    if fps:
+        settings["fps"] = fps
+    return settings
+
+
 def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
         http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT, fps=0.0):
     import serial
@@ -235,10 +245,7 @@ def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=
     ser = serial.Serial(dev, DEFAULT_BAUD, timeout=0.2, write_timeout=WRITE_TIMEOUT)
     io = _SerialIO(ser, default_timeout=10.0)
     command_id = "focus-stream"
-    # max_seconds caps each board-side stream segment; the reader re-requests to stay live.
-    settings = {"framesize": framesize, "jpeg_quality": quality, "max_seconds": max_seconds}
-    if fps:
-        settings["fps"] = fps  # board-side cap; boards with older code ignore unknown keys
+    settings = stream_settings(framesize, quality, max_seconds, fps)
 
     state = StreamState()
     reader = threading.Thread(
