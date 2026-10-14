@@ -95,8 +95,13 @@ def read(model: str = "30BA", samples: int = 1, bus_no: int = 1) -> dict:
         b = list(m)
         return b[0] << 16 | b[1] << 8 | b[2]
 
+    try:  # the shared I2C lock (scripts/pool_led.py); fail-soft if it can't be imported
+        from pool_led import i2c_lock
+    except ImportError:
+        import contextlib
+        i2c_lock = contextlib.nullcontext
     t0 = time.monotonic()
-    with SMBus(bus_no) as bus:
+    with i2c_lock(), SMBus(bus_no) as bus:
         bus.write_byte(ADDR, 0x1E)
         time.sleep(0.02)
         prom = []

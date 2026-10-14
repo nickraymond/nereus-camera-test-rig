@@ -44,3 +44,19 @@ make at the shared venv (`make test VENV=../../../.venv`, or an absolute path); 
 
 Runtime dependencies are minimal by default (PyYAML). Analysis, serial, and web
 dependencies are optional extras installed per phase (see `pyproject.toml`).
+
+## Pool mode (nereus002)
+
+An unattended 3-camera RAW capture loop for underwater tests. It runs `scripts/pool_capture.py`
+under `scripts/pool_mode.sh` (arm / start / stop / status / disarm), with a fail-soft Bar30
+depth read per set. The Mac side is `host_tools/pool_pull.py` + `host_tools/pool_render.py`.
+
+The green LED uses Nick's codes, precedence B > A > C:
+
+- **C constant on** = OK.
+- **A one short flash + long pause** = a camera not working.
+- **B rapid flashing** = low battery (< 3.20 V on battery).
+
+The full legend, start/stop and download steps are in
+[docs/POOL_DAY_CARD_nereus002.md](docs/POOL_DAY_CARD_nereus002.md).
+
