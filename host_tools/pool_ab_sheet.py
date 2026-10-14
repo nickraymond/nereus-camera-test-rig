@@ -118,7 +118,7 @@ def b_info(set_dir: Path, camera: str) -> str:
         else:
             rec = json.loads((folder / "capture.json").read_text())
             q = (rec.get("sensor_metadata") or {}).get("jpeg_quality")
-            size = rec.get("size_bytes")
+            size = (rec.get("output") or {}).get("size_bytes")  # capture.json: output.size_bytes
             return f"q{q}, {size / 1e3:.0f} kB" if q and size else (f"q{q}" if q else "")
     except (OSError, ValueError, AttributeError):
         return ""
