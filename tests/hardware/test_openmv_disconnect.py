@@ -31,7 +31,7 @@ from nereus_camera_test_rig import config as config_mod  # noqa: E402
 from nereus_camera_test_rig.cameras import openmv_usb  # noqa: E402
 from nereus_camera_test_rig.capture.coordinator import run_experiment  # noqa: E402
 
-N6_SERIAL = "020023000450433547373200"
+N6_SERIAL = "10003500025043364d343000"
 
 
 def _inject_reset(port: str) -> None:

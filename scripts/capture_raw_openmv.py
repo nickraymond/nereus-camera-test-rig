@@ -50,7 +50,7 @@ from nereus_camera_test_rig.color.raw_meter import (  # noqa: E402
 )
 from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 
-SERIALS = {"n6": "020023000450433547373200", "ae3": "0829c14000000000"}  # nereus002
+SERIALS = {"n6": "10003500025043364d343000", "ae3": "0829c14000000000"}  # nereus002
 MIN_GAIN_DB = 3.152157  # PAG7936 floor on both boards: 0 dB reads back as this (OQ-21)
 MAX_METER_SHOTS = 3
 # Gain moves in sensor steps (read back on the N6, 2026-09-28: asked 3.676 -> 3.522 dB, 4.18 ->

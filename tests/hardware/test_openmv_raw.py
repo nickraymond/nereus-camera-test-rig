@@ -32,7 +32,7 @@ from nereus_camera_test_rig.color.raw_io import read_openmv_bayer  # noqa: E402
 from nereus_camera_test_rig.models import CaptureRequest  # noqa: E402
 
 BOARDS = {
-    "n6": os.environ.get("N6_SERIAL", "020023000450433547373200"),
+    "n6": os.environ.get("N6_SERIAL", "10003500025043364d343000"),
     "ae3": os.environ.get("AE3_SERIAL", "0829c14000000000"),
 }
 # Lock-check target: well inside the range the probe reached (80 us .. metered ~6 ms), and
