@@ -194,6 +194,19 @@ def atomic_json(path: Path, data: dict) -> None:
 
 
 # -- run setup ---------------------------------------------------------------------------------
+def arm_clock() -> dict | None:
+    """The newest arm-time clock anchor (results/pool/arm_clock_*.json, written by `pool_mode.sh
+    arm` while NTP is up): Pi epoch vs the UPS RTC. In the pool (no NTP) the Mac caption tool
+    uses it to turn each set's clock.ups_rtc_epoch into real time. None if absent/unreadable."""
+    for f in sorted(POOL_ROOT.glob("arm_clock_*.json"), reverse=True):
+        try:
+            d = json.loads(f.read_text())
+            return {**d, "file": f.name} if isinstance(d, dict) else None
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def next_run_id() -> str:
     """pool<NNN>_<Pi UTC>: NNN is a counter on disk, so runs order correctly even when the Pi
     clock is wrong after a power-off."""
@@ -472,7 +485,8 @@ def run(args) -> int:
         "camera_note": ("IMX708: auto still + rpicam-still --raw (DNG+JPEG, one exposure), "
                         "AE/AWB auto, focus per profiles/imx708.yaml. N6/AE3: board ISP JPEG HD "
                         "auto + 8-bit BGGR Bayer HD metered-then-locked; hard reset before each"),
-        "sets": 0, "ok_counts": {c: 0 for c in CAMERAS}, "stop_reason": None}
+        "sets": 0, "ok_counts": {c: 0 for c in CAMERAS}, "stop_reason": None,
+        "arm_clock": arm_clock()}
     atomic_json(run_dir / "run_manifest.json", manifest)
     log_fh = (run_dir / "pool.log").open("a")
 
