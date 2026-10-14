@@ -30,3 +30,9 @@ video:
 # OpenMV: 8-bit BGGR Bayer at a locked exposure). Off = the Phase 5 path unchanged.
 # `nereus-rig experiment --raw` turns it on for one run.
 raw: false
+
+# Board JPEG ("B" = the camera's out-of-the-box image: sensor.reset() defaults, auto exposure,
+# gain and white balance, 2 s settle). The board reads a TOP-LEVEL jpeg_quality; the nested
+# image.jpeg_quality above is not read and the board fell back to its default 90. Nick
+# 2026-10-14: best quality the board can do. q100 valid on the N6 (quantization all 1s, ~593 kB HD; 3/3 OK on 2026-10-14).
+jpeg_quality: 100
