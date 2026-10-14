@@ -9,7 +9,8 @@ Purpose
         the Mac by pool_render (bilinear demosaic, gray-world AWB, sRGB); IMX708 DNG rendered by
         pool_render (camera WB + the DNG's colour matrix, sRGB).
     B = the camera's own image: OpenMV board JPEG after sensor.reset() (auto exposure / gain /
-        white balance, 2 s settle; q100 N6 / q98 AE3 from 2026-10-14), IMX708 rpicam JPEG.
+        white balance, 2 s settle; N6 q100 / AE3 q95 from 2026-10-14, #109 + #111; q90 before),
+        IMX708 rpicam JPEG. B's quality and size are printed on the sheet.
 
 Inputs
     --render DIR   a pool_render output folder for the run (run it with --all so every set has its
@@ -17,7 +18,9 @@ Inputs
     --set NAME     the set folder name (default: the first set that has all three cameras)
 
 Output
-    <DIR>/ab_<set>.png   lossless PNG. Rows: N6 (A | B at 1:1), AE3 (A | B at 1:1), IMX708 (A | B,
+    <DIR>/ab_<set>.png   lossless PNG (ab_<set>_INCOMPLETE.png + exit 3 if an A or B is missing,
+                         unless --allow-missing; a complete sheet is never overwritten by it).
+                         Rows: N6 (A | B at 1:1), AE3 (A | B at 1:1), IMX708 (A | B,
                          each scaled to the OpenMV row width, labelled with the scale).
 
 Example
@@ -99,7 +102,31 @@ def pick_set(run_render: Path, want: Optional[str]) -> Path:
                      "(run pool_render with --all and pull the sets)")
 
 
-def row(label: str, a: Optional[Path], b: Optional[Path], scale_to: Optional[int]) -> Image.Image:
+def b_info(set_dir: Path, camera: str) -> str:
+    """B's JPEG quality + size from the pulled run's capture records (QE #110: q90 on 10/13 vs
+    N6 q100 / AE3 q95 from 10/14 must be visible on the sheet). '' if not recorded."""
+    import json
+    src = source_set(set_dir)
+    if src is None:
+        return ""
+    folder = src / "captures" / camera
+    try:
+        if camera == "imx708":  # the rpicam JPEG is the RAW capture's sibling: -q from the request
+            rec = json.loads((folder / "raw_capture.json").read_text())
+            q = (((rec.get("request") or {}).get("settings") or {}).get("source") or {}).get(
+                "jpeg_quality")
+        else:
+            rec = json.loads((folder / "capture.json").read_text())
+            q = (rec.get("sensor_metadata") or {}).get("jpeg_quality")
+            size = rec.get("size_bytes")
+            return f"q{q}, {size / 1e3:.0f} kB" if q and size else (f"q{q}" if q else "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return f"q{q}" if q else ""
+
+
+def row(label: str, a: Optional[Path], b: Optional[Path], scale_to: Optional[int],
+        b_note: str = "") -> Image.Image:
     """One labelled row: A | B. ``scale_to`` = width per half (None = native, no resampling)."""
     tiles, notes = [], []
     for tag, path in (("A  our RAW render", a), ("B  camera's own image", b)):
@@ -109,12 +136,14 @@ def row(label: str, a: Optional[Path], b: Optional[Path], scale_to: Optional[int
         else:
             img = Image.open(path).convert("RGB")
             native = f"{img.width}x{img.height}"
+            extra = f", {b_note}" if (path is b and b_note) else ""
             if scale_to and img.width != scale_to:
                 s = scale_to / img.width
                 img = img.resize((scale_to, round(img.height * s)), Image.LANCZOS)
-                notes.append(f"{tag}: {path.name} ({native}, shown scaled to {s * 100:.1f} %)")
+                notes.append(f"{tag}: {path.name} ({native}{extra}, shown scaled to "
+                             f"{s * 100:.1f} %)")
             else:
-                notes.append(f"{tag}: {path.name} ({native}, 1:1 native pixels)")
+                notes.append(f"{tag}: {path.name} ({native}{extra}, 1:1 native pixels)")
         tiles.append(img)
     h = max(t.height for t in tiles)
     out = Image.new("RGB", (sum(t.width for t in tiles), h + LABEL_H), "white")
@@ -128,41 +157,70 @@ def row(label: str, a: Optional[Path], b: Optional[Path], scale_to: Optional[int
     return out
 
 
-def build(run_render: Path, set_name: Optional[str]) -> Path:
+ROWS = (("openmv_n6", "OpenMV N6 — A: Mac render of 8-bit Bayer RAW (gray-world AWB) | B: board "
+                      "JPEG, out of the box (auto exposure/gain/WB)", None),
+        ("openmv_ae3", "OpenMV AE3 — A: Mac render of 8-bit Bayer RAW (gray-world AWB) | B: board "
+                       "JPEG, out of the box (auto exposure/gain/WB)", None),
+        ("imx708", "IMX708 — A: Mac render of the DNG | B: rpicam JPEG (libcamera auto)",
+         ROW_W // 2))
+
+
+def build(run_render: Path, set_name: Optional[str]) -> tuple[Path, list[str]]:
+    """Write the sheet; returns (path, missing). A sheet with a missing A or B is written as
+    ab_<set>_INCOMPLETE.png, never over a complete ab_<set>.png (QE #110)."""
     set_dir = pick_set(run_render, set_name)
-    rows = [row("OpenMV N6 — A: Mac render of 8-bit Bayer RAW (gray-world AWB) | B: board JPEG, "
-                "out of the box (auto exposure/gain/WB)", *find_pair(set_dir, "openmv_n6"), None),
-            row("OpenMV AE3 — A: Mac render of 8-bit Bayer RAW (gray-world AWB) | B: board JPEG, "
-                "out of the box (auto exposure/gain/WB)", *find_pair(set_dir, "openmv_ae3"), None),
-            row("IMX708 — A: Mac render of the DNG | B: rpicam JPEG (libcamera auto)",
-                *find_pair(set_dir, "imx708"), ROW_W // 2)]
+    rows, missing = [], []
+    for camera, label, scale in ROWS:
+        a, b = find_pair(set_dir, camera)
+        for tag, path in (("A", a), ("B", b)):
+            if path is None:
+                where = (set_dir if tag == "A" or camera != "imx708"
+                         else "the pulled run named in render_manifest.json 'runs'")
+                missing.append(f"MISSING {camera} {tag} (set {set_dir.name}; looked in {where})")
+        rows.append(row(label, a, b, scale, b_info(set_dir, camera)))
     title_h = 70
     W = max(r.width for r in rows)
     sheet = Image.new("RGB", (W, title_h + sum(r.height + 20 for r in rows)), "white")
     d = ImageDraw.Draw(sheet)
     d.text((10, 14), f"A/B: our RAW pipeline vs the camera's own image — set {set_dir.name} "
-                     f"(run {set_dir.parent.name})", fill="black", font=_font(36))
+                     f"(run {set_dir.parent.name})" + ("  [INCOMPLETE]" if missing else ""),
+           fill="black", font=_font(36))
     y = title_h
     for r in rows:
         sheet.paste(r, (0, y))
         y += r.height + 20
-    out = run_render.parent / f"ab_{set_dir.name}.png"
+    suffix = "_INCOMPLETE" if missing else ""
+    out = run_render.parent / f"ab_{set_dir.name}{suffix}.png"
     sheet.save(out, optimize=False)
-    return out
+    return out, missing
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--render", type=Path, required=True, help="pool_render output folder")
+    ap.add_argument("--run", default=None, help="run folder name (required if more than one)")
     ap.add_argument("--set", default=None, help="set folder name (default: first complete set)")
+    ap.add_argument("--allow-missing", action="store_true",
+                    help="exit 0 even if an A or B image is missing (sheet still INCOMPLETE)")
     args = ap.parse_args(argv)
-    runs = [p for p in args.render.iterdir() if p.is_dir() and p.name not in ("sheet", "spotter")]
+    runs = sorted(p for p in args.render.iterdir()
+                  if p.is_dir() and p.name not in ("sheet", "spotter"))
+    if args.run:
+        runs = [p for p in runs if p.name == args.run]
     if not runs:
         print(f"[pool_ab_sheet] no run folder in {args.render}", file=sys.stderr)
         return 2
-    out = build(runs[0], args.set)
-    print(f"[pool_ab_sheet] wrote {out} ({Image.open(out).size[0]}x{Image.open(out).size[1]})")
-    return 0
+    if len(runs) > 1:
+        print(f"[pool_ab_sheet] {len(runs)} runs in {args.render}: pass --run "
+              f"({', '.join(p.name for p in runs)})", file=sys.stderr)
+        return 2
+    out, missing = build(runs[0], args.set)
+    for m in missing:
+        print(f"[pool_ab_sheet] {m}", file=sys.stderr)
+    size = Image.open(out).size
+    print(f"[pool_ab_sheet] wrote {out} ({size[0]}x{size[1]})"
+          + (f" — INCOMPLETE: {len(missing)} image(s) missing" if missing else ""))
+    return 3 if missing and not args.allow_missing else 0
 
 
 if __name__ == "__main__":
