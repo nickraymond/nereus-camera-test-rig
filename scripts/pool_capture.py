@@ -63,6 +63,7 @@ Known limitations
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import os
@@ -77,12 +78,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import pool_led  # noqa: E402  (Nick's LED codes + the shared I2C lock)
 from hil_soak import SERIALS, PowerLog, pi_health  # noqa: E402  (reuse, not a copy)
+
+
+class LockedPowerLog(PowerLog):
+    """hil_soak's UPS logger, reading only VIN/VBAT/VOUT/IOUT under the shared I2C lock (not the
+    full register dump): the I2C budget in pool_led.py."""
+
+    @staticmethod
+    def read() -> dict | None:
+        return pool_led.ups_read() or None
 
 POOL_ROOT = ROOT / "results" / "pool"
 SET_TIMEOUT_S = 300          # a healthy set is ~40-60 s; a hung one is killed and logged
 DEPTH_PY = os.environ.get("POOL_DEPTH_PYTHON", "/usr/bin/python3")  # has smbus2; the venv not
-DEPTH_TIMEOUT_S = 3          # a depth read is ~0.5-1 s; a stuck one is cut off, capture goes on
+# A depth read is ~0.5-1 s, plus up to 2 s of I2C-lock wait and the >= 3 s Bar30 gap (both
+# inside the subprocess): 8 s so a slow lock can never count as a Bar30 strike (QE #101).
+DEPTH_TIMEOUT_S = 8
 # A Bar30 that fails this many sets in a row is switched off for the rest of the run: the bus is
 # shared with the UPS (0x43), and a wet/damaged sensor holding SDA low would otherwise keep
 # blinding the low-battery guard (QE #100).
@@ -111,31 +124,26 @@ def clocks() -> dict:
 
 
 def ups_get(key: str):
-    """One LiFePO4wered register (int) or None when the UPS/CLI is absent."""
+    """One LiFePO4wered register (int) or None when the UPS/CLI is absent (under the I2C lock)."""
+    out = pool_led.ups_cli("get", key).strip()
     try:
-        out = subprocess.run(["lifepo4wered-cli", "get", key], capture_output=True, text=True,
-                             timeout=5).stdout.strip()
         return int(out.split("=")[-1]) if out else None
-    except (OSError, subprocess.SubprocessError, ValueError):
+    except ValueError:
         return None
 
 
-def ups_set_led(state: int) -> None:
-    """UPS LED: 1 on (idle), 2 pulsing (loop running, last set OK), 3 flashing (last set had a
-    failure). Volatile register (no CFG_WRITE); best-effort, never fails the loop."""
-    try:
-        subprocess.run(["lifepo4wered-cli", "set", "LED_STATE", str(state)],
-                       capture_output=True, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        pass
+_VIN_THRESHOLD = None
 
 
 def ups_power() -> dict:
     """VIN/VBAT/VOUT (mV) and IOUT (mA) → watts and whether we run on the battery."""
-    v = PowerLog.read() or {}
+    v = LockedPowerLog.read() or {}
     if not v:
         return {}
-    thr = ups_get("VIN_THRESHOLD") or 4498
+    global _VIN_THRESHOLD
+    if _VIN_THRESHOLD is None:  # a config register: read once per run, not every set
+        _VIN_THRESHOLD = ups_get("VIN_THRESHOLD") or 4498
+    thr = _VIN_THRESHOLD
     return {"vin_mv": v["VIN"], "vbat_mv": v["VBAT"], "iout_ma": v["IOUT"],
             "w_out": round(v["VOUT"] * v["IOUT"] / 1e6, 3), "on_battery": v["VIN"] < thr}
 
@@ -317,7 +325,9 @@ def wait_for_boards(timeout_s: float) -> dict:
 def read_depth(ref_mbar: float | None) -> dict:
     """One fail-soft MS5837 reading (scripts/depth_ms5837.py in a subprocess with a timeout): a
     missing sensor, bus error or hang becomes {"ok": false, "error": ...} and nothing else."""
-    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "3"]
+    # 1 sample: one short session (reset, PROM, 2 conversions); the >= 3 s gap between sessions
+    # is enforced inside the script (pool_led.bar30_session).
+    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "1"]
     if ref_mbar:
         cmd += ["--ref-mbar", f"{ref_mbar:.2f}"]
     try:
@@ -503,9 +513,14 @@ def run(args) -> int:
         signal.signal(sig, _on_signal)
     power = None
     if args.power_period > 0 and power0:
-        power = PowerLog(run_dir / "power.csv", args.power_period)
+        power = LockedPowerLog(run_dir / "power.csv", args.power_period)
         power.start()
-    ups_set_led(2)
+    led = pool_led.LedDriver()  # C (steady) until the first set says otherwise
+    led.start()
+    # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the firmware
+    # default at interpreter exit if the normal stop below never ran (QE #101).
+    atexit.register(lambda: None if led.stopped else led.stop())
+    vbat_hist: list[int] = []
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False
     ref = surface_ref() if args.depth else {}
@@ -592,7 +607,14 @@ def run(args) -> int:
         manifest.update({"sets": n, "last_set": {"set": n, "clock": line["clock"],
                                                  "ok": good, "seconds": line["set_seconds"]}})
         atomic_json(run_dir / "run_manifest.json", manifest)
-        ups_set_led(2 if len(good) == 3 else 3)
+        p_now = line["power"]
+        if p_now.get("on_battery"):
+            vbat_hist.append(p_now["vbat_mv"])
+        else:
+            vbat_hist.clear()
+        led.set_mode(pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")),
+                                     len(good) == 3, args.low_vbat_mv))
+        line["led"] = led.mode
         say(health_text(line))
         if line.get("exit_code") not in (0,) and line.get("stderr_tail"):
             say("    stderr: " + " | ".join(line["stderr_tail"][-3:])[:400])
@@ -623,7 +645,9 @@ def run(args) -> int:
     atomic_json(run_dir / "run_manifest.json", manifest)
     say(f"POOL run {run_id} stopped: {stop} after {n} sets "
         f"({manifest['ok_counts']} OK) in {manifest['run_seconds']:.0f} s")
-    ups_set_led(1)
+    # Back to the firmware's steady-on (Nick's spec), except a battery stop keeps B showing:
+    # the truest signal, and the firmware takes over the LED at shutdown anyway.
+    led.stop(final=pool_led.LED_FLASHING if stop == "battery_low" else pool_led.FIRMWARE_DEFAULT)
     os.sync()
     return 0
 
@@ -705,10 +729,15 @@ def main() -> int:
     r.add_argument("--min-vbat-mv", type=int, default=3050,
                    help="stop cleanly on battery below this (UPS shuts down at 2950)")
     r.add_argument("--max-cpu-c", type=float, default=80.0, help="pause sets at/above this")
+    r.add_argument("--low-vbat-mv", type=int, default=pool_led.LOW_VBAT_MV,
+                   help="LED B (low battery): on battery and the median of the last 3 set "
+                        "readings below this (default 3200: ~1 h left at ~2.85 W, Nick's "
+                        "LiFePO4 curve)")
     r.add_argument("--ups-recover-after", type=int, default=3,
                    help="UPS power cycle when an N6/AE3 failed this many attempted sets in a "
                         "row (0 = off; max one per run, two per day, never in the first 10 min)")
-    r.add_argument("--power-period", type=float, default=5.0, help="UPS log period s (0 = off)")
+    r.add_argument("--power-period", type=float, default=10.0,
+                   help="UPS log period s (0 = off); 4 registers per sample")
     r.add_argument("--no-depth", dest="depth", action="store_false",
                    help="skip the MS5837 depth/temperature read at the start and end of each set")
     s = sub.add_parser("summary")

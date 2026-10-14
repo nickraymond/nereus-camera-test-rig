@@ -126,6 +126,8 @@ cmd_supervise() {  # runs detached; restarts an abnormal exit
       0) say "loop ended cleanly"; break ;;
       3|4) say "loop refused to start (rc=$rc), not restarting"; break ;;
     esac
+    # Abnormal exit: the loop may have died mid LED pattern; back to the firmware default.
+    lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true
     [ -e "$NO_RESTART" ] && { say "stop requested, not restarting (rc=$rc)"; break; }
     restarts=$((restarts + 1))
     [ "$restarts" -gt "$MAX_RESTARTS" ] && { say "FAIL: $MAX_RESTARTS restarts used, giving up"; break; }
