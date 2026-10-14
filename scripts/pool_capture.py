@@ -63,6 +63,7 @@ Known limitations
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import os
@@ -92,7 +93,9 @@ class LockedPowerLog(PowerLog):
 POOL_ROOT = ROOT / "results" / "pool"
 SET_TIMEOUT_S = 300          # a healthy set is ~40-60 s; a hung one is killed and logged
 DEPTH_PY = os.environ.get("POOL_DEPTH_PYTHON", "/usr/bin/python3")  # has smbus2; the venv not
-DEPTH_TIMEOUT_S = 3          # a depth read is ~0.5-1 s; a stuck one is cut off, capture goes on
+# A depth read is ~0.5-1 s, plus up to 2 s of I2C-lock wait and the >= 3 s Bar30 gap (both
+# inside the subprocess): 8 s so a slow lock can never count as a Bar30 strike (QE #101).
+DEPTH_TIMEOUT_S = 8
 # A Bar30 that fails this many sets in a row is switched off for the rest of the run: the bus is
 # shared with the UPS (0x43), and a wet/damaged sensor holding SDA low would otherwise keep
 # blinding the low-battery guard (QE #100).
@@ -514,6 +517,9 @@ def run(args) -> int:
         power.start()
     led = pool_led.LedDriver()  # C (steady) until the first set says otherwise
     led.start()
+    # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the firmware
+    # default at interpreter exit if the normal stop below never ran (QE #101).
+    atexit.register(lambda: None if led.stopped else led.stop())
     vbat_hist: list[int] = []
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False

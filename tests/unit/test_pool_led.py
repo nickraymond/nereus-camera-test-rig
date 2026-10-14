@@ -109,3 +109,18 @@ def test_ups_read_only_the_four_registers(tmp_path, monkeypatch):
     v = led.ups_read()
     calls = (tmp_path / "calls").read_text().split()
     assert calls == ["VIN", "VBAT", "VOUT", "IOUT"] and v == dict.fromkeys(calls, 4970)
+
+
+def test_crash_restores_the_firmware_default_via_atexit_hook():
+    """What pool_capture registers with atexit: a still-running driver is stopped (default)."""
+    w = FakeWriter()
+    d = led.LedDriver(writer=w)
+    d.set_mode("camera")
+    d.start()
+    time.sleep(0.1)
+    hook = lambda: None if d.stopped else d.stop()  # noqa: E731  (the same lambda)
+    hook()
+    assert d.stopped and w.writes[-1][1] == led.FIRMWARE_DEFAULT
+    n = len(w.writes)
+    hook()  # after a normal stop the hook does nothing
+    assert len(w.writes) == n

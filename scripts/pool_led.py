@@ -160,6 +160,7 @@ class LedDriver(threading.Thread):
     def __init__(self, writer=set_led):
         super().__init__(daemon=True)
         self.mode, self._shown, self._write = "ok", None, writer
+        self.stopped = False
         self._wake, self._stop = threading.Event(), threading.Event()
 
     def set_mode(self, mode: str) -> None:
@@ -191,6 +192,7 @@ class LedDriver(threading.Thread):
         return woke or self._stop.is_set()
 
     def stop(self, final: int | None = FIRMWARE_DEFAULT) -> None:
+        self.stopped = True
         self._stop.set()
         self._wake.set()
         self.join(timeout=5)
