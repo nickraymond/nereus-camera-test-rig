@@ -23,8 +23,9 @@ A board that stays wedged is fixed by a switch off/on.
 
 ## Night before / morning (bench)
 
-The rig is left **armed and switched OFF**. Armed means it starts the capture loop by itself
-when it is switched on.
+The rig is left **armed** (main@60f9033, `--hours 6 --lens-position 0.8
+--ups-recover-after 0`). Armed means it starts the capture loop by itself at every boot. If
+nobody switched it off on 10/13, it is still ON and idle; that's fine, see Start.
 
 To check it, power it on and run:
 
@@ -42,7 +43,8 @@ If you switch it on to check, a run starts. That is harmless; it is a new folder
 
 ## Start (pool)
 
-1. **Switch ON.**
+1. **Switch OFF, wait 10 s, switch ON.** A run starts only at boot, so if the rig was left
+   on, plain "ON" does nothing. The OFF→ON cycle works from either state.
 2. About 20 s after boot, the loop starts and creates `pool<NNN>_<time>`. The first set
    takes ~45 s.
 3. **Optional, if a Mac is connected** (rig AP or LAN), so the run records the Mac clock:
