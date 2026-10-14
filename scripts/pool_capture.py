@@ -82,12 +82,12 @@ from hil_soak import SERIALS, PowerLog, pi_health  # noqa: E402  (reuse, not a c
 
 
 class LockedPowerLog(PowerLog):
-    """hil_soak's UPS logger, with every lifepo4wered-cli read under the shared I2C lock."""
+    """hil_soak's UPS logger, reading only VIN/VBAT/VOUT/IOUT under the shared I2C lock (not the
+    full register dump): the I2C budget in pool_led.py."""
 
     @staticmethod
     def read() -> dict | None:
-        with pool_led.i2c_lock():
-            return PowerLog.read()
+        return pool_led.ups_read() or None
 
 POOL_ROOT = ROOT / "results" / "pool"
 SET_TIMEOUT_S = 300          # a healthy set is ~40-60 s; a hung one is killed and logged
@@ -129,12 +129,18 @@ def ups_get(key: str):
         return None
 
 
+_VIN_THRESHOLD = None
+
+
 def ups_power() -> dict:
     """VIN/VBAT/VOUT (mV) and IOUT (mA) → watts and whether we run on the battery."""
     v = LockedPowerLog.read() or {}
     if not v:
         return {}
-    thr = ups_get("VIN_THRESHOLD") or 4498
+    global _VIN_THRESHOLD
+    if _VIN_THRESHOLD is None:  # a config register: read once per run, not every set
+        _VIN_THRESHOLD = ups_get("VIN_THRESHOLD") or 4498
+    thr = _VIN_THRESHOLD
     return {"vin_mv": v["VIN"], "vbat_mv": v["VBAT"], "iout_ma": v["IOUT"],
             "w_out": round(v["VOUT"] * v["IOUT"] / 1e6, 3), "on_battery": v["VIN"] < thr}
 
@@ -316,7 +322,9 @@ def wait_for_boards(timeout_s: float) -> dict:
 def read_depth(ref_mbar: float | None) -> dict:
     """One fail-soft MS5837 reading (scripts/depth_ms5837.py in a subprocess with a timeout): a
     missing sensor, bus error or hang becomes {"ok": false, "error": ...} and nothing else."""
-    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "3"]
+    # 1 sample: one short session (reset, PROM, 2 conversions); the >= 3 s gap between sessions
+    # is enforced inside the script (pool_led.bar30_session).
+    cmd = [DEPTH_PY, str(ROOT / "scripts" / "depth_ms5837.py"), "--samples", "1"]
     if ref_mbar:
         cmd += ["--ref-mbar", f"{ref_mbar:.2f}"]
     try:
@@ -722,7 +730,8 @@ def main() -> int:
     r.add_argument("--ups-recover-after", type=int, default=3,
                    help="UPS power cycle when an N6/AE3 failed this many attempted sets in a "
                         "row (0 = off; max one per run, two per day, never in the first 10 min)")
-    r.add_argument("--power-period", type=float, default=5.0, help="UPS log period s (0 = off)")
+    r.add_argument("--power-period", type=float, default=10.0,
+                   help="UPS log period s (0 = off); 4 registers per sample")
     r.add_argument("--no-depth", dest="depth", action="store_false",
                    help="skip the MS5837 depth/temperature read at the start and end of each set")
     s = sub.add_parser("summary")

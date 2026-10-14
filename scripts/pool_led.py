@@ -13,8 +13,8 @@ What the board supports (lifepo4wered-data.h, ~/LiFePO4wered-Pi on the rig): LED
     C = LED_STATE 1, written once.
     B = LED_STATE 3, the firmware's own flashing, written once. Whether its rate reads as
         "rapid" through the housing is checked by eye in the bench demo.
-    A = driven from the Pi: LED_STATE 1 for 0.25 s, then 0 for 2.75 s. That is 2 tiny I2C
-        writes every 3 s.
+    A = driven from the Pi: LED_STATE 1 for 0.25 s, then 0 for 3.75 s. That is 2 tiny I2C
+        writes every 4 s, 0.5 writes/s, the slowest that still reads as a beacon.
 The firmware's own boot/shutdown breathing is never touched: the loop only writes while it
 runs. On stop it restores 1, the firmware's normal steady-on (Nick: "leave the LED in the
 firmware default when the loop stops").
@@ -46,7 +46,12 @@ import time
 I2C_LOCK = os.environ.get("POOL_I2C_LOCK", "/tmp/nereus_pool_i2c.lock")
 LED_OFF, LED_ON, LED_FLASHING = 0, 1, 3
 FIRMWARE_DEFAULT = LED_ON
-A_ON_S, A_OFF_S = 0.25, 2.75          # pattern A: one short flash, long dwell off
+# I2C budget (Nick 2026-10-13 9:08 PM: polling the Bar30 faster than every few seconds can
+# wedge the shared bus, and then the LiFePO4wered misbehaves). All in one place:
+A_ON_S, A_OFF_S = 0.25, 3.75          # pattern A: 2 LED writes per 4 s = 0.5 writes/s max
+BAR30_MIN_INTERVAL_S = 3.0            # >= 3 s between any two Bar30 sessions (pool: ~2 per set)
+UPS_KEYS = ("VIN", "VBAT", "VOUT", "IOUT")  # the only UPS registers the loop polls
+BAR30_STAMP = os.environ.get("POOL_BAR30_STAMP", "/tmp/nereus_pool_bar30.last")
 LOW_VBAT_MV = 3200                    # B: on battery, median of 3 readings below this
 LOW_VBAT_HYST_MV = 30                 # clears above LOW_VBAT_MV + this
 
@@ -85,6 +90,46 @@ def ups_cli(*args: str, timeout: float = 5.0) -> str:
                                   timeout=timeout).stdout
         except (OSError, subprocess.SubprocessError):
             return ""
+
+
+def ups_read(keys=UPS_KEYS) -> dict:
+    """Just these UPS registers (``lifepo4wered-cli get <KEY>`` each, one lock hold) instead of
+    the full ~37-register dump: {} if any read fails."""
+    out = {}
+    with i2c_lock():
+        for k in keys:
+            try:
+                v = subprocess.run(["lifepo4wered-cli", "get", k], capture_output=True,
+                                   text=True, timeout=5).stdout.strip()
+                out[k] = int(v.split("=")[-1])
+            except (OSError, subprocess.SubprocessError, ValueError):
+                return {}
+    return out
+
+
+@contextlib.contextmanager
+def bar30_session(min_interval_s: float | None = None, max_wait_s: float = 10.0):
+    """Hold the I2C lock for one Bar30 session, starting it no sooner than
+    BAR30_MIN_INTERVAL_S after the previous one (any process: the time is kept in BAR30_STAMP).
+    The wait happens outside the lock, so LED/UPS users are never blocked by it."""
+    gap = BAR30_MIN_INTERVAL_S if min_interval_s is None else min_interval_s
+    deadline = time.monotonic() + max_wait_s
+    while True:
+        try:
+            last = float(open(BAR30_STAMP).read().strip() or 0)
+        except (OSError, ValueError):
+            last = 0.0
+        wait = last + gap - time.time()
+        if wait <= 0 or time.monotonic() > deadline:
+            break
+        time.sleep(min(wait, 0.5))
+    with i2c_lock():
+        try:
+            yield
+        finally:
+            with contextlib.suppress(OSError):
+                with open(BAR30_STAMP, "w") as fh:
+                    fh.write(f"{time.time():.3f}\n")
 
 
 def set_led(state: int) -> None:

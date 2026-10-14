@@ -65,7 +65,7 @@ Precedence is B > A > C.
 | You see | Meaning | Do |
 |---|---|---|
 | **C: constant on** | System OK. The capture loop is running, every camera worked in the last set (or the loop has just started), and the battery is fine | Nothing |
-| **A: one short flash, long dark pause, repeating** (0.25 s on / 2.75 s off) | **One or more cameras NOT working** in the last set. The IMX708 keeps capturing; a failed board is retried every 5 sets. A fully OK set clears it | Nothing needed. If A stays on > 10 min, cycle the switch at the next break (OFF 10 s → ON) to reset the boards |
+| **A: one short flash, long dark pause, repeating** (0.25 s on / 3.75 s off) | **One or more cameras NOT working** in the last set. The IMX708 keeps capturing; a failed board is retried every 5 sets. A fully OK set clears it | Nothing needed. If A stays on > 10 min, cycle the switch at the next break (OFF 10 s → ON) to reset the boards |
 | **B: continuous rapid flashing** | **LOW BATTERY**: on battery, with the median of the last 3 set readings below **3.20 V** (~1 h left at the loop's ~2.85 W, from Nick's LiFePO4 curve; `--low-vbat-mv` to change). It clears above 3.23 V or on the charger. At 3.05 V the loop stops cleanly and leaves B showing | Finish up and come out to charge. **Don't cycle the switch**: below 3.25 V the loop refuses to restart (start guard) |
 | Breathing (slow fade), for ~30–60 s after switch-on or at shutdown | The UPS firmware's own boot/shutdown signal; the loop never uses it | Wait |
 | Off | Pi powered off (switch off, or the battery hit the 2.95 V cutoff) | Switch on / charge |
@@ -74,7 +74,7 @@ Who drives it:
 
 - **The loop drives A, B and C** while it runs, through the UPS register `LED_STATE`
   (`lifepo4wered-data.h`: 0 off, 1 on, 2 pulsing, 3 flashing). C writes 1 once, B writes 3
-  once (the firmware's own flashing), and A is toggled from the Pi: 2 small I2C writes every 3 s
+  once (the firmware's own flashing), and A is toggled from the Pi: 2 small I2C writes every 4 s
   (`scripts/pool_led.py`).
 - **The firmware drives** the boot/shutdown breathing and "off".
 - **When the loop stops** (or the rig is disarmed) the LED goes back to the firmware's normal

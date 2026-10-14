@@ -86,3 +86,26 @@ def test_i2c_lock_is_fail_soft_when_held(tmp_path, monkeypatch):
     with led.i2c_lock(timeout_s=0.2):
         assert time.monotonic() - t0 < 0.1                            # free: immediate
     holder.close()
+
+
+def test_bar30_sessions_are_at_least_the_minimum_gap_apart(tmp_path, monkeypatch):
+    monkeypatch.setattr(led, "I2C_LOCK", str(tmp_path / "i2c.lock"))
+    monkeypatch.setattr(led, "BAR30_STAMP", str(tmp_path / "bar30.last"))
+    starts = []
+    for _ in range(3):
+        with led.bar30_session(min_interval_s=0.3):
+            starts.append(time.monotonic())
+    gaps = [b - a for a, b in zip(starts, starts[1:])]
+    assert all(g >= 0.28 for g in gaps), gaps
+
+
+def test_ups_read_only_the_four_registers(tmp_path, monkeypatch):
+    calls = []
+    fake = tmp_path / "lifepo4wered-cli"
+    fake.write_text('#!/bin/sh\necho "$2" >> "' + str(tmp_path / "calls") + '"\necho 4970\n')
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:/usr/bin:/bin")
+    monkeypatch.setattr(led, "I2C_LOCK", str(tmp_path / "i2c.lock"))
+    v = led.ups_read()
+    calls = (tmp_path / "calls").read_text().split()
+    assert calls == ["VIN", "VBAT", "VOUT", "IOUT"] and v == dict.fromkeys(calls, 4970)

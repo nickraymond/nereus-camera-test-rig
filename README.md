@@ -57,6 +57,15 @@ The green LED uses Nick's codes, precedence B > A > C:
 - **A one short flash + long pause** = a camera not working.
 - **B rapid flashing** = low battery (< 3.20 V on battery).
 
+**I2C budget** (bus 1 is shared by the UPS at 0x43 and the Bar30 at 0x76; Nick: polling the
+Bar30 faster than every few seconds can wedge the bus). Every pool-mode access goes through one
+lock (`scripts/pool_led.py`):
+
+- **Bar30:** ≤ 1 session per 3 s (enforced). In practice 2 per set, ~1 per 22 s.
+- **LED:** ≤ 0.5 writes/s (pattern A); otherwise 1 write per state change.
+- **UPS:** 4 registers per 10 s (power log) plus per set.
+- Outside our control: the root `lifepo4wered-daemon` polls `PI_RUNNING` once a second.
+
 The full legend, start/stop and download steps are in
 [docs/POOL_DAY_CARD_nereus002.md](docs/POOL_DAY_CARD_nereus002.md).
 
