@@ -17,7 +17,7 @@ def _fake(tmp_path, with_ae3_b=True, name="pool009_x"):
     _img(src_set / "captures" / "imx708" / "imx708_raw_A.jpg", 4608, 2592)
     (src_set / "captures" / "openmv_n6").mkdir(parents=True)
     (src_set / "captures" / "openmv_n6" / "capture.json").write_text(json.dumps(
-        {"size_bytes": 640000, "sensor_metadata": {"jpeg_quality": 100}}))
+        {"output": {"size_bytes": 640000}, "sensor_metadata": {"jpeg_quality": 100}}))
     render = tmp_path / f"{name}_render"
     rset = render / name / "exp_A_pool"
     for cam in ("openmv_n6", "openmv_ae3"):
