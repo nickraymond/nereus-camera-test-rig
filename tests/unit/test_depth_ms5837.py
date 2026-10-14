@@ -63,3 +63,23 @@ def test_read_depth_rejects_non_dict_and_bad_ok(monkeypatch, tmp_path):
         (tmp_path / "scripts" / "depth_ms5837.py").write_text(body + "\n")
         d = pool_capture.read_depth(None)
         assert d["ok"] is False and why in d["error"]
+
+
+def test_depth_bus_reaches_the_script(monkeypatch, tmp_path):
+    """--depth-bus N must reach depth_ms5837.py (Nick is moving the Bar30 off the UPS bus)."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "depth_ms5837.py").write_text(
+        "import json, sys\nprint(json.dumps({'ok': True, 'pressure_mbar': 985.0, "
+        "'temp_c': 20.0, 'argv': sys.argv[1:]}))\n")
+    monkeypatch.setattr(pool_capture, "DEPTH_PY", sys.executable)
+    monkeypatch.setattr(pool_capture, "ROOT", tmp_path)
+    d = pool_capture.read_depth(None, bus=3)
+    assert d["ok"] and d["argv"][d["argv"].index("--bus") + 1] == "3"
+
+
+def test_led_codes_are_opt_in():
+    """Nick: no custom LED flashing by default; --led-codes turns #101's patterns on."""
+    import subprocess
+    out = subprocess.run([sys.executable, str(ROOT / "scripts" / "pool_capture.py"), "run",
+                          "--help"], capture_output=True, text=True).stdout
+    assert "--led-codes" in out and "off by default" in out and "--depth-bus" in out
