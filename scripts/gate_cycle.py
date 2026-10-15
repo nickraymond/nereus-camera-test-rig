@@ -70,6 +70,7 @@ STILL_BARS = {"imx708": (300_000, (4608, 2592)), "openmv_n6": (30_000, (1280, 80
 RAW_MIN_BYTES = {"imx708": 10_000_000, "openmv_n6": 1_000_000, "openmv_ae3": 1_000_000}
 MAX_LAST_STILL_UPTIME_S = 180.0   # last verified still within this of kernel start
 MAX_FAILS_IN_ROW = 3              # auto mode stops power-cycling after this many FAILs
+                                  # (arm --stop-after-fails; 0 = never, for baseline runs)
 BYID_TIMEOUT_S = 60.0
 CSV_FIELDS = [
     "cycle", "started_by", "utc", "boot_id", "uptime_start_s", "prev_end", "prev_by",
@@ -199,6 +200,10 @@ def verify_still(cam: str, path: Path, recorded_sha: str | None) -> dict:
         with Image.open(path) as im:
             im.load()  # full decode, not just the header
             rec["dims"] = list(im.size)
+            # mean grey level 0-255 of a thumbnail: a black frame (dark bench, dead sensor) is
+            # visible in the CSV instead of hiding behind a "decoded OK"
+            thumb = im.convert("L").resize((64, 40))
+            rec["mean"] = round(sum(thumb.histogram()[i] * i for i in range(256)) / (64 * 40), 1)
         rec["decode_ok"] = tuple(rec["dims"]) == size
     except Exception as exc:  # noqa: BLE001 - any decode failure is a FAIL with its reason
         rec.update(decode_ok=False, why=f"decode: {exc}")
@@ -344,8 +349,8 @@ def csv_row(rec: dict) -> dict:
 
     def still(cam):
         s = (v.get(cam) or {}).get("still") or {}
-        return f"ok {s.get('bytes')}B {s.get('seconds')}s" if s.get("ok") else \
-            f"FAIL {s.get('why')}"
+        return f"ok {s.get('bytes')}B {s.get('seconds')}s m{s.get('mean')}" if s.get("ok") \
+            else f"FAIL {s.get('why')} {s.get('bytes')}B m{s.get('mean')}"
 
     raws = sum(1 for c in CAMERAS if ((v.get(c) or {}).get("raw") or {}).get("ok"))
     return {
@@ -408,7 +413,8 @@ def cmd_arm(a) -> int:
         return 1
     GATE_ROOT.mkdir(parents=True, exist_ok=True)
     n = len(list(GATE_ROOT.glob("gate[0-9]*"))) + 1
-    run_id = f"gate{n:03d}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    run_id = f"gate{n:03d}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}" + (
+        f"_{a.label}" if a.label else "")
     run_dir = GATE_ROOT / run_id
     run_dir.mkdir()
     before = crontab_lines()
@@ -427,7 +433,8 @@ def cmd_arm(a) -> int:
     state = {"run_id": run_id, "run_dir": str(run_dir), "run_config": str(run_config),
              "target": a.target, "mode": a.mode, "cycles_done": 0, "streak": 0,
              "fails_in_row": 0, "dive_flag_before": flag, "armed_utc": now_utc(),
-             "sha": pc.git_sha(), "wake_min": a.wake_min}
+             "sha": pc.git_sha(), "wake_min": a.wake_min,
+             "stop_after_fails": a.stop_after_fails, "label": a.label}
     save_state(state)
     pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg":
                    "docs/rig_gate_20261014/PREREG.md", "host": os.uname().nodename})
@@ -492,8 +499,9 @@ def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
     if (run_dir / "STOP").exists():
         log("STOP present — not power-cycling; rig stays up")
         return
-    if state.get("fails_in_row", 0) >= MAX_FAILS_IN_ROW:
-        log(f"{MAX_FAILS_IN_ROW} FAILs in a row — not power-cycling; rig stays up for inspection")
+    stop_after = state.get("stop_after_fails", MAX_FAILS_IN_ROW)
+    if stop_after and state.get("fails_in_row", 0) >= stop_after:
+        log(f"{stop_after} FAILs in a row — not power-cycling; rig stays up for inspection")
         return
     if state.get("mode") != "auto":
         log("mode switch: READY — Nick: switch OFF, wait for the LED to go dark, switch ON")
@@ -545,6 +553,9 @@ def main() -> int:
     arm.add_argument("--target", type=int, default=25)
     arm.add_argument("--mode", choices=("auto", "switch"), default="auto")
     arm.add_argument("--wake-min", type=int, default=1)
+    arm.add_argument("--stop-after-fails", type=int, default=MAX_FAILS_IN_ROW,
+                     help="auto mode stops power-cycling after N FAILs in a row (0 = never)")
+    arm.add_argument("--label", default="", help="appended to the run id (e.g. baseline)")
     arm.add_argument("--lens-position", default="0.8")
     arm.add_argument("--config", default="configs/rig.example.yaml")
     for name in ("boot", "once"):
