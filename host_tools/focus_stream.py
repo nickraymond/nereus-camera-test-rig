@@ -234,6 +234,61 @@ def stream_settings(framesize="VGA", quality=70, max_seconds=3600, fps=0.0) -> d
     return settings
 
 
+def _imx_reader_loop(state: StreamState, width: int, height: int, fps: float, lens: float):
+    """IMX708 full-frame preview: rpicam-vid MJPEG on stdout, split at the JPEG end marker.
+
+    ``--mode 2304:1296:10:P`` forces the full-FOV 2x2-binned sensor mode, so the preview shows
+    the whole frame a still sees (ScalerCrop (0,0)/4608x2592; a small output size would
+    otherwise pick the cropped 1536x864 mode). For posing a calibration board on the full
+    frame (Friday 2026-10-16) and placing bench lamps/clocks."""
+    import subprocess
+
+    cmd = ["rpicam-vid", "-n", "-t", "0", "--codec", "mjpeg", "--mode", "2304:1296:10:P",
+           "--width", str(width), "--height", str(height), "--framerate", str(fps or 10),
+           "--autofocus-mode", "manual", "--lens-position", str(lens), "-o", "-"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    buf, seq, t_last = b"", 0, time.monotonic()
+    try:
+        while state.running and proc.poll() is None:
+            chunk = proc.stdout.read1(65536)
+            if not chunk:
+                continue
+            buf += chunk
+            while True:
+                start = buf.find(b"\xff\xd8")
+                end = buf.find(b"\xff\xd9", start + 2) if start >= 0 else -1
+                if start < 0 or end < 0:
+                    break
+                frame, buf = buf[start:end + 2], buf[end + 2:]
+                now = time.monotonic()
+                seq += 1
+                state.update(frame, seq, len(frame), 1.0 / max(now - t_last, 1e-3))
+                t_last = now
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def run_imx708(width=1152, height=648, fps=10.0, lens=0.8, http_host="0.0.0.0",
+               http_port=8083):
+    state = StreamState()
+    reader = threading.Thread(target=_imx_reader_loop, args=(state, width, height, fps, lens),
+                              daemon=True)
+    reader.start()
+    httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state))
+    signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
+    print("IMX708 full-frame preview on http://%s:%d/ (%dx%d, lens %.2f). Ctrl-C to stop."
+          % (_tailscale_host(), http_port, width, height, lens))
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopping preview...")
+    finally:
+        state.running = False
+        reader.join(timeout=6)
+        httpd.server_close()
+
+
 def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
         http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT, fps=0.0):
     import serial
@@ -294,7 +349,17 @@ def main(argv=None):
     parser.add_argument("--fps", type=float, default=0.0,
                         help="board-side frame-rate cap (0 = unlimited; e.g. 10 for the N6 to "
                              "match the AE3 and draw less current)")
+    parser.add_argument("--imx708", action="store_true",
+                        help="preview the IMX708 full frame instead of a board (default port "
+                             "8083 when --http-port is not given)")
+    parser.add_argument("--lens-position", type=float, default=0.8,
+                        help="IMX708 manual focus for --imx708 (production 0.8)")
     args = parser.parse_args(argv)
+    if args.imx708:
+        port = args.http_port if args.http_port != DEFAULT_HTTP_PORT else 8083
+        run_imx708(fps=args.fps or 10.0, lens=args.lens_position, http_host=args.http_host,
+                   http_port=port)
+        return 0
     try:
         run(serial_number=args.serial_number, port=args.port, framesize=args.framesize,
             quality=args.quality, max_seconds=args.max_seconds,
