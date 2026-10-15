@@ -23,7 +23,7 @@ physical switch (= the UPS button: clean boot, clean shutdown). Code: `~/nereus-
 | 12–22 | **CAL B** (for the N6 / AE3) | The same board at **1.5–2.0 m**, posed for the boards' narrower view (~46°; on 10/14 their aim was top-left) | Same shots |
 | 22–32 | **STILLS** | Scene / reference card at your test distance | Synchronized sets (still + RAW, all three), every ~25 s |
 | 32–38 | **VIDEO** | One clip per minute (T+32 … 37). **At about :20 past each minute, flash a torch once in view of all three cameras**, then film the scene | 6 synchronized 30 s clips (each starts ~10 s after the minute): IMX708 H.264 1080p30, N6 + AE3 MJPEG VGA 10 fps |
-| 38 → | stills | Anything | Synchronized sets until switch-off or low battery (stops itself at 3.05 V) |
+| 38 → | stills | Anything | Synchronized sets until switch-off or low battery (stops itself at 3.10 V) |
 
 Shots taken before you are in position just have no board in them; the pipeline skips them.
 
@@ -47,7 +47,7 @@ ssh pi@192.168.1.35 'cd ~/nereus-rig-poolcam && ~/nereus-camera-test-rig/.venv/b
 The gate and the pool loop must never both be armed.
 
 ```bash
-ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30 --lens-position 0.8 --ups-recover-after 0 --hours 6'
+ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30 --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --hours 6'
 ```
 Add `--depth-bus N` if the Bar30 has moved to its own I²C bus.
 
