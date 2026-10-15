@@ -28,7 +28,8 @@ Shots taken before you are in position simply have no board in them; the pipelin
 
 - **Full-frame coverage:** there is no live preview underwater (no Wi-Fi through water).
   - **Before the dive**, in air at the pool edge: rehearse the 9 places on the full-frame preview
-    pages (`focus_stream` :8081 AE3 / :8082 N6, IMX708 page TBD). Underwater the view is
+    pages (`focus_stream` :8081 AE3 / :8082 N6, `focus_stream --imx708` :8083). **Only with the
+    loop stopped** (`pool_mode.sh stop`): a preview holds the camera and every set fails while it runs. Underwater the view is
     ~1.33× narrower (flat port), so place the board a little closer to centre than it looked in
     air.
   - **After the dive:** pull a subset and run the calibration pipeline's `coverage.png` before
