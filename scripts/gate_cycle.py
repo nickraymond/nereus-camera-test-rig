@@ -501,7 +501,7 @@ def cmd_arm(a) -> int:
              "fails_in_row": 0, "dive_flag_before": flag, "armed_utc": now_utc(),
              "sha": pc.git_sha(), "wake_min": a.wake_min,
              "stop_after_fails": a.stop_after_fails, "label": a.label, "sync": a.sync,
-             "video_s": a.video_s}
+             "video_s": a.video_s, "until_streak": a.until_streak}
     save_state(state)
     pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg":
                    "docs/rig_gate_20261014/PREREG.md", "host": os.uname().nodename})
@@ -529,8 +529,9 @@ def cmd_status(_a) -> int:
     if not state:
         print("gate: not armed")
         return 0
-    print(json.dumps({k: state[k] for k in ("run_id", "mode", "target", "cycles_done",
-                                            "streak", "fails_in_row") if k in state}))
+    keys = ("run_id", "mode", "target", "until_streak", "cycles_done", "streak", "best_streak",
+            "fails_in_row")
+    print(json.dumps({k: state[k] for k in keys if k in state}))
     path = Path(state["run_dir"]) / "cycles.csv"
     if path.exists():
         rows = list(csv.DictReader(path.open()))
@@ -559,8 +560,13 @@ def cmd_mode(a) -> int:
 
 def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
     """Auto mode: power-cycle through the UPS for the next cycle, unless a stop condition holds."""
+    if state.get("until_streak") and state.get("streak", 0) >= state["until_streak"]:
+        log(f"GATE PASSED: {state['streak']} PASS in a row — disarming, rig stays up")
+        cmd_disarm(None)
+        return
     if state.get("cycles_done", 0) >= state.get("target", 0):
-        log(f"target {state['target']} cycles reached — disarming, rig stays up")
+        log(f"cycle cap {state['target']} reached (streak {state.get('streak', 0)}) — "
+            "disarming, rig stays up")
         cmd_disarm(None)
         return
     if (run_dir / "STOP").exists():
@@ -617,7 +623,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     arm = sub.add_parser("arm")
-    arm.add_argument("--target", type=int, default=25)
+    arm.add_argument("--target", type=int, default=25,
+                     help="cycle cap: stop after this many cycles in total")
+    arm.add_argument("--until-streak", type=int, default=0,
+                     help="stop as soon as this many PASS in a row (Nick's bar: 25); "
+                          "0 = run to --target")
     arm.add_argument("--mode", choices=("auto", "switch"), default="auto")
     arm.add_argument("--wake-min", type=int, default=1)
     arm.add_argument("--stop-after-fails", type=int, default=MAX_FAILS_IN_ROW,
