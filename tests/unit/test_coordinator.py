@@ -319,3 +319,13 @@ def test_sync_board_that_cannot_arm_fails_alone(tmp_path):
     assert by["openmv_ae3"].result.error["code"] == "arm_failed"
     assert json.loads((by["openmv_ae3"].metadata_path and
                        Path(by["openmv_ae3"].metadata_path)).read_text())["status"] == "failed"
+
+
+def test_sync_raw_only_takes_one_raw_shot_per_camera(tmp_path):
+    _register_sync(_blank_jpeg())
+    out = run_experiment(_config(), "cal", results_root=tmp_path, when=WHEN, analysis=False,
+                         sync=True, sync_raw_only=True)
+    assert out.status == "completed"
+    assert [e[2] for e in FakeSyncCamera.events if e[0] == "arm"] == ["raw"] * 3
+    assert json.loads((out.paths.root / "sync.json").read_text())["shots"][0]["shot"] == "raw"
+    assert all(c.raw_result is None for c in out.camera_outcomes)

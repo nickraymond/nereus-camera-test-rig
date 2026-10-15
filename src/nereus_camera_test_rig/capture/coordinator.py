@@ -303,7 +303,8 @@ def _sync_frame_time(result: CaptureResult) -> Optional[float]:
 
 def _capture_synchronized(ordered: list[str], cameras_cfg: dict[str, Any],
                           paths: ExperimentPaths, when: datetime, raw: Optional[bool],
-                          lead_ms: float) -> tuple[list[CameraOutcome], list[dict]]:
+                          lead_ms: float, raw_only: bool = False
+                          ) -> tuple[list[CameraOutcome], list[dict]]:
     """Every camera shoots the same moment, per shot (still, then RAW). Never raises.
 
     Per shot: boards with ``reset_before_capture`` are reset in parallel (the AE3 allows one
@@ -326,12 +327,15 @@ def _capture_synchronized(ordered: list[str], cameras_cfg: dict[str, Any],
             results[name] = {"still": _synth_failed_result(name, cameras_cfg[name],
                                                            "camera_init_failed", str(exc))}
     want_raw = any(profiles[n].get("raw", False) for n in devices) if raw is None else raw
-    shots = [("still", "image")] + ([("raw", "raw")] if want_raw else [])
+    # raw_only (calibration poses, ~10 s per shot): one RAW shot — the IMX708 writes its DNG and
+    # a JPEG from that one exposure, the boards their Bayer — recorded as each camera's capture.
+    shots = [("raw", "raw")] if raw_only else (
+        [("still", "image")] + ([("raw", "raw")] if want_raw else []))
     sync_log: list[dict] = []
     pool = ThreadPoolExecutor(max_workers=max(1, len(devices)))
     try:
         for i, (shot, kind) in enumerate(shots):
-            live = [n for n in devices if shot == "still" or results.get(n, {}).get("still")]
+            live = [n for n in devices if i == 0 or results.get(n, {}).get("still")]
 
             def prepare(name, shot=shot, i=i):
                 dev, prof = devices[name], profiles[name]
@@ -399,11 +403,12 @@ def _capture_synchronized(ordered: list[str], cameras_cfg: dict[str, Any],
     outcomes: list[CameraOutcome] = []
     for name in ordered:
         r = results.get(name, {})
-        result = r.get("still") or _synth_failed_result(name, cameras_cfg[name], "not_captured",
-                                                        "no still")
+        first = "raw" if raw_only else "still"
+        result = r.get(first) or _synth_failed_result(name, cameras_cfg[name], "not_captured",
+                                                      f"no {first}")
         cap_dir = paths.capture_dir(name)
         write_capture_metadata(cap_dir / "capture.json", result)
-        raw_result = r.get("raw")
+        raw_result = None if raw_only else r.get("raw")
         if raw_result is not None:
             write_capture_metadata(cap_dir / "raw_capture.json", raw_result)
         outcomes.append(CameraOutcome(camera_name=name, result=result,
@@ -425,6 +430,7 @@ def run_experiment(
     when: Optional[datetime] = None,
     raw: Optional[bool] = None,
     sync: bool = False,
+    sync_raw_only: bool = False,
 ) -> ExperimentOutcome:
     """Run one sequential capture set across all connected cameras (Spec §11, §13).
 
@@ -480,7 +486,7 @@ def run_experiment(
         lead = float((config.get("rig", {}).get("sync") or {}).get("imx_lead_ms",
                                                                    SYNC_IMX_LEAD_MS))
         sync_outcomes, sync_log = _capture_synchronized(ordered, cameras_cfg, paths, when, raw,
-                                                        lead)
+                                                        lead, raw_only=sync_raw_only)
         (paths.root / "sync.json").write_text(json.dumps(
             {"mode": "synchronized", "imx_lead_ms": lead, "shots": sync_log}, indent=2) + "\n")
         it = iter(sync_outcomes)

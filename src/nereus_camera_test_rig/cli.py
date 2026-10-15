@@ -52,6 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_experiment.add_argument(
         "--sync", action="store_true",
         help="all cameras shoot the same moment (per-shot skew in sync.json; no analysis)")
+    p_experiment.add_argument(
+        "--sync-raw-only", action="store_true",
+        help="with --sync: one RAW shot only (calibration poses: IMX708 DNG + JPEG, board Bayer)")
     p_experiment.set_defaults(func=_cmd_experiment)
 
     return parser
@@ -115,7 +118,8 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
         camera_names=subset,
         analysis=not args.no_analysis and not args.sync,
         raw=True if args.raw else None,
-        sync=args.sync,
+        sync=args.sync or args.sync_raw_only,
+        sync_raw_only=args.sync_raw_only,
     )
 
     print(f"[nereus-rig] experiment {outcome.record.experiment_id}")
