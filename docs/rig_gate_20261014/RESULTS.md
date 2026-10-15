@@ -108,10 +108,73 @@ Historical clean boots: 1 wedge (pool007) in 5.
 
 - **Before (sequential):** the stills were 19.8–31.4 s apart across 3 sets (gate001 c1,
   gate002 c1/c2).
-- **After:** `experiment --sync`, first live set 8:11 PM, IMX708 + N6 (AE3 was off the bus):
-  - frame-timestamp skew **7 ms** (still) and **1 ms** (RAW);
-  - IMX708 fired first, boards 200 ms later.
-- `rpicam-still --signal` latency, signal to `SensorTimestamp`: 186–231 ms (n=7).
-- N6 fire to snapshot: 9 ms.
-- **Not yet verified against a visible clock.** The board timestamps are when the snapshot
-  returned, not exposure start, and a board may hand back a buffered frame.
+- **After (`experiment --sync`):**
+  - The boards arm (warm-up, autos live) and fire on one byte.
+  - The IMX708 runs `rpicam-still --signal` and is fired first. The boards fire 200 ms later,
+    because the IMX708 takes 186–231 ms from SIGUSR1 to its frame (mode switch, n=7).
+  - Per-shot skew comes from frame timestamps (IMX `SensorTimestamp`, board snapshot ticks) and
+    is written to `sync.json`.
+  - A synchronized set takes **26–30 s**, against 45–50 s sequential.
+
+Measured (dark bench):
+
+| run | still skew ms | RAW skew ms |
+|---|---|---|
+| 8:11 PM (IMX + N6) | 7 | 1 |
+| 8:15 PM (all three) | 59 | 15.5 |
+| gate003 c1–c4 (cold boots, all three) | 66 / 82.5 / 62 / 58 | 17 / 12 / 13 / 23 |
+
+- The still skew is dominated by the AE3's frame period: 66 ms at HD in the dark, against the
+  N6's 8 ms.
+- **Not yet verified against a visible clock**: the board timestamps mark when the snapshot
+  returned. **Needs Nick:** a lamp and a running ms clock in view.
+
+## Synchronized video (Phase 3c path, built now so the gate tests the Friday build)
+
+`scripts/sync_video.py`: one command, all three cameras, every frame on the Pi monotonic clock.
+
+- **IMX708:** `rpicam-vid` hardware H.264, 1080p30, records from the arm with per-frame
+  `--metadata`. Its synchronized start is the first frame at or after the fire.
+  - Pause/resume was rejected: `rpicam-vid` resumes only at the next keyframe. In the test that
+    gave 251 of ~300 frames, so the IMX708 could start up to ~2 s late.
+- **Boards:** `start_stream` with the trigger, MJPEG over USB, 10 fps each. Each frame header
+  carries board ticks.
+- **Host:** the reader thread never touches the SD card; a writer thread does the writes. The
+  reader resyncs on lost bytes and counts them.
+
+**CMA** (ci-record hard-reset this Pi twice on 10/13; one of those boots, `ccc3c914`, ends with
+no kernel message at all):
+
+| rpicam-vid 1080p H.264, 6 s, n=1 each | min CmaFree | frames |
+|---|---|---|
+| default buffers | 0 MB | 167 |
+| `--buffer-count 4` (chosen) | 16 MB | 158 |
+| `--buffer-count 3` | 21 MB | 130 (drops) |
+| 1536×864 | 23 MB | 172 (likely a cropped FOV, not used) |
+
+Under the full 3-camera load, CmaFree also reads 0 MB at times. That number counts reclaimable
+page cache from the video writes, so the stability runs below are the real evidence.
+
+**Runs:**
+
+| run | IMX708 | N6 | AE3 | start skew | Pi |
+|---|---|---|---|---|---|
+| 10 s (pause mode, rejected) | 251 fr | 653 fr, 63 fps | 104 fr, 10 fps | 17.8 ms* | ok |
+| 10 s ×2 (30 fps boards) | 266/272 fr, ~27 fps | 303 fr, 30 fps, 0 lost | 101 fr, 10 fps, 0 lost | 11.5 / 18.5 ms | ok |
+| **5 min, boards uncapped then 30 fps** | 8223 fr, 27.4 fps | **FAIL**: byte loss (57 resyncs), silent at ~85 s | 3033 fr, 0 lost | — | ok, 58.5 °C |
+| **5 min, boards 10 fps + decoupled writer** | 8087 fr, 27.0 fps | 3001 fr, 10.0 fps, **0 lost** | 3000 fr, 10.0 fps, **0 lost** | **11.3 ms** | ok, 59.6 °C, no throttle |
+
+\* pause mode: the IMX708 time was the fire, not its real first frame.
+
+**N6 USB limit.**
+- The N6 is a full-speed (12 Mbit/s) device on the hub.
+- At 30–63 fps VGA (~0.4–0.8 MB/s) it drops bytes whenever the Pi's reader stalls. It is
+  MicroPython's CDC send timeout.
+- The same mechanism explains a still transfer that came up 3.4 KB short in an early trigger
+  test. sha256 catches it for stills.
+- Friday video: both boards at 10 fps (the AE3's VGA ceiling anyway).
+
+**Ground truth.** `host_tools/sync_flash.py` finds a light step (room light, torch) in every
+camera's frame series and reports each camera's step time on the Pi clock. Its resolution is
+about one frame: 33 ms on the IMX708, 100 ms on the boards at 10 fps. **Needs Nick:** switch a
+light on/off in view during one bench run.
