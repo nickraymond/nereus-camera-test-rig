@@ -156,7 +156,10 @@ class BoardVideo:
 
     def stop(self) -> None:
         try:
-            self.io._t.write(b"x")  # any byte ends the stream
+            # Any byte ends the stream; a bare newline because a board whose stream already
+            # ended (trigger timeout, max_seconds) is back in its line loop, where "\n" is
+            # ignored but any other byte would corrupt the next command (QE #115).
+            self.io._t.write(b"\n")
         except OSError as exc:
             self.rec["stop_error"] = str(exc)
 
@@ -164,7 +167,7 @@ class BoardVideo:
         """Idempotent cleanup for any exit path: stop the stream, release the port."""
         try:
             if getattr(self, "io", None) is not None:
-                self.io._t.write(b"x")
+                self.io._t.write(b"\n")  # see stop(): never leave a byte in the line buffer
         except Exception:  # noqa: BLE001 - best effort; the board times out by itself
             pass
         self.cam.close()
