@@ -261,6 +261,8 @@ def contact_cols(rec: dict) -> tuple[str, float | None, int | None]:
     if not info:
         for step in rec.get("steps", []):
             info = (step.get("retry") or {}).get("info") or info
+    if info and "pi_uptime_s" not in info:
+        info = {**info, "pi_uptime_s": first.get("pi_uptime_s")}
     ticks = info.get("ticks_ms")
     boot = info.get("boot_ms") or {}
     imp = (boot.get("imported") - boot.get("main")) if {"imported", "main"} <= set(boot) else None
@@ -331,9 +333,12 @@ def evaluate(rec: dict, state: dict) -> dict:
     # Boards really lost power: their uptime at first contact is below the Pi's uptime.
     cycled = []
     for cam in ("openmv_ae3", "openmv_n6"):
-        _, ticks_s, _ = contact_cols((rec.get("contact") or {}).get(cam) or {})
+        c = (rec.get("contact") or {}).get(cam) or {}
+        _, ticks_s, _ = contact_cols(c)
+        # the board powers up with the Pi, ~5 s before the Pi kernel starts counting uptime
+        pi_up = (c.get("first") or {}).get("pi_uptime_s") or rec.get("uptime_start_s", 0)
         if ticks_s is not None:
-            cycled.append(ticks_s <= rec.get("uptime_start_s", 0) + 60)
+            cycled.append(ticks_s <= pi_up + 30)
     rec["boards_power_cycled"] = all(cycled) if cycled else None
     if rec["boards_power_cycled"] is False and rec.get("started_by") == "boot":
         fails.append("boards_not_power_cycled")

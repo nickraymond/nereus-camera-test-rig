@@ -80,6 +80,15 @@ def usb_device(serial_number: str) -> dict | None:
     return None
 
 
+def _pi_uptime() -> float | None:
+    """Pi uptime (s): compared with the board's own ticks_ms it shows whether the board lost
+    power when the Pi did (a board that kept power has been up far longer)."""
+    try:
+        return round(float(Path("/proc/uptime").read_text().split()[0]), 1)
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def _open(port: str):
     import serial
 
@@ -100,7 +109,8 @@ def first_contact(serial_number: str, pending_s: float = PENDING_S,
                   reply_timeout_s: float = REPLY_TIMEOUT_S) -> dict:
     """One ``get_device_info`` exchange, timed, with whatever the board had already sent."""
     t0 = time.monotonic()
-    rec: dict = {"ok": False, "port": by_id_port(serial_number), "usb": usb_device(serial_number)}
+    rec: dict = {"ok": False, "port": by_id_port(serial_number), "usb": usb_device(serial_number),
+                 "pi_uptime_s": _pi_uptime()}
     if not rec["port"]:
         rec["stage"] = "absent"
         return rec
