@@ -7,36 +7,74 @@ Pi numbers are **emulated, calibrated** (Pi-matched arm64 container, scaled to P
 nereus002 runs); a real-Pi check of the top 3 is still to come (after the nereus002 hand-over and
 Friday's pool pull).
 
-## Recommendation
+## Recommendation: the pre-registered winner
 
-**AV1 with SVT-AV1 2.3 (the Pi's own Debian package), preset 4, low-memory settings, 1280×720,
-10 fps, one key frame, 2-pass at a fixed 150 kbps request.**
+**`pi_svt_p4_lowmem`: AV1 with SVT-AV1 2.3 (the Pi's own Debian package), preset 4, low-memory
+settings, 1280×720, 10 fps, one key frame, 2-pass, bitrate searched per clip into 95–100 % of
+100,000 B** (final requests 150–176 kbps, 1–3 encodes per clip).
 
 ```
-SvtAv1EncApp --preset 4 --rc 1 --tbr 150 --passes 2 --keyint 300 --scd 0 \
+SvtAv1EncApp --preset 4 --rc 1 --tbr <kbps> --passes 2 --keyint 300 --scd 0 \
   --lp 1 --lookahead 0 --enable-tf 0 --stats pass.stats -i clip.y4m -b clip.ivf
 # send the AV1 OBU stream (ffmpeg -i clip.ivf -c copy -f obu clip.obu)
 ```
 
-| | recommended (p4 low-mem) | faster fallback (p6 low-mem) |
+| pre-registered numbers (main window, 6 clips) | recommended (p4 low-mem) | faster fallback (p6 low-mem) |
 |---|---|---|
-| VMAF, worst of 6 clips (≥ 70 good; pre-registered ranking, bitrate searched) | **76.8** | 74.8 |
-| same, one encode at a fixed 150 kbps (what a unit does; post-hoc) | 76.5 | 74.8 |
+| VMAF, worst clip (≥ 70 good) | **76.8** | 74.8 |
 | VMAF, calm clips (4) | 88–92 | 87–92 |
-| bytes sent at 150 kbps, max of 12 windows (cap 100,000) | 96,100 | 99,115 |
+| bytes sent, max | 99,509 | 99,539 |
 | card SSIM-Y, worst clip | 0.978 | 0.976 |
-| Pi Zero 2 W encode, one 5 s clip (emulated) | **6.5–7.7 min**; busy scene 8.2–9.7 min | 2.1–2.5 min; busy 3.1–3.7 min |
-| Pi peak memory (bar 250 MiB) | **151–162 MiB** | 136–141 MiB |
+| Pi encode, final settings, worst clip | **6.4–7.5 min** (381–451 s) | 2.2–2.6 min |
+| Pi time incl. the rate search, worst clip (1–3 encodes) | up to 17 min (1,026 s) | up to 5 min |
+| Pi peak memory (bar 250 MiB) | **161 MiB** | 141 MiB |
 
-- It is within 0.7 VMAF of the best any encoder reached on the Mac (libaom cpu-used 3: 77.5),
-  at the full 720p and 10 fps. Lower resolution or frame rate made it **worse**, not better:
-  960×540 → 73.8, 5 fps → 68.8 (both on p6 low-mem, worst clip).
+- Within 0.7 VMAF of the best any encoder reached on the Mac (libaom cpu-used 3: 77.5), at full
+  720p and 10 fps. Lower resolution or frame rate made it **worse**: 960×540 → 73.8, 5 fps → 68.8
+  (both on p6 low-mem, worst clip).
 - The p6 fallback is 2 VMAF points lower for a third of the encode time (energy not measured).
-  Under the pre-registered tie rule it lost only because the top eligible score (79.1, below) set
-  the tie window; if the encode time matters more than 2 points, p6 low-mem is the pick.
-- Today's widely playable choice, H.264 (x264 veryslow on the Pi), scores 66.9 on the worst clip
-  (under the 70 bar), and needs zram (377 MiB). The Pi's hardware H.264 was not re-run; in PR #88
+- H.264 (x264 veryslow on the Pi), the most widely playable format, scores 66.9 on the worst clip
+  (under the 70 bar) and needs zram (377 MiB). The Pi's hardware H.264 was not re-run; in PR #88
   (real Zero, dry 720p clips) it needed ~4.5× the bytes of the Zero's software AV1 for VMAF 70.
+
+## Why not the background-sent-earlier pipeline (79.1, ~40 % of the encode time)?
+
+`pi_svt_p6_lowmem+bgcache` sends only the difference from a background image the server already
+holds. On the numbers it is the strongest Pi-feasible candidate: worst clip **79.1** (vs 76.8),
+stress window **64.4** (vs 58.9, so the stress window is no argument against it), Pi 2.4–2.9 min
+final encode (up to 9.4 min with its rate search, 7 encodes on one clip), 135 MiB.
+
+It is not the recommendation because of the pre-registered rule, which was fixed before any result:
+79.1 − 76.8 = 2.3 < 3, so the two tie, and inside a tie **a standard bitstream beats a custom
+pipeline**. The rule reflects real costs that the VMAF score does not include:
+- **Extra bytes outside the 100 KB:** each background is 34–67 KB here and must be sent before the
+  clips and re-sent whenever the scene changes.
+- **The camera must not move, and the scene must still match the background.** Here the background
+  came from another round in the same pool minutes apart, with the camera fixed on the bottom. A
+  camera that swings on a mooring, or a scene whose light or water clarity changes, breaks the
+  match; that was not tested.
+- **Server rebuild:** the clip is a residual, not a playable video. The server adds the background
+  back frame by frame before anyone can watch it, and a stock player cannot open the file.
+
+If the field camera is rigidly mounted and the server can do the rebuild, this pipeline gives
+2.3–5.5 VMAF more in about 40 % of the encode time. That is a product decision, not something this study
+can settle; it would need a test with a moving camera and changing light first.
+
+## Exploratory (post-hoc, not pre-registered): one encode at a fixed 150 kbps
+
+The PREREG only says the rate-search attempts and their time are reported ("a deployed unit may need
+a retry"). It does not allow swapping the rate control, so this is **exploratory and not part of
+the recommendation**. The bench search took up to 3 encodes per clip on the main window (up to 6 on
+one stress clip), which a unit can ill afford. 2-pass sizes ran 0.86–1.04× the request over the 24
+searched clips, so both recipes were re-run with one encode at a fixed 150 kbps on all 12 windows:
+- every file landed under 100,000 B in one encode (p4: 78,583–96,100 B; p6: up to 99,115 B, too
+  close, so p6 would need a lower request such as 145 kbps);
+- p4 worst clip 76.5 (−0.3; at most −0.94 on any clip); Pi 6.5–7.7 min, 8.2–9.7 min on the stress
+  window; 151–153 MiB.
+If the real-Pi check confirms it, a unit can skip the search. It should still check the size and
+re-encode at 0.9× in the rare case it is over. The 2-pass encoder reads its input twice, so it
+needs the 5 s as a file (`clip.y4m`, 69 MB): put it on the SD card, not in a RAM disk (it is not
+in the memory figures).
 
 ## How good is it, honestly
 
@@ -46,27 +84,12 @@ SvtAv1EncApp --preset 4 --rc 1 --tbr 150 --passes 2 --keyint 300 --scd 0 \
   bubbles: 3× more frame-to-frame change), the recommended encode drops to **58.9 / 59.5, below
   the 60 "watchable" bar**; none of the standard Pi recipes run there (p4, p6, p6 + ROI) reach 60.
   The ranking of the top candidates did not change between the two windows.
-- **Background sent earlier** (residual against a background cached at the server, e.g. sent once
-  a day; 34–67 KB, not counted in the clip): best of all, 79.1 worst clip and 64.4 on the stress
-  window, Pi 2.4–2.9 min, 135 MiB. It needs server-side reconstruction and a background that
-  matches the scene, so the rule ranks it after a standard bitstream. Worth a follow-up if the
-  camera stays put.
-
-## Rate control on the unit (post-hoc, not pre-registered)
-
-The bench searched the bitrate to land in 95–100 % of the cap (up to 6 encodes on one stress clip).
-A unit can't afford that. 2-pass sizes ran 0.86–1.04× the request over the 24 searched clips, so we re-ran
-both recipes with one encode at a fixed **150 kbps** request on all 12 windows (main + stress):
-**every file landed under 100,000 B in one encode** (p4: 78,583–96,100 B; p6: up to 99,115 B, too
-close, so give p6 a lower request such as 145 kbps). Quality cost vs the searched rate: ≤ 0.94 VMAF
-on any clip, 0.3 on the worst clip. A unit should still check the size and re-encode at 0.9× in the
-rare case it is over. The 2-pass encoder reads its input twice, so it needs the 5 s as a file
-(`clip.y4m`, 69 MB): put it on the SD card, not in a RAM disk (it is not in the memory figures).
 
 ## What it looks like (check sheets, worst clip)
 
-`decision/sheet_c3r3_main.png` and `sheet_c3r3_stress.png` in the run folder (source vs candidates,
-full frame + card at 2×, at the recommended encode's worst frame and the middle frame).
+`decision/sheet_c3r3_main.png`, `sheet_c4r3_main.png` and `sheet_c3r3_stress.png` in the run folder
+(source vs candidates, full frame + card at 2×, at the recommended encode's worst frame and the
+middle frame).
 - Worst main clip (diver crossing): the recommended encode keeps the diver recognisable and the
   card patches clean and flat; H.264 smears the diver and makes the card blocky; the cached
   background is the sharpest on the static floor.
@@ -93,4 +116,5 @@ full frame + card at 2×, at the recommended encode's worst frame and the middle
 | 1 Mac ceiling | libaom c3 77.5 | vvenc slower 76.3 | x264 66.3 |
 | 2 Pi recipes | SVT p4 low-mem 76.8 | SVT p6 low-mem 74.8 | only the low-memory SVT recipes fit 250 MiB; libaom c4 77.2 needs 384 MiB |
 | 3 one change on p6 low-mem | + cached background 79.1 | + card ROI 75.0 (tie) | denoise, film grain, tune VQ, 540p, 5 fps all lower |
+| decision (PREREG rule) | **p4 low-mem 76.8** | | tie with the cached background (2.3 < 3), standard bitstream first |
 | 4 stress window | + cached background 64.4 | p4 low-mem 58.9 | ranking unchanged |
