@@ -153,7 +153,7 @@ def armed_response(command_id, ticks_ms, version=PROTOCOL_VERSION):
 
 
 def frame_response(command_id, seq, size_bytes, sharpness, width, height,
-                   version=PROTOCOL_VERSION):
+                   version=PROTOCOL_VERSION, ticks_ms=None):
     """Header line that precedes one JPEG frame in a focus stream.
 
     ``sharpness`` is a relative focus proxy (JPEG byte count at fixed quality): it rises
@@ -161,7 +161,7 @@ def frame_response(command_id, seq, size_bytes, sharpness, width, height,
     corrupt focus frame is cosmetic, and framing (exact ``size_bytes``) keeps the stream
     in sync.
     """
-    return {
+    msg = {
         "version": version,
         "command_id": command_id,
         "status": "frame",
@@ -170,6 +170,9 @@ def frame_response(command_id, seq, size_bytes, sharpness, width, height,
             "width": width, "height": height,
         },
     }
+    if ticks_ms is not None:  # board time the frame was taken (synchronized video, 2026-10-14)
+        msg["frame"]["ticks_ms"] = ticks_ms
+    return msg
 
 
 # -- validation -------------------------------------------------------------

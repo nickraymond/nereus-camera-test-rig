@@ -426,7 +426,11 @@ def stream_frames(usb, command_id, board_config, settings):
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
     sensor.set_framesize(fs_const)
-    sensor.skip_frames(time=300)
+    # Synchronized video (settings["trigger"], 2026-10-14): warm up, say "armed", start on the
+    # host's fire byte; every frame header then carries its board ticks. Focus stream: as before.
+    trigger = bool(settings.get("trigger"))
+    sensor.skip_frames(time=int(settings.get("warmup_ms", 2000 if trigger else 300)))
+    sync = _wait_fire(usb, command_id, sensor.snapshot) if trigger else None
 
     seq = 0
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
@@ -442,11 +446,13 @@ def stream_frames(usb, command_id, board_config, settings):
             break
         t_frame = time.ticks_ms()
         img = sensor.snapshot()
+        t_snap = time.ticks_ms()
         img.compress(quality=quality)
         data = img.bytearray()
         n = len(data)
         usb.write(cp.encode_message(
-            cp.frame_response(command_id, seq, n, n, img.width(), img.height())
+            cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
+                              ticks_ms=t_snap if trigger else None)
         ))
         usb.write(data)
         seq += 1
@@ -459,4 +465,7 @@ def stream_frames(usb, command_id, board_config, settings):
                     break
                 time.sleep_ms(min(rest, 50))
 
-    usb.write(cp.encode_message(cp.completed_response(command_id, {"frames": seq})))
+    out = {"frames": seq}
+    if sync is not None:
+        out["sync"] = sync
+    usb.write(cp.encode_message(cp.completed_response(command_id, out)))
