@@ -77,8 +77,13 @@ with a Wilson 95 % lower bound ≥ 50 %, **and** the labelled set meets the Q2 m
 
 ## Held-out split (never random frames from the same clip)
 
-- Group = site, if sites can be identified (folder or file names, or Reef Check's notes);
-  otherwise recording day (`creation_time`); otherwise the video file.
+- Group = **site + dive date** from the file name (amended 2026-10-15, see the log), written
+  `<site>|<YYYY-MM-DD>` with these site names: `South Wreck`, `Fullers Resto`,
+  `Caspar South Restoration`, `Mendocino Headlands` (two-digit years read as 20YY). A file
+  without a site or date in its name falls back to recording day (`creation_time`), then to
+  the video file.
+- Secondary report (not part of the bar): F1 for held-out groups whose site has no training
+  data ("new site") and for those whose site does ("same site, other day"), each with its n.
 - Eligibility screen (recorded in `labels/group_screen.csv`): for each group, up to 40 of its
   stills, evenly spaced in time (all of them if it has fewer), are checked for a purple urchin.
   A group with none in its screen is not eligible for the test set; it may still be used in
@@ -167,3 +172,4 @@ training stills, to show whether more video would still help.
 |---|---|---|---|
 | 2026-10-15 | QE review of #117 (before any video was downloaded or viewed): 1-group outcome is "inconclusive"; paired, group-stratified bootstrap; 30 s gap before validation, LOGO validation from training groups; E3 text matches the code (median of window-bests); test eligibility from a per-group screen; Q1 bar uses a Wilson lower bound; ignore-box rule spelled out. Also A runs tiled. | QE FAIL items 1–5 + nits | All — no data yet |
 | 2026-10-15 | Clarifications while writing the code (no video downloaded yet): ignore boxes are left out of model B's training targets (treated as background, which works against "helped"); bar condition 3 is checked for every seed, like 1 and 2; minimums are pooled over folds (held-out groups and test boxes). | Ambiguities in the original text | All — no data yet |
+| 2026-10-15 | Group = site + dive date instead of site. Decided after seeing only the Drive file list (names, dates, sizes) and before any frame was viewed or any group hash computed. Adds the new-site / same-site secondary report. | South Wreck holds 23 of 29 videos (91 % of the bytes) over 5 dive days in 4 years. With site groups, 2 of 4 sites are held out by hash, so half the time South Wreck would be test data and B would train on ~2 GB from small sites: the outcome would hinge on a coin flip, not on the stills. Site-day groups are still separate dives (other day, mostly other year and diver). | All — no frames viewed, no hashes computed |
