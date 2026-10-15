@@ -92,8 +92,8 @@ def manifest(starts: list[int]) -> None:
     lines = [
         "# MANIFEST — video ≤ 100 KB study, 5 s clips (PREREG v2)",
         "",
-        "What: encodes, scores and logs for the question \"best 5 s underwater clip in "
-        "≤ 100,000 B, encodable on a Pi Zero 2 W\". Pre-registration: "
+        'What: encodes, scores and logs for the question "best 5 s underwater clip in '
+        '≤ 100,000 B, encodable on a Pi Zero 2 W". Pre-registration: '
         "`compression_study/video_100k/PREREG.md` (rig repo, branch `study/video-100k-budget`).",
         f"Written: {datetime.now().astimezone().isoformat(timespec='seconds')}",
         f"Host: {platform.node()} ({platform.platform()})",

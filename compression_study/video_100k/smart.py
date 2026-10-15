@@ -240,7 +240,8 @@ def cached_bg(data: Path, clip: str, crf: int, py: str | None = None) -> tuple[s
     raw = d / f"{ref}_median.y4m"
     cmd = (
         f"mkdir -p {q(d)} && ( test -s {q(y4m)} || ( "
-        f"{q(py or sys.executable)} {q(HERE / 'bg_median.py')} {q(src_path(ref))} {q(raw)}.$$ --step 1 && "
+        f"{q(py or sys.executable)} {q(HERE / 'bg_median.py')} {q(src_path(ref))} "
+        f"{q(raw)}.$$ --step 1 && "
         f"ffmpeg -hide_banner -v error -y -i {q(raw)}.$$ -c:v libaom-av1 -usage allintra "
         f"-cpu-used 4 -crf {crf} -b:v 0 -f obu {q(obu)}.$$ && "
         f"ffmpeg -hide_banner -v error -y -f obu -i {q(obu)}.$$ -pix_fmt yuv420p "

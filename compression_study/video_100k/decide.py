@@ -3,7 +3,8 @@
     python -m compression_study.video_100k.decide --run <RUN_ROOT> --out <RUN_ROOT>/decision
 
 Reads ``<run>/stage1/results.jsonl`` (Mac encoders: the quality ceiling) and
-``<run>/pi/results.jsonl`` (Pi container: stages 2-4), plus every ``<run>/pi/pi_calibration*.jsonl``.
+``<run>/pi/results.jsonl`` (Pi container: stages 2-4), plus every
+``<run>/pi/pi_calibration*.jsonl``.
 
 Pi time (emulated, calibrated), per clip, from the final encode's container measurement:
   low  = container wall × median wall ratio   (the Zero's 4 cores scale like the container's)
@@ -140,8 +141,10 @@ def decide(rows: list[dict]) -> dict:
     elig.sort(key=lambda s: -s["vmaf_worst"])
     top = elig[0]["vmaf_worst"]
     tie = [s for s in elig if top - s["vmaf_worst"] < TIE_VMAF]
-    steps = [f"top eligible worst-clip VMAF {top}; tie set (within {TIE_VMAF}): "
-             + ", ".join(f"{s['cand']} ({s['vmaf_worst']})" for s in tie)]
+    steps = [
+        f"top eligible worst-clip VMAF {top}; tie set (within {TIE_VMAF}): "
+        + ", ".join(f"{s['cand']} ({s['vmaf_worst']})" for s in tie)
+    ]
     pool = tie
     if any(s["standard"] for s in pool) and not all(s["standard"] for s in pool):
         pool = [s for s in pool if s["standard"]]
@@ -166,7 +169,10 @@ def fmt(v, nd=1):
 
 
 def table(rows: list[dict], with_pi: bool) -> list[str]:
-    head = "| candidate | ok | max B | VMAF worst (clip) | mean | p5 worst | S2 worst | card SSIM-Y worst |"
+    head = (
+        "| candidate | ok | max B | VMAF worst (clip) | mean | p5 worst | S2 worst "
+        "| card SSIM-Y worst |"
+    )
     sep = "|---|---|---|---|---|---|---|---|"
     if with_pi:
         head += " Pi time low–high s | RSS MiB | Pi |"
@@ -174,8 +180,11 @@ def table(rows: list[dict], with_pi: bool) -> list[str]:
     out = [head, sep]
     for s in rows:
         if "vmaf_worst" not in s:
-            out.append(f"| `{s['cand']}` | {s['n_ok']}/{s['n']} | " + " | ".join(
-                ["–"] * (6 + (3 if with_pi else 0))) + " |")
+            out.append(
+                f"| `{s['cand']}` | {s['n_ok']}/{s['n']} | "
+                + " | ".join(["–"] * (6 + (3 if with_pi else 0)))
+                + " |"
+            )
             continue
         line = (
             f"| `{s['cand']}`{' (post-hoc)' if s.get('posthoc') else ''} | "
@@ -219,17 +228,21 @@ def main(argv=None) -> int:
         [summarize(pi, c, CLIPS, cal, std(c), ph(c)) for c in sorted({k[0] for k in pi})]
     )
     sens = [k[0] for k in pi if k[1] in SENS_CLIPS]
-    sens_rows = rank(
-        [summarize(pi, c, SENS_CLIPS, cal, std(c), ph(c)) for c in sorted(set(sens))]
-    )
+    sens_rows = rank([summarize(pi, c, SENS_CLIPS, cal, std(c), ph(c)) for c in sorted(set(sens))])
     dec = decide(pi_rows) if cal else {"winner": None, "why": "no Pi runs yet"}
     ceiling = next((s for s in mac_rows if s["complete"]), None)
 
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "decision.json").write_text(
         json.dumps(
-            {"calibration": cal, "decision": dec, "ceiling": ceiling, "mac": mac_rows,
-             "pi": pi_rows, "sensitivity": sens_rows},
+            {
+                "calibration": cal,
+                "decision": dec,
+                "ceiling": ceiling,
+                "mac": mac_rows,
+                "pi": pi_rows,
+                "sensitivity": sens_rows,
+            },
             indent=1,
         )
     )
@@ -242,9 +255,12 @@ def main(argv=None) -> int:
         md += ["", "## Stage 4 — sensitivity window (frames 150–199; not used for ranking)", ""]
         md += table(sens_rows, True)
     if cal:
-        md += ["", f"Calibration: n = {cal['n']} PR #88 jobs; wall ratio median "
-               f"{cal['wall_ratio_median']}, CPU ratio median {cal['cpu_ratio_median']} / max "
-               f"{cal['cpu_ratio_max']}; stalls dropped: {len(cal['dropped_stalls'])}."]
+        md += [
+            "",
+            f"Calibration: n = {cal['n']} PR #88 jobs; wall ratio median "
+            f"{cal['wall_ratio_median']}, CPU ratio median {cal['cpu_ratio_median']} / max "
+            f"{cal['cpu_ratio_max']}; stalls dropped: {len(cal['dropped_stalls'])}.",
+        ]
     md += ["", "## Decision (PREREG v2 rule)", ""]
     md += [f"- {x}" for x in dec.get("steps", [dec.get("why", "")])]
     md.append(f"- **winner: {dec['winner']}**" if dec.get("winner") else "")

@@ -61,14 +61,30 @@ def main(argv=None) -> int:
     img.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="slider_"))
     views = [  # (key, clip, frame choice, afters, title, note)
-        ("calm", "bmcam003_round1", "mid", [REC, H264],
-         "Calm pool, card at 2 m", "Middle frame of the 5 s clip. Most of a static scene."),
-        ("diver", "bmcam003_round3", "worst", [REC, FAST, H264],
-         "Diver passing the card (hardest clip)",
-         "The frame where the recommended encode scores lowest in this clip."),
-        ("busy", "bmcam003_round3@150", "worst", [REC, BG],
-         "Stress case: diver close, bubbles (15–20 s into the recording)",
-         "Sensitivity window, not used for ranking: the busiest 5 s we have."),
+        (
+            "calm",
+            "bmcam003_round1",
+            "mid",
+            [REC, H264],
+            "Calm pool, card at 2 m",
+            "Middle frame of the 5 s clip. Most of a static scene.",
+        ),
+        (
+            "diver",
+            "bmcam003_round3",
+            "worst",
+            [REC, FAST, H264],
+            "Diver passing the card (hardest clip)",
+            "The frame where the recommended encode scores lowest in this clip.",
+        ),
+        (
+            "busy",
+            "bmcam003_round3@150",
+            "worst",
+            [REC, BG],
+            "Stress case: diver close, bubbles (15–20 s into the recording)",
+            "Sensitivity window, not used for ranking: the busiest 5 s we have.",
+        ),
     ]
     sections = []
     try:
@@ -83,18 +99,29 @@ def main(argv=None) -> int:
                 disp = display_file(reg[c], r, data, clip, tmp)
                 f = frame_png(disp, n, img / f"{key}_{c.replace('+', '_')}.png")
                 cp = card_png(f, clip, img / f"{key}_card_{c.replace('+', '_')}.png")
-                lab = f"{LABEL[c]} · {r['size_B'] / 1000:.1f} kB · VMAF {r['vmaf_per_frame'][n]:.0f}"
+                lab = (
+                    f"{LABEL[c]} · {r['size_B'] / 1000:.1f} kB · VMAF {r['vmaf_per_frame'][n]:.0f}"
+                )
                 full_afters.append({"label": lab, "image": f"img/{f.name}"})
                 card_afters.append({"label": lab, "image": f"img/{cp.name}"})
             sections.append(
-                {"title": title, "note": f"{note} Frame {n} of 50; click for full screen and 1:1.",
-                 "before": f"img/{before.name}", "before_label": "Before · original video frame",
-                 "afters": full_afters}
+                {
+                    "title": title,
+                    "note": f"{note} Frame {n} of 50; click for full screen and 1:1.",
+                    "before": f"img/{before.name}",
+                    "before_label": "Before · original video frame",
+                    "afters": full_afters,
+                }
             )
             sections.append(
-                {"title": f"{title}: the colour card, 3×", "note": "Pixels enlarged, no smoothing.",
-                 "before": f"img/{card_b.name}", "before_label": "Before · original",
-                 "pixelated": True, "afters": card_afters}
+                {
+                    "title": f"{title}: the colour card, 3×",
+                    "note": "Pixels enlarged, no smoothing.",
+                    "before": f"img/{card_b.name}",
+                    "before_label": "Before · original",
+                    "pixelated": True,
+                    "afters": card_afters,
+                }
             )
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

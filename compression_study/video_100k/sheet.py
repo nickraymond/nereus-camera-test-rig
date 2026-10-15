@@ -43,7 +43,8 @@ def grab(src: Path, n: int, box: tuple[int, int, int, int]) -> tuple[Image.Image
     with tempfile.TemporaryDirectory() as td:
         png = Path(td) / "f.png"
         sh(
-            f"ffmpeg -hide_banner -v error -y -i {q(src)} -vf \"select='eq(n\\,{n})',format=rgb24\" "
+            f"ffmpeg -hide_banner -v error -y -i {q(src)} "
+            f"-vf \"select='eq(n\\,{n})',format=rgb24\" "
             f"-frames:v 1 -update 1 {q(png)}"
         )
         im = Image.open(png).convert("RGB")
@@ -64,7 +65,11 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     reg = registry()
     data = a.run / a.data
-    recs = {(r["cand"], r["clip"]): r for r in read_jsonl(data / "results.jsonl") if r.get("status") == "ok"}
+    recs = {
+        (r["cand"], r["clip"]): r
+        for r in read_jsonl(data / "results.jsonl")
+        if r.get("status") == "ok"
+    }
     missing = [c for c in a.cands if (c, a.clip) not in recs]
     if missing:
         raise SystemExit(f"no ok result for {missing} on {a.clip} in {data}")
@@ -76,7 +81,9 @@ def main(argv=None) -> int:
         rows = [("source (5 s window, lossless)", src_path(a.clip), None)]
         for name in a.cands:
             r = recs[(name, a.clip)]
-            rows.append((f"{name}  {r['size_B']:,} B", display_file(reg[name], r, data, a.clip, tmp), r))
+            rows.append(
+                (f"{name}  {r['size_B']:,} B", display_file(reg[name], r, data, a.clip, tmp), r)
+            )
         tiles = []
         for label, path, r in rows:
             line = []
