@@ -160,6 +160,15 @@ class BoardVideo:
         except OSError as exc:
             self.rec["stop_error"] = str(exc)
 
+    def abort(self) -> None:
+        """Idempotent cleanup for any exit path: stop the stream, release the port."""
+        try:
+            if getattr(self, "io", None) is not None:
+                self.io._t.write(b"x")
+        except Exception:  # noqa: BLE001 - best effort; the board times out by itself
+            pass
+        self.cam.close()
+
     def finish(self) -> dict:
         if self.thread:
             self.thread.join(timeout=30)
@@ -188,7 +197,8 @@ class BoardVideo:
 
 
 class ImxVideo:
-    """IMX708 hardware H.264 via rpicam-vid, armed paused, recorded on SIGUSR1."""
+    """IMX708 hardware H.264 via rpicam-vid: records from the arm with per-frame metadata; the
+    fire only marks t=0 (frames are trimmed to the fire by their SensorTimestamp)."""
 
     name = "imx708"
 
@@ -227,6 +237,21 @@ class ImxVideo:
         self.rec["stop_host_mono"] = time.monotonic()
         if self.proc.poll() is None:
             os.kill(self.proc.pid, signal.SIGINT)  # clean exit: file + metadata closed
+
+    def abort(self) -> None:
+        """Idempotent cleanup for any exit path: rpicam-vid must never outlive this script
+        (it would hold the camera and keep filling the SD card)."""
+        proc = getattr(self, "proc", None)
+        if proc is not None and proc.poll() is None:
+            os.kill(proc.pid, signal.SIGINT)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        log = getattr(self, "log", None)
+        if log is not None and not log.closed:
+            log.close()
 
     def finish(self) -> dict:
         try:
@@ -322,24 +347,36 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             errors[d.name] = f"arm: {exc!r}"
 
-    threads = [threading.Thread(target=arm, args=(d,)) for d in devs]
-    [t.start() for t in threads]
-    [t.join(timeout=60) for t in threads]
-    armed = [d for d in devs if d.name not in errors]
-    print(f"sync_video: armed {[d.name for d in armed]} errors {errors}", flush=True)
-    fire = {}
-    for d in list(armed):  # back to back, sub-ms apart; a board not reading fails alone
-        try:
-            fire[d.name] = d.fire()
-        except Exception as exc:  # noqa: BLE001
-            errors[d.name] = f"fire: {exc!r}"
-            armed.remove(d)
-    time.sleep(a.seconds)
-    for d in armed:
-        d.stop()
-    results = {d.name: d.finish() for d in armed}
-    stop.set()
-    sampler.join(timeout=3)
+    results: dict = {}
+    fire: dict = {}
+    try:
+        threads = [threading.Thread(target=arm, args=(d,)) for d in devs]
+        [t.start() for t in threads]
+        [t.join(timeout=60) for t in threads]
+        armed = [d for d in devs if d.name not in errors]
+        print(f"sync_video: armed {[d.name for d in armed]} errors {errors}", flush=True)
+        for d in list(armed):  # back to back, sub-ms apart; a board not reading fails alone
+            try:
+                fire[d.name] = d.fire()
+            except Exception as exc:  # noqa: BLE001
+                errors[d.name] = f"fire: {exc!r}"
+                armed.remove(d)
+        time.sleep(a.seconds)
+        for d in armed:
+            try:
+                d.stop()
+            except Exception as exc:  # noqa: BLE001
+                errors[d.name] = f"stop: {exc!r}"
+        for d in armed:
+            try:
+                results[d.name] = d.finish()
+            except Exception as exc:  # noqa: BLE001
+                errors[d.name] = f"finish: {exc!r}"
+    finally:
+        for d in devs:  # whatever happened above: no rpicam-vid / open port survives
+            d.abort()
+        stop.set()
+        sampler.join(timeout=3)
     for name, err in errors.items():
         results[name] = {"camera": name, "ok": False, "error": err}
 

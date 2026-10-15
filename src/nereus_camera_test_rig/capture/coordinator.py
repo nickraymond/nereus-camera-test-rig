@@ -399,7 +399,12 @@ def _capture_synchronized(ordered: list[str], cameras_cfg: dict[str, Any],
                      "frame_offset_ms": {n: round((t - t0) * 1000, 1)
                                          for n, t in frames.items()} if t0 else {},
                      "skew_ms": round((max(frames.values()) - t0) * 1000, 1)
-                     if len(frames) >= 2 else None}
+                     if len(frames) >= 2 else None,
+                     # a board whose fire arrived after its 20 s armed wait shot unsynchronized
+                     "timed_out": sorted(
+                         n for n in fired if results[n][shot].ok and
+                         ((results[n][shot].sensor_metadata or {}).get("sync") or {})
+                         .get("timed_out"))}
             sync_log.append(entry)
             logger.info("synchronized %s: skew %s ms offsets %s", shot, entry["skew_ms"],
                         entry["frame_offset_ms"])

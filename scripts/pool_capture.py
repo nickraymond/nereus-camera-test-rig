@@ -485,19 +485,33 @@ def append_pose(run_dir: Path, n: int, block: str, line: dict) -> None:
 def run_video_clip(run_dir: Path, n: int, seconds: float) -> dict:
     """One synchronized clip (scripts/sync_video.py) into <run>/video/clipNNN; its summary."""
     out = run_dir / "video" / f"clip{n:03d}"
+    # Own process group, killed on every exit: rpicam-vid must not outlive a hung clip (QE #115).
+    proc = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "sync_video.py"),
+                             "--seconds", str(seconds), "--out", str(out)],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            start_new_session=True)
     try:
-        subprocess.run([sys.executable, str(ROOT / "scripts" / "sync_video.py"), "--seconds",
-                        str(seconds), "--out", str(out)], capture_output=True, text=True,
-                       timeout=seconds + 120)
+        proc.communicate(timeout=seconds + 120)
         summary = json.loads((out / "video_sync.json").read_text())
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return {"ok": False, "error": repr(exc)[:200], "dir": str(out.relative_to(run_dir))}
+    finally:
+        _killpg_quiet(proc.pid)
+        if proc.poll() is None:
+            proc.wait()
     cams = summary.get("cameras") or {}
     return {"ok": bool(summary.get("ok")), "skew_ms": summary.get("start_skew_ms"),
             "frames": {c: r.get("frames") for c, r in cams.items()},
             "fps": {c: r.get("fps") for c, r in cams.items()},
             "lost": sum(r.get("frames_lost") or 0 for r in cams.values()),
             "host": summary.get("host"), "dir": str(out.relative_to(run_dir))}
+
+
+def _killpg_quiet(pgid: int) -> None:
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
@@ -526,10 +540,22 @@ def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
             pass
         proc.communicate()
         line["exit_code"] = "timeout"
+    finally:
+        # Even after a normal exit: nothing of this set (e.g. a signal-mode rpicam-still left
+        # by a crashed synchronized set) may survive to hold the camera (QE #115).
+        _killpg_quiet(proc.pid)
     new = sorted(set(run_dir.glob("*/exp_*")) - before)
     if new:
         exp = new[-1]
         line["experiment"] = str(exp.relative_to(run_dir))
+        sync_path = exp / "sync.json"
+        if sync_path.is_file():  # synchronized set: per-shot skew + boards that fired late
+            try:
+                line["sync"] = {sh["shot"]: {"skew_ms": sh.get("skew_ms"),
+                                             "timed_out": sh.get("timed_out", [])}
+                                for sh in json.loads(sync_path.read_text()).get("shots", [])}
+            except (OSError, ValueError):
+                pass
         try:
             line["cameras"] = summarize_set(exp)
         except (OSError, ValueError, KeyError) as exc:
@@ -550,8 +576,10 @@ def health_text(line: dict) -> str:
 def _health_text(line: dict) -> str:
     """The one human line per set (pool.log). OK n/3 counts a camera only if still AND raw."""
     cams = line.get("cameras", {})
+    # calibration sets: one RAW shot, recorded as the capture ("still" key)
+    kinds = ("still",) if line.get("phase", "").startswith("cal") else ("still", "raw")
     ok = [c for c in CAMERAS if all((cams.get(c, {}).get(k) or {}).get("status") == "completed"
-                                    for k in ("still", "raw"))]
+                                    for k in kinds)]
     parts = []
     for c in CAMERAS:
         raw = (cams.get(c, {}).get("raw") or {})
@@ -559,6 +587,8 @@ def _health_text(line: dict) -> str:
         short = {"imx708": "imx", "openmv_n6": "n6", "openmv_ae3": "ae3"}[c]
         if c in line.get("benched", []):
             parts.append(f"{short} benched")
+        elif c in ok and len(kinds) == 1:
+            parts.append(f"{short} cal {still['bytes'] / 1e6:.1f}MB")
         elif c in ok:
             parts.append(f"{short} raw {raw['bytes'] / 1e6:.1f}MB jpg {still['bytes'] / 1e6:.2f}MB")
         else:
@@ -569,7 +599,14 @@ def _health_text(line: dict) -> str:
     pw = (f" · ups {p['vin_mv'] / 1000:.2f}Vin {p['vbat_mv'] / 1000:.2f}Vbat {p['w_out']:.1f}W"
           f"{' BATT' if p.get('on_battery') else ''}" if p else " · ups -")
     up = int(line["clock"]["uptime_s"] or 0)
-    return (f"[set {line['set']:03d} | run+{int(line['run_s']) // 60:3d}m | boot+{up // 60}m] "
+    sync = line.get("sync") or {}
+    if sync:
+        late = sorted({n for sh in sync.values() for n in sh.get("timed_out") or []})
+        parts.append("sync " + "/".join(f"{k} {v.get('skew_ms')}ms" for k, v in sync.items())
+                     + (f" LATE-FIRE {','.join(late)}" if late else ""))
+    phase = f" {line['phase']}" if line.get("phase") else ""
+    return (f"[set {line['set']:03d}{phase} | run+{int(line['run_s']) // 60:3d}m | "
+            f"boot+{up // 60}m] "
             f"{'OK' if len(ok) == 3 else 'PARTIAL' if ok else 'FAIL'} {len(ok)}/3 · "
             + " · ".join(parts)
             + depth_text((line.get("depth") or {}).get("end") or {})

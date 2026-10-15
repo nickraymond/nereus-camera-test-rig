@@ -302,6 +302,9 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
     line = pc.run_one_set(n, run_dir, Path(state["run_config"]), state["run_id"], list(CAMERAS),
                           ("--sync",) if state.get("sync") else ())
     rec["set_s"] = round(time.monotonic() - t_set, 1)
+    # Upper bound for the last still's time on the uptime clock (monotonic; the wall clock can
+    # step when NTP syncs mid-boot, QE #115): every still is written before the set returns.
+    rec["uptime_set_end_s"] = round(uptime_s(), 1)
     rec["set_exit"] = line.get("exit_code")
     rec["set_tail"] = line.get("stdout_tail") or []
     exp = line.get("experiment")
@@ -375,8 +378,8 @@ def evaluate(rec: dict, state: dict) -> dict:
     mt = [((v.get(c) or {}).get("still") or {}).get("mtime") for c in CAMERAS]
     mt = [m for m in mt if m]
     rec["still_skew_s"] = round(max(mt) - min(mt), 1) if len(mt) >= 2 else None
-    if mt and rec.get("uptime_end_s") is not None:
-        last = rec["uptime_end_s"] - (time.time() - max(mt))
+    if mt and rec.get("uptime_set_end_s") is not None:
+        last = rec["uptime_set_end_s"]
         rec["last_still_uptime_s"] = round(last, 1)
         if rec.get("started_by") == "boot" and last > MAX_LAST_STILL_UPTIME_S:
             fails.append(f"slow:{last:.0f}s")

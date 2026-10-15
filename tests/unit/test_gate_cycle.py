@@ -42,6 +42,7 @@ def _still(ok=True, why=None):
 
 def _rec(**kw):
     rec = {"cycle": 2, "started_by": "boot", "uptime_start_s": 25.0, "uptime_end_s": 120.0,
+           "uptime_set_end_s": 95.0,
            "prev": {"clean": True, "by": "gate_timer"},
            "contact": {"openmv_ae3": _contact(), "openmv_n6": _contact()},
            "verify": {c: {"still": _still(), "raw": {"ok": True}} for c in gate.CAMERAS}}
@@ -106,3 +107,7 @@ def test_video_clip_must_be_ok_synchronized_and_lossless():
     assert gate.evaluate(_rec(video={"ok": False, "error": "timeout"}), {})["fail_reasons"] == [
         "video:timeout"]
     assert gate.csv_row(gate.evaluate(_rec(video=ok), {}))["video"] == "ok"
+
+
+def test_slow_start_fails_on_the_monotonic_set_end():
+    assert gate.evaluate(_rec(uptime_set_end_s=181.0), {})["fail_reasons"] == ["slow:181s"]

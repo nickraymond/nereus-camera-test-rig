@@ -106,3 +106,33 @@ transfer), so the stills are several seconds apart.
 - **Then fix:** warm up all three in parallel and fire on one trigger.
 - **Bar (proposed):** skew ≤ 100 ms between any two cameras' exposures. Verified with a visible
   millisecond clock in view of all three. Skew is reported per gate cycle.
+
+## Amendments (dated; made before any gate cycle on the fixed configuration)
+
+**A1 (2026-10-14 9:15 PM, QE #115): "the boards really lost power".**
+- The bar is board `ticks_ms` at first contact ≤ the Pi uptime at that same moment **+ 30 s**,
+  not "< Pi uptime".
+- Why: the board powers up with the UPS output, ~4–5 s before the Pi kernel starts counting
+  uptime. Measured: board 32.6 s vs Pi 28 s.
+- A board that kept power would read the previous boot's uptime plus the off time (≥ 2 min),
+  so 30 s still separates the two cases cleanly.
+
+**A2 (same time): video is part of every gate cycle.** Nick's video requirement, "in the gate's
+spirit": the 25× gate runs synchronized stills and then a 10 s synchronized clip on all three
+cameras. A cycle also FAILS if the clip:
+- did not record on every camera;
+- has a start skew > 100 ms (timestamp-based);
+- lost any board frame.
+
+This is stricter than the "5 clean video starts/stops" in the brief.
+
+**A3 (same time): the 180 s start bar uses the monotonic clock.**
+- "The last verified still within 180 s of kernel start" is now the Pi uptime when the capture
+  set returned, an upper bound, since every still is written before the set returns.
+- The first version mixed file mtimes (wall clock) with uptime. The wall clock can step when NTP
+  syncs mid-boot.
+
+**A4 (same time): still skew is reported, not gated, until the lamp run.**
+- The proposed ≤ 100 ms still bar (§5) is measured per cycle (`sync.json`).
+- It is not a FAIL condition until it has been checked against a visible clock in a lit scene.
+  In the dark, the AE3's 66 ms frame period alone makes 58–102 ms.

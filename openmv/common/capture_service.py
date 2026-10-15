@@ -434,6 +434,11 @@ def stream_frames(usb, command_id, board_config, settings):
     trigger = bool(settings.get("trigger"))
     sensor.skip_frames(time=int(settings.get("warmup_ms", 2000 if trigger else 300)))
     sync = _wait_fire(usb, command_id, sensor.snapshot) if trigger else None
+    if sync is not None and sync["timed_out"]:
+        # The host never fired (it died or gave up): do not stream into a port nobody reads.
+        usb.write(cp.encode_message(cp.completed_response(command_id,
+                                                          {"frames": 0, "sync": sync})))
+        return
 
     seq = 0
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)

@@ -40,6 +40,7 @@ Shots taken before you are in position simply have no board in them; the pipelin
       `usb-storage.quirks=37c5:16e3:i,37c5:1206:i`.
 - [ ] Gate passed (25 + 25), with results in `docs/rig_gate_20261014/RESULTS.md`.
 - [ ] Charged: VBAT ≥ 3.4 V on the charger.
+- [ ] Gate disarmed first (`python scripts/gate_cycle.py disarm`; the gate and pool mode must never both be armed).
 - [ ] Armed with the program: `pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30`
       (exact args in the final card).
 - [ ] Switched **OFF**.
