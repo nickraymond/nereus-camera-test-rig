@@ -66,7 +66,10 @@ def audit(run: Path) -> dict:
         n = int(r["cycle"])
         clip = run / "video" / f"cycle{n:03d}"
         rec = {"cycle": n, "live_result": r["result"], "audited_result": r["result"]}
-        if r["result"] == "PASS":
+        if r["result"] == "PASS" and not (clip / "imx708.h264").is_file():
+            # not on this Mac (pull incomplete): no verdict for it, never a silent PASS or FAIL
+            rec.update(a8="MISSING", audited_result="MISSING")
+        elif r["result"] == "PASS":
             frames, err = decoded_frames(clip / "imx708.h264")
             meta = meta_records(clip / "imx708.meta.json")
             ok = frames is not None and frames >= floor and frames >= meta - META_SLACK
@@ -75,7 +78,7 @@ def audit(run: Path) -> dict:
                 rec["audited_result"] = "FAIL"
         if rec["audited_result"] == "PASS":
             streak += 1
-        elif rec["audited_result"] != "VOID":
+        elif rec["audited_result"] not in ("VOID", "MISSING"):
             streak = 0
         best = max(best, streak)
         rec["audited_streak"] = streak
@@ -89,6 +92,7 @@ def audit(run: Path) -> dict:
         w.writerows(out)
     summary = {"run": run.name, "cycles": len(out), "min_frames": floor,
                "a8_failures": [o["cycle"] for o in out if o.get("a8") == "FAIL"],
+               "missing": [o["cycle"] for o in out if o.get("a8") == "MISSING"],
                "best_audited_streak": best, "final_audited_streak": streak}
     (run / "audit_a8.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary))
@@ -100,6 +104,9 @@ def main() -> int:
     ap.add_argument("run")
     a = ap.parse_args()
     s = audit(Path(a.run).expanduser())
+    if s["missing"]:
+        print(f"INCOMPLETE: {len(s['missing'])} counted clip(s) not pulled; no verdict")
+        return 2
     return 0 if not s["a8_failures"] else 1
 
 
