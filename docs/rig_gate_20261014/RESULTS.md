@@ -207,6 +207,39 @@ three.
   the real risk.
 - The IMX708 and AE3 RAWs never failed.
 
+### Which checks are gated (for the 3 PM merge rule: "only if every gate008 failure is the N6 video loss")
+
+**Gated, a FAIL resets the streak.** Exactly the PASS conditions of PREREG §4 plus amendments
+A1–A3 and A5–A8. In `scripts/gate_cycle.py` `evaluate()`, every `fails.append` is one of:
+
+| check | source | failure tag |
+|---|---|---|
+| each camera's **still**: sha256, size, full decode at the expected size | §4 | `<cam>_still:…` |
+| previous boot ended cleanly | §4 | `prev_shutdown_not_clean` |
+| boards really lost power | §4 + A1 | `boards_not_power_cycled` |
+| last verified still ≤ 180 s from kernel start (monotonic) | §4 + A3 | `slow:…` |
+| 10 s synchronized **video** on all three, start skew ≤ 100 ms, 0 board frames lost | A2 (+ A7) | `video:…`, `video_skew:…`, `video_lost:…` |
+| every counted IMX708 clip decodes | A8 (offline audit) | audit FAIL |
+
+**Not gated, logged only:**
+- **RAW captures.** The `raws_ok` column. RAWs are absent from §4's PASS conditions and from
+  every amendment. The harness has never failed a cycle on a RAW: gate008 c36 and c52 had
+  RAW 2/3 and stayed PASS.
+- **Still skew** (A4).
+- VIN/VBAT.
+
+**Every gate008 cycle that failed a gated check (as of cycle 55):**
+
+| cycle | gated failure | camera / cause |
+|---|---|---|
+| 22 | `video:camera_failed` | N6 video stream lost bytes 4.6 s in (47 frames) |
+| 31 | `video:camera_failed` | N6 video stream lost bytes 3.4 s in (34 frames) |
+| 44 | `video:camera_failed` | N6 video stream lost bytes ~1 s in (11 frames) |
+
+No other gated check failed in gate008: stills, shutdown, power-cycle and start time were all
+clean. The N6 RAW losses (c36, c52) are not gated failures. The final list will be confirmed
+from the full CSV at the results commit.
+
 ### Run 2 (repeat): gate008, from 9:59 AM
 
 Armed automatically when run 1 passed (A6). The STOP at cycle 1 was the planned pause for the
