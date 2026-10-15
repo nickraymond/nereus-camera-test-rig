@@ -8,9 +8,9 @@ Time on the Zero = container time × a factor calibrated on real nereus002 runs:
     python -m compression_study.video_100k.pi_emulate calibrate --data <data> \
         --pr88 <rig>/data/video_20261002          # re-runs PR #88's Zero jobs in the container
     python -m compression_study.video_100k.pi_emulate measure --data <data> \
-        --cands svt23_p8_pi --clips all           # rate search + timing in the container
+        --cands tag:stage2 --clips all            # rate search + timing in the container
 
-The Mac must be otherwise idle while this runs (timing). Docker image: ``docker/Dockerfile.pi``
+The Mac must be otherwise idle while this runs (timing). Docker image: ``Dockerfile.pi`` (here)
 (``docker build --platform linux/arm64 -t video100k-pi:trixie``).
 """
 
@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from .candidates import registry
-from .common import CLIPS, EXPLORE, POOL, append_jsonl, read_jsonl
+from .common import REF_DIR, append_jsonl, clip_set, read_jsonl
 
 HERE = Path(__file__).resolve().parent
 IMAGE = "video100k-pi:trixie"
@@ -198,13 +198,25 @@ def prebuild_backgrounds(box: Container, data: Path, clips: list[str]) -> None:
         )
 
 
+def expand(reg: dict, name: str) -> list[str]:
+    """A candidate name, or 'tag:<tag>' for every candidate carrying that tag."""
+    if name.startswith("tag:"):
+        return [k for k, v in reg.items() if name[4:] in v.tags]
+    if name not in reg:
+        raise SystemExit(f"unknown candidate: {name}")
+    return [name]
+
+
 def measure(data: Path, names: list[str], clips: list[str], score_it: bool = True) -> None:
     from .bench import rate_search, score_cand
 
     reg = registry()
-    box = Container([data, POOL, HERE])
+    names = [m for n in names for m in expand(reg, n)]
+    box = Container([data, REF_DIR, HERE])
     out = data / "results.jsonl"
-    done = {(r["cand"], r["clip"]) for r in read_jsonl(out) if r.get("status") == "ok"}
+    done = {
+        (r["cand"], r["clip"]) for r in read_jsonl(out) if r.get("status") in ("ok", "over_cap")
+    }
     try:
         if any("bgcache" in n for n in names):
             prebuild_backgrounds(box, data, clips)
@@ -260,10 +272,7 @@ def main(argv=None) -> int:
     if a.cmd == "calibrate":
         calibrate(a.data, a.pr88, a.tag)
     elif a.cmd == "measure":
-        clips = (
-            EXPLORE if a.clips == "explore" else CLIPS if a.clips == "all" else a.clips.split(",")
-        )
-        measure(a.data, a.cands, clips, not a.no_score)
+        measure(a.data, a.cands, clip_set(a.clips), not a.no_score)
     else:
         summarize_calibration(a.data)
     return 0

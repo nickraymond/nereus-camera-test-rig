@@ -2,10 +2,10 @@
 
 The static camera's background: moving caustics, the diver and bubbles average out.
 
-    python bg_median.py SRC.mp4 OUT.y4m [--step 3]
+    python bg_median.py SRC OUT.y4m [--step 3]
 
-Every --step-th frame is used (3 -> 98 frames). Memory ~ frames x 1.4 MB at 720p
-(step 3: ~135 MB; step 6: ~68 MB, the Pi setting); the median runs in column chunks so the
+Every --step-th frame is used (a 50-frame 5 s window: step 1 -> 50 frames, step 3 -> 17).
+Memory ~ frames x 1.4 MB at 720p (50 frames: ~70 MB); the median runs in column chunks so the
 temporary copy stays small.
 """
 

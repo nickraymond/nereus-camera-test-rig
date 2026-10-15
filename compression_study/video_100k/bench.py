@@ -1,7 +1,7 @@
 """Encode + score candidates on the pool clips at ≤ 100,000 B per clip (Mac).
 
-    python -m compression_study.video_100k.bench --data <data> --cands x264_vs svt3_p4 \
-        --clips explore --jobs 3
+    python -m compression_study.video_100k.bench --data <run>/stage1 --cands tag:codec \
+        --clips all --jobs 2 --threads 3      # run under `nice -n 10` on the Mac
 
 Per (candidate, clip): search the rate knob until the bitstream lands in 95–100 % of the cap
 (``kbps``: proportional correction, ≤ 7 attempts; ``q``: bisection), keep the largest attempt
@@ -26,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .candidates import KBPS0, Cand, Ctx, n_frames, registry, source_vf
-from .common import CLIPS, EXPLORE, NFR, append_jsonl, q, read_jsonl, sh, src_path
+from .common import NFR, append_jsonl, clip_set, q, read_jsonl, sh, src_path
 from .score import score
 
 LOCK = threading.Lock()
@@ -164,7 +164,7 @@ def rate_search(c: Cand, data: Path, clip: str, threads: int, runner=None) -> di
 
 def score_cand(c: Cand, data: Path, clip: str, f: Path, s2: bool = True) -> dict:
     """Score the sent file; candidates with a custom display (stills, background+residual)
-    first rebuild what the viewer sees as a lossless 293-frame file."""
+    first rebuild what the viewer sees as a lossless 50-frame file."""
     cache = data / "cache"
     if c.display_file is None:
         return score(
@@ -227,7 +227,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, required=True)
     ap.add_argument("--cands", nargs="+", required=True, help="candidate names, or 'tag:<tag>'")
-    ap.add_argument("--clips", default="explore", help="explore | all | comma list")
+    ap.add_argument("--clips", default="explore", help="explore | all | sens | comma list")
     ap.add_argument("--jobs", type=int, default=3)
     ap.add_argument("--threads", type=int, default=3)
     ap.add_argument("--no-s2", action="store_true")
@@ -240,7 +240,7 @@ def main(argv=None) -> int:
     missing = [n for n in names if n not in reg]
     if missing:
         raise SystemExit(f"unknown candidates: {missing}")
-    clips = EXPLORE if a.clips == "explore" else CLIPS if a.clips == "all" else a.clips.split(",")
+    clips = clip_set(a.clips)
     done = {
         (r["cand"], r["clip"])
         for r in read_jsonl(a.data / "results.jsonl")

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .common import CLIPS, EXPLORE, read_jsonl
+from .common import clip_set, read_jsonl
 
 
 def load(datas: list[Path]) -> list[dict]:
@@ -99,7 +99,7 @@ def main(argv=None) -> int:
     ap.add_argument("--clips", default="explore")
     ap.add_argument("--out", type=Path)
     a = ap.parse_args(argv)
-    clips = EXPLORE if a.clips == "explore" else CLIPS if a.clips == "all" else a.clips.split(",")
+    clips = clip_set(a.clips)
     summ = summarize(load(a.data), clips)
     out = a.out or a.data[0]
     (out / "summary.json").write_text(json.dumps(summ, indent=1))

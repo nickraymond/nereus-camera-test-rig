@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from .candidates import GOP, Ctx
-from .common import DUR_S, FPS, NFR, H, W, card_box, q, sh, src_path
+from .common import DUR_S, FPS, NFR, WIN_MAIN, H, W, card_box, q, sh, split_clip, src_path
 
 HERE = Path(__file__).resolve().parent
 PACK = f"python3 {q(HERE / 'pack.py')}"
@@ -224,20 +224,23 @@ BG_REF = {"round1": "round2", "round2": "round3", "round3": "round1"}
 
 
 def bg_ref_clip(clip: str) -> str:
-    cam, rnd = clip.split("_")
-    return f"{cam}_{BG_REF[rnd]}"
+    """The other round of the same camera, same window (e.g. round1 -> round2)."""
+    base, start = split_clip(clip)
+    cam, rnd = base.split("_")
+    ref = f"{cam}_{BG_REF[rnd]}"
+    return ref if start == WIN_MAIN else f"{ref}@{start}"
 
 
 def cached_bg(data: Path, clip: str, crf: int, py: str | None = None) -> tuple[str, Path, Path]:
-    """Shell command (idempotent) that makes the cached background of clip's reference clip,
-    plus its coded (.obu) and decoded (.y4m) paths."""
+    """Shell command (idempotent) that makes the cached background of clip's reference clip
+    (median of all 50 window frames), plus its coded (.obu) and decoded (.y4m) paths."""
     ref = bg_ref_clip(clip)
     d = data / "cache" / "bg"
     obu, y4m = d / f"{ref}_crf{crf}.obu", d / f"{ref}_crf{crf}.y4m"
     raw = d / f"{ref}_median.y4m"
     cmd = (
         f"mkdir -p {q(d)} && ( test -s {q(y4m)} || ( "
-        f"{q(py or sys.executable)} {q(HERE / 'bg_median.py')} {q(src_path(ref))} {q(raw)}.$$ && "
+        f"{q(py or sys.executable)} {q(HERE / 'bg_median.py')} {q(src_path(ref))} {q(raw)}.$$ --step 1 && "
         f"ffmpeg -hide_banner -v error -y -i {q(raw)}.$$ -c:v libaom-av1 -usage allintra "
         f"-cpu-used 4 -crf {crf} -b:v 0 -f obu {q(obu)}.$$ && "
         f"ffmpeg -hide_banner -v error -y -f obu -i {q(obu)}.$$ -pix_fmt yuv420p "

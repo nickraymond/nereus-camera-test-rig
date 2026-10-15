@@ -23,13 +23,13 @@ from typing import Callable
 
 from .common import CAP_B, DUR_S, FPS, NFR, H, W, q
 
-GOP = 300  # > 293 frames: exactly one key frame per clip (static camera)
+GOP = 300  # > 50 frames: exactly one key frame per clip (static camera)
 
 
 @dataclass
 class Ctx:
     clip: str
-    src: Path  # source mp4
+    src: Path  # source: the 5 s window reference (lossless FFV1, common.src_path)
     out: Path  # bitstream to write
     tmp: Path  # scratch dir for this attempt
     vf: str  # source filter chain (pre-filter, frame select, scale)
@@ -60,7 +60,7 @@ class Cand:
     display_file: Callable | None = None
     cap: int = CAP_B  # bytes; a bundle (still + video) splits the 100 KB
     threads: int | None = None  # fixed thread count (Pi memory configs); None = the runner's
-    nfr: int = NFR  # < 293: a shorter clip (first nfr frames) -- exploratory duration knob
+    nfr: int = NFR  # frames in the clip (50 = 5 s); kept for the bg/score helpers
 
 
 def src_ff(ctx: Ctx) -> str:
@@ -241,7 +241,7 @@ def av1_intra(cpu: int = 4):
 
 # ---------------------------------------------------------------- registry
 
-KBPS0 = 100_000 * 8 / DUR_S / 1000  # 27.3 kbps for the whole clip
+KBPS0 = 100_000 * 8 / DUR_S / 1000  # 160 kbps for a 5 s clip
 
 
 def registry() -> dict[str, Cand]:
@@ -337,12 +337,13 @@ def registry() -> dict[str, Cand]:
     return C
 
 
-def pi_registry(add) -> None:
-    """Recipes for the Pi container (pi_emulate.py measure): Pi package versions, 4 cores.
-    Same builders as on the Mac; only the encoder versions and thread counts differ."""
-    from . import smart
+LOWMEM = "--lookahead 0 --enable-tf 0"  # PR #88: what fits SVT-AV1 2.3 in the Zero's RAM (+ lp 1)
 
-    for p in (6, 8, 10):
+
+def pi_registry(add) -> None:
+    """Stage 2 (PREREG v2): recipes for the Pi container (pi_emulate.py measure) -- the Pi's
+    package versions, 4 cores. Same builders as on the Mac; only versions and threads differ."""
+    for p in (4, 6, 8, 10):
         add(
             Cand(
                 f"pi_svt_p{p}",
@@ -350,77 +351,99 @@ def pi_registry(add) -> None:
                 f"AV1 SVT-AV1 2.3 p{p} 2-pass (Pi versions)",
                 svt_app(p),
                 needs_y4m=True,
-                tags=["pi"],
+                tags=["pi", "stage2"],
             )
         )
-    add(
-        Cand(
-            "pi_svt_p8_lowmem",
-            "av1",
-            "AV1 SVT-AV1 2.3 p8, 1 thread, no look-ahead / temporal filter",
-            svt_app(8, "--lookahead 0 --enable-tf 0"),
-            needs_y4m=True,
-            threads=1,
-            tags=["pi"],
-        )
-    )
-    for p in (6, 8):
         add(
             Cand(
-                f"pi_bgres_p{p}",
+                f"pi_svt_p{p}_lowmem",
                 "av1",
-                f"background + residual, SVT-AV1 2.3 p{p} (Pi versions)",
-                smart.bg_residual(30, preset=p, step=6, py="python3", bg_cpu=6),
-                ext="pack",
-                display_file=smart.bg_residual_display,
-                tags=["pi"],
+                f"AV1 SVT-AV1 2.3 p{p} 2-pass, 1 thread, no look-ahead / temporal filter",
+                svt_app(p, LOWMEM),
+                needs_y4m=True,
+                threads=1,
+                tags=["pi", "stage2"],
             )
         )
-    for p in (8, 10):
+    for cpu in (4, 6):
         add(
             Cand(
-                f"pi_bgcache_p{p}",
+                f"pi_aom_c{cpu}",
                 "av1",
-                f"residual vs cached background, SVT-AV1 2.3 p{p} (Pi versions)",
-                smart.bg_cached_residual(20, preset=p, py="python3"),
-                display_file=smart.bg_cached_display(20),
-                tags=["pi"],
+                f"AV1 libaom 3.12 cpu-used {cpu} 2-pass (Pi versions)",
+                aom(cpu),
+                tags=["pi", "stage2"],
             )
         )
     add(
         Cand(
-            "pi_bgcache_p8_lowmem",
-            "av1",
-            "residual vs cached background, SVT-AV1 2.3 p8, 1 thread, no look-ahead / TF",
-            smart.bg_cached_residual(
-                20, preset=8, py="python3", extra="--lookahead 0 --enable-tf 0"
-            ),
-            display_file=smart.bg_cached_display(20),
-            threads=1,
-            tags=["pi"],
+            "pi_x264_vs",
+            "h264",
+            "H.264 x264 0.164 veryslow 2-pass (Pi versions)",
+            x264(),
+            ext="h264",
+            tags=["pi", "stage2"],
         )
     )
     add(
         Cand(
-            "pi_aom_c6",
-            "av1",
-            "AV1 libaom 3.12 cpu-used 6 2-pass (Pi versions)",
-            aom(6),
-            tags=["pi"],
+            "pi_x265_slow",
+            "hevc",
+            "H.265 x265 4.1 slow 2-pass (Pi versions)",
+            x265("slow"),
+            ext="hevc",
+            tags=["pi", "stage2"],
         )
     )
-    add(
-        Cand(
-            "pi_jxl_stills_2",
-            "still",
-            "2 JPEG XL stills (Pi versions)",
-            smart.jxl_stills(2),
-            knob="q",
-            q_range=(0.3, 25.0, False),
-            ext="pack",
-            display_file=smart.stills_display(2),
-            tags=["pi"],
+    for p in (4, 6, 8, 10):
+        for lowmem in (False, True):
+            stage3_variants(add, p, lowmem)
+
+
+def stage3_variants(add, preset: int, lowmem: bool) -> None:
+    """Stage 3 (PREREG v2): one change at a time on an SVT-AV1 2.3 Pi recipe. Named
+    ``<base>+<change>``; only the variants of the stage 2 winner are run."""
+    from . import smart
+
+    base = f"pi_svt_p{preset}{'_lowmem' if lowmem else ''}"
+    ex = LOWMEM if lowmem else ""
+    th = 1 if lowmem else None
+    lab = f"SVT-AV1 2.3 p{preset}{' low-mem' if lowmem else ''}"
+
+    def v(change, label, build, **kw):
+        add(
+            Cand(
+                f"{base}+{change}",
+                "av1",
+                f"{lab}, {label}",
+                build,
+                needs_y4m=kw.pop("needs_y4m", True),
+                threads=th,
+                tags=["pi", "stage3", f"stage3:{base}"],
+                **kw,
+            )
         )
+
+    v("540p", "960x540 (upscaled for scoring)", svt_app(preset, ex), wh=(960, 540))
+    v("fps5", "5 fps (frame hold)", svt_app(preset, ex), k=2)
+    v("fps5_mi", "5 fps + server interpolation", svt_app(preset, ex), k=2, display="minterp")
+    v("hqdn3d", "denoise hqdn3d=4:3:8:6", svt_app(preset, ex), pre="hqdn3d=4:3:8:6")
+    fg = "--film-grain 8 --film-grain-denoise 1"
+    v("fg8", "film grain 8 (grain shown)", svt_app(preset, f"{ex} {fg}"))
+    v(
+        "fg8_nograin",
+        "film grain 8 (grain not applied)",
+        svt_app(preset, f"{ex} {fg}"),
+        dec="-c:v libdav1d -export_side_data film_grain",
+    )
+    v("roi", "ROI card -60 qindex", smart.svt_roi(preset, -60, 0, extra=ex))
+    v("vq", "tune VQ", svt_app(preset, f"{ex} --tune 0"))
+    v(
+        "bgcache",
+        "residual vs a background cached at the server (not counted)",
+        smart.bg_cached_residual(20, preset=preset, py="python3", extra=ex),
+        display_file=smart.bg_cached_display(20),
+        needs_y4m=False,
     )
 
 
@@ -553,19 +576,6 @@ def smart_registry(add) -> None:
             )
         )
     # encoder tuning
-    # clip length (exploratory, not in PREREG): the same 100 KB for the first 10 s / 15 s
-    for sec in (10, 15):
-        add(
-            Cand(
-                f"s4_{sec}s",
-                "av1",
-                f"{base}, first {sec} s only",
-                svt_app(4),
-                nfr=sec * FPS,
-                needs_y4m=True,
-                tags=["duration"],
-            )
-        )
     add(
         Cand(
             "s4_tune_vq",
@@ -685,18 +695,6 @@ def smart_registry(add) -> None:
                 display_file=smart.bg_cached_display(20, k=k),
                 k=k,
                 tags=["bgdelta", "fps"],
-            )
-        )
-    for sec in (10, 15):
-        add(
-            Cand(
-                f"bgcache_crf20_{sec}s",
-                "av1",
-                f"residual video only, first {sec} s; background cached at the server",
-                smart.bg_cached_residual(20, nfr=sec * FPS),
-                display_file=smart.bg_cached_display(20, nfr=sec * FPS),
-                nfr=sec * FPS,
-                tags=["bgdelta", "duration"],
             )
         )
     # video summary: N stills as JPEG XL, held on screen

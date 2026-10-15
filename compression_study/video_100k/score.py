@@ -2,9 +2,10 @@
 
 What a viewer would see is rebuilt first: the candidate is decoded, frames are held (or
 interpolated, labelled) back to 10 fps, and lower resolutions are upscaled bicubic to 1280×720.
+The reference is the 5 s window (``common.src_path``, lossless FFV1).
 Then, frame N vs frame N on one time base (the PR #88 pairing fix):
 
-- VMAF (vmaf_v0.6.1) mean / 5th percentile / min, PSNR-Y, SSIM over all 293 frames;
+- VMAF (vmaf_v0.6.1) mean / 5th percentile / min, PSNR-Y, SSIM over all 50 frames;
 - card-ROI SSIM-Y and PSNR-Y inside the per-camera card box (native video coordinates);
 - SSIMULACRA2 on 10 fixed frames (RGB PNG, same conversion for both sides).
 
@@ -24,7 +25,7 @@ import numpy as np
 
 from .common import FPS, NFR, S2_FRAMES, H, W, card_box, q, sh, src_path
 
-VMAF_THREADS = 4
+VMAF_THREADS = 3  # 2 jobs in parallel on a hot Mac
 
 
 def count_frames(path: Path, dec: str = "") -> int:
@@ -40,7 +41,7 @@ def count_frames(path: Path, dec: str = "") -> int:
 
 
 def display_chain(k: int, wh: tuple[int, int], display: str, nfr: int = NFR) -> str:
-    """Filter chain turning the decoded candidate into nfr (293) frames of 1280×720 at 10 fps."""
+    """Filter chain turning the decoded candidate into nfr (50) frames of 1280×720 at 10 fps."""
     parts = ["format=yuv420p", f"settb=1/{FPS}", f"setpts=N*{k}"]
     if k > 1:
         if display == "minterp":  # server-side motion-compensated interpolation (labelled)
@@ -96,7 +97,7 @@ def score(
     s2: bool = True,
     nfr: int = NFR,
 ) -> dict:
-    """nfr < 293 = a shorter clip (the first nfr source frames; exploratory duration knob)."""
+    """nfr = frames scored (the 5 s window: 50)."""
     if expect_frames is not None:
         n = count_frames(cand_file)
         if n != expect_frames:
