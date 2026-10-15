@@ -157,6 +157,42 @@ cycle log has the values.
 - RAWs are not gated; stills are, and the N6 still verified in both cycles.
 - **Friday rule:** never pull or preview while the loop runs (the dive card says so).
 
+### Still skew across both runs (Friday step-3 bar: synced stills ≤ 100 ms)
+
+From the per-shot `sync.json` frame timestamps, gate007 + gate008 cycles 1–28, n = 53 sets:
+
+| shot | median | p95 | max | over 100 ms |
+|---|---|---|---|---|
+| **still** (JPEG; boards' ISP) | 92 ms | 124 ms | 164 ms | **18/53 (34 %)** |
+| **RAW** (IMX708 DNG + JPEG, board Bayer) | 46 ms | 60 ms | 64 ms | **0/53** |
+
+**Cause, named from the data.** The AE3 is the last camera in 49/53 still shots. Two fixed
+mechanisms add up:
+
+1. **The AE3 takes one frame after its fire.** Its fire-to-snapshot is 66–67 ms on every shot
+   (its sensor runs ~15 fps at HD), while the N6's is 8 ms. That alone puts the AE3 ~58 ms behind
+   the N6.
+2. **The IMX708's still is quantised to its still-mode frames.** `rpicam-still --signal`
+   switches from the binned preview to the full-resolution still mode (14.35 fps, 70 ms frames),
+   and its frame lands 190 ms to ~370 ms after SIGUSR1 (1–3 frames). The 164 ms outlier is the
+   IMX708 two frames late.
+
+The boards are fired at a fixed 200 ms after the IMX708, so the skew is the spread of these
+three.
+
+**Friday.**
+- **Calibration poses use RAW-only shots:** 0/53 over 100 ms, so the bar is met.
+- **The stills block (still + RAW per set):** the RAW shot meets it; the JPEG still shot misses it
+  in ~1 in 3.
+- Proposal: **report-only for Friday**. No code change (freeze). `sync.json` records every shot's
+  skew, so analysis can keep the shots ≤ 100 ms (~2/3 of still shots and every RAW shot).
+- For static scenes (the card and board held still) 0.16 s does not change the image. That is
+  far inside Nick's original "±1 s" concern.
+- **Fix after Friday:**
+  - fire the AE3 ~60 ms before the N6 (per-board lead, a config value);
+  - re-calibrate the IMX708 lead;
+  - check against a visible ms clock. That is still open: the skews here are timestamp-based.
+
 ### Run 2 (repeat): gate008, from 9:59 AM
 
 Armed automatically when run 1 passed (A6). The STOP at cycle 1 was the planned pause for the
