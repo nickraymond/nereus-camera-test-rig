@@ -10,8 +10,13 @@ physical switch (= the UPS button: clean boot, clean shutdown). Code: `~/nereus-
   on one clock. Bench skew: stills 60–110 ms (set by the AE3's frame time), RAW 10–50 ms,
   video start 10–50 ms.
 - **The AE3 cold-boot wedge is fixed.** Cause: the kernel read the board's USB disk at
-  power-on. Fix: `usb-storage.quirks=…` on the kernel line (Nick, 10/14). The 25 + 25
-  start/stop gate results are in `docs/rig_gate_20261014/RESULTS.md`.
+  power-on. Fix: `usb-storage.quirks=…` on the kernel line (Nick, 10/14). Start/stop gate on
+  10/15:
+  - run 1: 25/25 on every check;
+  - run 2: 87/87 cold boots with all three cameras up, every still verified and a clean
+    shutdown. Its 4 FAILs were all the N6 video stream; best strict streak 24.
+
+  Details in `docs/rig_gate_20261014/RESULTS.md`.
 - **One dive program runs by itself from switch-on:** calibration at two distances, stills,
   then video. It needs no network and no LED codes.
 
@@ -38,17 +43,17 @@ Shots taken before you are in position just have no board in them; the pipeline 
 
 - **Sync bar (d42 pending Nick):** the Friday plan's bar is ≤ 100 ms for synced stills. Until
   Nick decides d42, the **JPEG** still shots over 100 ms are **scored FAIL**. On the bench that
-  was 1 in 3 (median 92 ms), because the AE3 waits one frame and the IMX708 still is quantised to
-  70 ms frames. The **RAW** synced shots meet the bar: gate 0/53 over, max 64 ms. That includes
+  was 30/112, 27 % (median 86 ms, max 187 ms), because the AE3 waits one frame and the IMX708 still is quantised to
+  70 ms frames. The **RAW** synced shots meet the bar: gate 0/112 over, max 64 ms. That includes
   every calibration pose. The dive itself doesn't change: no code change, and every shot's skew
   is logged in its `sync.json`.
-- **N6 video (PgM d40):** about 1 clip in 50 loses the N6 stream partway. Its USB drops bytes
+- **N6 video (PgM d40):** about 1 clip in 28 loses the N6 stream partway (gate: 4 of 112). Its USB drops bytes
   (gate008 cycle 22: 47 of ~100 frames). The IMX708 and AE3 clips are unaffected. Flash the
   torch early in each clip.
 - **N6 RAW (Block B calibration uses the N6 Bayer):**
-  - The N6 loses about 1 RAW frame in 67 with nothing else loading the Pi (gate008 cycle 36). It
-    lost 2 more while a Mac pull loaded the Pi.
-  - CAL B gives ~46 shots in 10 min, so expect 1–2 N6 frames lost and ~44 good. The calibration
+  - The N6 loses about 1 RAW frame in 55 with nothing else loading the Pi (gate008 cycles 36
+    and 52). It lost 2 more while a Mac pull loaded the Pi.
+  - CAL B gives ~46 shots in 10 min, so expect ~1 N6 frame lost and ~45 good. The calibration
     pre-reg needs ≥ 15 distinct usable poses (B1).
   - A lost frame only removes the N6 from that one pose. The real risk is coverage (corners and
     edges), not the count.
