@@ -329,3 +329,23 @@ def test_sync_raw_only_takes_one_raw_shot_per_camera(tmp_path):
     assert [e[2] for e in FakeSyncCamera.events if e[0] == "arm"] == ["raw"] * 3
     assert json.loads((out.paths.root / "sync.json").read_text())["shots"][0]["shot"] == "raw"
     assert all(c.raw_result is None for c in out.camera_outcomes)
+
+
+def test_sync_board_whose_fire_times_out_fails_alone(tmp_path):
+    _register_sync(_blank_jpeg())
+    orig = FakeSyncCamera.fire
+
+    def fire(self):
+        if self.name == "ae3":
+            raise OSError("Write timeout")
+        return orig(self)
+
+    FakeSyncCamera.fire = fire
+    try:
+        out = run_experiment(_config(), "sync", results_root=tmp_path, when=WHEN,
+                             analysis=False, sync=True)
+    finally:
+        FakeSyncCamera.fire = orig
+    by = {c.camera_name: c for c in out.camera_outcomes}
+    assert out.status == "partial" and by["imx708"].ok and by["openmv_n6"].ok
+    assert by["openmv_ae3"].result.error["code"] == "fire_failed"

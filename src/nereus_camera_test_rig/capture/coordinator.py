@@ -366,20 +366,30 @@ def _capture_synchronized(ordered: list[str], cameras_cfg: dict[str, Any],
             fire_host: dict[str, float] = {}
             imx = [n for n in armed if getattr(devices[n], "driver", "") == "imx708"]
             boards = [n for n in armed if n not in imx]
+
+            def fire(name, shot=shot):
+                try:  # a board that stops reading makes this write time out (10 s): fail it
+                    fire_host[name] = devices[name].fire()
+                except Exception as exc:
+                    logger.error("camera %s: fire for %s FAILED: %s", name, shot, exc)
+                    results.setdefault(name, {})[shot] = _synth_failed_result(
+                        name, cameras_cfg[name], "fire_failed", str(exc))
+
             for n in imx:
-                fire_host[n] = devices[n].fire()
+                fire(n)
             if imx and boards:
                 time.sleep(lead_ms / 1000.0)
             for n in boards:
-                fire_host[n] = devices[n].fire()
-            for name, fut in [(n, pool.submit(devices[n].finish)) for n in armed]:
+                fire(n)
+            fired = [n for n in armed if n in fire_host]
+            for name, fut in [(n, pool.submit(devices[n].finish)) for n in fired]:
                 try:
                     results.setdefault(name, {})[shot] = fut.result()
                 except Exception as exc:
                     logger.exception("camera %s: finish of %s raised", name, shot)
                     results.setdefault(name, {})[shot] = _synth_failed_result(
                         name, cameras_cfg[name], "adapter_exception", repr(exc))
-            frames = {n: _sync_frame_time(results[n][shot]) for n in armed
+            frames = {n: _sync_frame_time(results[n][shot]) for n in fired
                       if results[n][shot].ok}
             frames = {n: t for n, t in frames.items() if t is not None}
             t0 = min(frames.values()) if frames else None

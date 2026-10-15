@@ -327,7 +327,13 @@ def main() -> int:
     [t.join(timeout=60) for t in threads]
     armed = [d for d in devs if d.name not in errors]
     print(f"sync_video: armed {[d.name for d in armed]} errors {errors}", flush=True)
-    fire = {d.name: d.fire() for d in armed}  # back to back, sub-ms apart
+    fire = {}
+    for d in list(armed):  # back to back, sub-ms apart; a board not reading fails alone
+        try:
+            fire[d.name] = d.fire()
+        except Exception as exc:  # noqa: BLE001
+            errors[d.name] = f"fire: {exc!r}"
+            armed.remove(d)
     time.sleep(a.seconds)
     for d in armed:
         d.stop()
