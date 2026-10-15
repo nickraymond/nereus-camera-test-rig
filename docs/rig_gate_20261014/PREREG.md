@@ -201,3 +201,18 @@ separate short run.**
   cycles, with the same per-cycle checks (§4 + A1–A8).
 - They pass only if all 3 PASS, with the previous shutdown recorded as the switch/UPS button.
 - They are additional to the two 25× runs, not part of either streak.
+
+**A10 (2026-10-15 ~1:08 PM). The real switch cycles are skipped (Nick).**
+- Nick's decision ~1:02 PM, relayed verbatim by the PjM: "9. skip". It answered "3 battery
+  switch flips … today before 2:30 / skip".
+- This departs from the original brief ("at least a few REAL switch cycles by Nick").
+- What still covers the switch path:
+  - The switch drives the LiFePO4wered button. Its shutdown is the same `lifepo4wered-daemon` →
+    `systemctl poweroff` path that the UPS-timer cycles exercised 70+ times today (clean every
+    time).
+  - Its power-up is the same UPS output switch-on.
+  - The switch itself was last used on 10/14 for the pool and bench boots.
+- Battery boots (charger unplugged) remain untested after the fix. The boot fix does not depend
+  on the power source.
+- Nick also ruled, same message: "still images are a must, video not required but is valuable".
+  This feeds the PjM's 3 PM merge rule; it does not change this pre-registration.
