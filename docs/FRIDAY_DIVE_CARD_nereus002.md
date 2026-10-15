@@ -91,7 +91,8 @@ Then: charge to VBAT ≥ 3.4 V, and **switch OFF**.
 1. **Switch ON**, and start the dive watch.
 2. **Watch the LED for ~1 min** (blink-code card):
    - slow blink (2 s on / 2 s off) = all three cameras OK;
-   - N quick flashes + 4 s dark = camera N failed (1 IMX708, 2 N6, 3 AE3): switch OFF, wait
+   - N quick flashes + 4 s dark = camera N failed (1 IMX708, 2 N6, 3 AE3; watch three groups,
+     the highest count is the camera): switch OFF, wait
      10 s, switch ON, restart the watch, and look again. The same code twice = your call: the
      program records with the other cameras.
 3. Seal and dive. Follow the program table.

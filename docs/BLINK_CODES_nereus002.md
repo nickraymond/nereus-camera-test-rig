@@ -16,7 +16,9 @@ The check never fixes anything itself. The program always runs, with whichever c
 | No result after 3 min (still breathing or steady) | The check did not run | Switch OFF, wait 10 s, switch ON |
 | LED off | Rig off | Switch ON |
 
-Count the flashes in one group. The 4 s dark gap separates the groups.
+**Watch three or four groups; the highest count is the camera.** The 4 s dark gap separates the
+groups. While the rig is capturing, a flash can occasionally merge with the next one, which only ever
+makes a group look *lower*. Two counts that keep taking turns (2 … 3 … 2 … 3) = both cameras failed.
 
 Camera numbers: **1 = IMX708**, **2 = N6**, **3 = AE3**.
 
