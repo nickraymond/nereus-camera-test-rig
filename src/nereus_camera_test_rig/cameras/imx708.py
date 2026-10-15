@@ -243,6 +243,21 @@ class Imx708Camera(CameraDevice):
                                    f"(see {dest.name}.rpicam.log)")
             time.sleep(0.05)
 
+    def close(self) -> None:
+        """Stop a signal-mode rpicam-still that was armed but never finished (a failed fire or
+        an aborted set), so it cannot hold the camera into the next capture."""
+        proc = self._armed.get("proc")
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        log = self._armed.get("log")
+        if log is not None and not log.closed:
+            log.close()
+
     def fire(self) -> float:
         """SIGUSR1: take the still now. Returns the host monotonic time of the signal."""
         import os
