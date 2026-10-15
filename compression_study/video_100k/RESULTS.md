@@ -13,6 +13,13 @@ Friday's pool pull).
 settings, 1280×720, 10 fps, one key frame, 2-pass, bitrate searched per clip into 95–100 % of
 100,000 B** (final requests 150–176 kbps, 1–3 encodes per clip).
 
+> **Read this with the rule's second outcome.** p4 low-mem wins only because the cached-background
+> candidate (79.1) sets the top of the tie window, which leaves p6 low-mem (74.8, 4.3 below) outside,
+> and is then removed by the "standard bitstream first" step. Without that candidate (and on stage 2
+> alone) the same rule picks **p6 low-mem: 74.8, 2.2–2.6 min on the Pi**. Both readings follow the
+> PREREG text; p4 stays the recommendation because the PREREG ranks the candidates that ran. The
+> real choice, **+2.0 VMAF on the worst clip vs ~3× the encode time (and energy)**, is Nick's call.
+
 ```
 SvtAv1EncApp --preset 4 --rc 1 --tbr <kbps> --passes 2 --keyint 300 --scd 0 \
   --lp 1 --lookahead 0 --enable-tf 0 --stats pass.stats -i clip.y4m -b clip.ivf
@@ -30,8 +37,8 @@ SvtAv1EncApp --preset 4 --rc 1 --tbr <kbps> --passes 2 --keyint 300 --scd 0 \
 | Pi peak memory (bar 250 MiB) | **161 MiB** | 141 MiB |
 
 - Within 0.7 VMAF of the best any encoder reached on the Mac (libaom cpu-used 3: 77.5), at full
-  720p and 10 fps. Lower resolution or frame rate made it **worse**: 960×540 → 73.8, 5 fps → 68.8
-  (both on p6 low-mem, worst clip).
+  720p and 10 fps. Lower resolution or frame rate made it **worse**: on p6 low-mem (74.8 at
+  720p, 10 fps), 960×540 → 73.8 and 5 fps → 68.8 (worst clip).
 - The p6 fallback is 2 VMAF points lower for a third of the encode time (energy not measured).
 - H.264 (x264 veryslow on the Pi), the most widely playable format, scores 66.9 on the worst clip
   (under the 70 bar) and needs zram (377 MiB). The Pi's hardware H.264 was not re-run; in PR #88
@@ -40,9 +47,11 @@ SvtAv1EncApp --preset 4 --rc 1 --tbr <kbps> --passes 2 --keyint 300 --scd 0 \
 ## Why not the background-sent-earlier pipeline (79.1, ~40 % of the encode time)?
 
 `pi_svt_p6_lowmem+bgcache` sends only the difference from a background image the server already
-holds. On the numbers it is the strongest Pi-feasible candidate: worst clip **79.1** (vs 76.8),
-stress window **64.4** (vs 58.9, so the stress window is no argument against it), Pi 2.4–2.9 min
-final encode (up to 9.4 min with its rate search, 7 encodes on one clip), 135 MiB.
+holds. It was run on p6 low-mem (the stage 2 pick), so its like-for-like gain is over p6: worst
+clip **79.1 vs 74.8 (+4.3)**, stress window **64.4 vs 54.1 (+10.3)**. Against the recommended p4
+low-mem it is +2.3 and +5.5 (64.4 vs 58.9), so the stress window is no argument against it. Pi
+2.4–2.9 min final encode (up to 9.4 min with its rate search, 7 encodes on one clip), 135 MiB.
+p4 + cached background was not run (stage 3 changes only the stage 2 pick).
 
 It is not the recommendation because of the pre-registered rule, which was fixed before any result:
 79.1 − 76.8 = 2.3 < 3, so the two tie, and inside a tie **a standard bitstream beats a custom
@@ -57,7 +66,7 @@ pipeline**. The rule reflects real costs that the VMAF score does not include:
   back frame by frame before anyone can watch it, and a stock player cannot open the file.
 
 If the field camera is rigidly mounted and the server can do the rebuild, this pipeline gives
-2.3–5.5 VMAF more in about 40 % of the encode time. That is a product decision, not something this study
+2.3–5.5 VMAF more than p4 low-mem in about 40 % of its encode time. That is a product decision, not something this study
 can settle; it would need a test with a moving camera and changing light first.
 
 ## Exploratory (post-hoc, not pre-registered): one encode at a fixed 150 kbps
@@ -116,5 +125,5 @@ middle frame).
 | 1 Mac ceiling | libaom c3 77.5 | vvenc slower 76.3 | x264 66.3 |
 | 2 Pi recipes | SVT p4 low-mem 76.8 | SVT p6 low-mem 74.8 | only the low-memory SVT recipes fit 250 MiB; libaom c4 77.2 needs 384 MiB |
 | 3 one change on p6 low-mem | + cached background 79.1 | + card ROI 75.0 (tie) | denoise, film grain, tune VQ, 540p, 5 fps all lower |
-| decision (PREREG rule) | **p4 low-mem 76.8** | | tie with the cached background (2.3 < 3), standard bitstream first |
+| decision (PREREG rule) | **p4 low-mem 76.8** | p6 low-mem 74.8 | p4: tie with the cached background (2.3 < 3), standard first; without that candidate the rule picks p6 |
 | 4 stress window | + cached background 64.4 | p4 low-mem 58.9 | ranking unchanged |

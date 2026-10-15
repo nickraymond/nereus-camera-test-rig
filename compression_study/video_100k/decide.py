@@ -30,7 +30,7 @@ from pathlib import Path
 from .candidates import registry
 from .common import CAP_B, CLIPS, SENS_CLIPS, read_jsonl
 
-TIE_VMAF = 3.0
+TIE_VMAF = 3.0  # "within 3.0 points" (PREREG): inclusive, with a float epsilon
 PI_S, PI_RSS, ZRAM_RSS = 600.0, 250.0, 400.0
 TIME_EQUAL = 1.20
 
@@ -140,7 +140,7 @@ def decide(rows: list[dict]) -> dict:
         return {"winner": None, "why": "no eligible candidate"}
     elig.sort(key=lambda s: -s["vmaf_worst"])
     top = elig[0]["vmaf_worst"]
-    tie = [s for s in elig if top - s["vmaf_worst"] < TIE_VMAF]
+    tie = [s for s in elig if top - s["vmaf_worst"] <= TIE_VMAF + 1e-9]
     steps = [
         f"top eligible worst-clip VMAF {top}; tie set (within {TIE_VMAF}): "
         + ", ".join(f"{s['cand']} ({s['vmaf_worst']})" for s in tie)
