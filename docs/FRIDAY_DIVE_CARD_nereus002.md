@@ -17,14 +17,14 @@ physical switch (= the UPS button: clean boot / clean shutdown). Code `~/nereus-
 
 | T+ (min) | Block | What you do | What the rig does |
 |---|---|---|---|
-| 0 – 2 | boot | Seal, enter the water, settle | Boots (~40 s), checks all three cameras |
-| 2 – 14 | **CAL A** (IMX708) | ChArUco board at **0.7–0.9 m**. 9 places: 4 corners, 4 edge midpoints, centre; a board corner touching the frame edge each time. At each place: flat, ±30° left/right, ±30° up/down. **Hold each pose ~10 s** | One synchronized RAW shot every ~10 s, 1 stop dark: IMX708 DNG + JPEG, N6 + AE3 Bayer. `poses.csv` |
-| 14 – 24 | **CAL B** (N6 / AE3) | The same board at **1.5–2.0 m**, posed for the boards' narrower view (they see ~46°; aim was top-left on 10/14) | Same shots |
-| 24 – 34 | **STILLS** | Scene / reference card at your test distance | Synchronized sets (still + RAW, all three) every ~30 s |
-| 34 – 40 | **VIDEO** | One clip per minute (T+34, 35, … 39). **At about :15 past each minute, flash a torch once in view of all three**, then the scene | 6 synchronized 30 s clips (each starts ~5 s after the minute): IMX708 H.264 1080p30, N6 + AE3 MJPEG VGA 10 fps, one clock |
-| 40 → | stills | Anything | Synchronized sets until switch-off or low battery |
+| 0 – 1 | boot | Seal, enter the water | Boots (~40 s) |
+| 0 – 12 | **CAL A** (IMX708) | Start posing once you are down (~T+2). | ChArUco board at **0.7–0.9 m**. 9 places: 4 corners, 4 edge midpoints, centre; a board corner touching the frame edge each time. At each place: flat, ±30° left/right, ±30° up/down. **Hold each pose ~10 s** | One synchronized RAW shot every ~10 s, 1 stop dark: IMX708 DNG + JPEG, N6 + AE3 Bayer. `poses.csv` |
+| 12 – 22 | **CAL B** (N6 / AE3) | The same board at **1.5–2.0 m**, posed for the boards' narrower view (they see ~46°; aim was top-left on 10/14) | Same shots |
+| 22 – 32 | **STILLS** | Scene / reference card at your test distance | Synchronized sets (still + RAW, all three) every ~30 s |
+| 32 – 38 | **VIDEO** | One clip per minute (T+32, 33, … 37). **At about :15 past each minute, flash a torch once in view of all three**, then the scene | 6 synchronized 30 s clips (each starts ~5 s after the minute): IMX708 H.264 1080p30, N6 + AE3 MJPEG VGA 10 fps, one clock |
+| 38 → | stills | Anything | Synchronized sets until switch-off or low battery |
 
-The calibration block starts after boot, so the first poses can be done at T+2.
+Shots taken before you are in position simply have no board in them; the pipeline skips them.
 
 - **Full-frame coverage:** there is no live preview underwater (no Wi-Fi through water).
   - **Before the dive**, in air at the pool edge: rehearse the 9 places on the full-frame preview
