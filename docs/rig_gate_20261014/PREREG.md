@@ -179,3 +179,17 @@ black board frame while the IMX708 sees a lit scene.
 - The other video FAIL conditions (A2) are unchanged.
 - gate006 is stopped. Its c1 FAIL stays in the record. The gate restarts on the fixed build
   (new run, streak 0).
+
+**A8 (2026-10-15 8:58 AM, EM/QE #115; written before any gate007 result was audited. The live
+monitor had already printed cycle 1's summary row, PASS. A8 can only turn a PASS into a
+FAIL.)**
+
+Every counted gate cycle's `imx708.h264` must decode:
+- `ffprobe -count_frames` exits 0;
+- the decoded frame count is ≥ 2/3 of nominal for the clip (30 fps × 10 s × 2/3 = **200**);
+- and it is ≥ the per-frame metadata count − 2 (so a file cut short behind complete metadata
+  fails).
+
+A cycle that fails this audit is a **FAIL** and the streak is recomputed from the audited
+results. Run offline on the Mac by `host_tools/gate_audit.py` over the pulled `video/`
+folders, after each 25× run and before either is declared passed.
