@@ -69,6 +69,7 @@ STILL_BARS = {"imx708": (300_000, (4608, 2592)), "openmv_n6": (30_000, (1280, 80
               "openmv_ae3": (30_000, (1280, 800))}
 RAW_MIN_BYTES = {"imx708": 10_000_000, "openmv_n6": 1_000_000, "openmv_ae3": 1_000_000}
 MAX_LAST_STILL_UPTIME_S = 180.0   # last verified still within this of kernel start
+MAX_VIDEO_SKEW_MS = 100.0         # synchronized video: start skew bar (PREREG §5)
 MAX_FAILS_IN_ROW = 3              # auto mode stops power-cycling after this many FAILs
                                   # (arm --stop-after-fails; 0 = never, for baseline runs)
 BYID_TIMEOUT_S = 60.0
@@ -78,7 +79,7 @@ CSV_FIELDS = [
     "ae3_tty_s", "n6_tty_s", "ae3_contact", "ae3_board_ticks_s", "ae3_import_ms",
     "n6_contact", "n6_board_ticks_s", "boards_power_cycled", "set_s",
     "imx_still", "n6_still", "ae3_still", "raws_ok", "still_skew_s", "sync_still_ms",
-    "sync_raw_ms",
+    "sync_raw_ms", "video", "video_skew_ms", "video_fps", "video_lost",
     "last_still_uptime_s", "result", "fail_reasons", "streak",
 ]
 
@@ -315,8 +316,34 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
             rec["sha256sums_error"] = str(exc)
     else:
         rec["verify"] = {}
+    if state.get("video_s"):
+        rec["video"] = run_video(run_dir, n, float(state["video_s"]), log)
     rec["uptime_end_s"] = round(uptime_s(), 1)
     return evaluate(rec, state)
+
+
+def run_video(run_dir: Path, n: int, seconds: float, log: Log) -> dict:
+    """One synchronized video clip on all three cameras (scripts/sync_video.py); its summary."""
+    out = run_dir / "video" / f"cycle{n:03d}"
+    cmd = [sys.executable, str(ROOT / "scripts" / "sync_video.py"), "--seconds", str(seconds),
+           "--out", str(out)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=seconds + 120)
+        tail = (r.stdout + r.stderr).strip().splitlines()[-1:]
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "timeout"}
+    try:
+        summary = json.loads((out / "video_sync.json").read_text())
+    except (OSError, ValueError):
+        return {"ok": False, "error": f"no video_sync.json: {tail}"}
+    cams = summary.get("cameras") or {}
+    v = {"ok": bool(summary.get("ok")), "skew_ms": summary.get("start_skew_ms"),
+         "fps": {c: r.get("fps") for c, r in cams.items()},
+         "lost": sum(r.get("frames_lost") or 0 for r in cams.values()),
+         "host": summary.get("host")}
+    log(f"video {seconds:.0f}s: {'ok' if v['ok'] else 'FAIL'} skew {v['skew_ms']} ms fps "
+        f"{v['fps']} lost {v['lost']} host {v['host']}")
+    return v
 
 
 def evaluate(rec: dict, state: dict) -> dict:
@@ -350,6 +377,14 @@ def evaluate(rec: dict, state: dict) -> dict:
         rec["last_still_uptime_s"] = round(last, 1)
         if rec.get("started_by") == "boot" and last > MAX_LAST_STILL_UPTIME_S:
             fails.append(f"slow:{last:.0f}s")
+    vid = rec.get("video")
+    if vid is not None:
+        if not vid.get("ok"):
+            fails.append(f"video:{vid.get('error', 'camera_failed')}")
+        elif vid.get("skew_ms") is None or vid["skew_ms"] > MAX_VIDEO_SKEW_MS:
+            fails.append(f"video_skew:{vid.get('skew_ms')}")
+        elif vid.get("lost"):
+            fails.append(f"video_lost:{vid['lost']}")
     rec["result"] = "FAIL" if fails else "PASS"
     rec["fail_reasons"] = fails
     rec["streak"] = 0 if fails else state.get("streak", 0) + 1
@@ -388,6 +423,12 @@ def csv_row(rec: dict) -> dict:
         "still_skew_s": rec.get("still_skew_s"),
         "sync_still_ms": ((rec.get("sync") or {}).get("still") or {}).get("skew_ms"),
         "sync_raw_ms": ((rec.get("sync") or {}).get("raw") or {}).get("skew_ms"),
+        "video": None if rec.get("video") is None else ("ok" if rec["video"].get("ok")
+                                                        else "FAIL"),
+        "video_skew_ms": (rec.get("video") or {}).get("skew_ms"),
+        "video_fps": "/".join(str(v) for v in ((rec.get("video") or {}).get("fps") or {})
+                              .values()) or None,
+        "video_lost": (rec.get("video") or {}).get("lost"),
         "last_still_uptime_s": rec.get("last_still_uptime_s"), "result": rec.get("result"),
         "fail_reasons": ";".join(rec.get("fail_reasons") or []), "streak": rec.get("streak"),
     }
@@ -452,7 +493,8 @@ def cmd_arm(a) -> int:
              "target": a.target, "mode": a.mode, "cycles_done": 0, "streak": 0,
              "fails_in_row": 0, "dive_flag_before": flag, "armed_utc": now_utc(),
              "sha": pc.git_sha(), "wake_min": a.wake_min,
-             "stop_after_fails": a.stop_after_fails, "label": a.label, "sync": a.sync}
+             "stop_after_fails": a.stop_after_fails, "label": a.label, "sync": a.sync,
+             "video_s": a.video_s}
     save_state(state)
     pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg":
                    "docs/rig_gate_20261014/PREREG.md", "host": os.uname().nodename})
@@ -576,6 +618,8 @@ def main() -> int:
     arm.add_argument("--label", default="", help="appended to the run id (e.g. baseline)")
     arm.add_argument("--sync", action="store_true",
                      help="synchronized capture (experiment --sync): all cameras one moment")
+    arm.add_argument("--video-s", type=float, default=0,
+                     help="after the stills, a synchronized video clip of N s (0 = none)")
     arm.add_argument("--lens-position", default="0.8")
     arm.add_argument("--config", default="configs/rig.example.yaml")
     for name in ("boot", "once"):

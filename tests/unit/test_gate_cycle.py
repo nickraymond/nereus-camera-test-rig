@@ -95,3 +95,14 @@ def test_ladder_recovery_in_boot_counts_as_pass_and_is_visible_in_the_csv():
 ])
 def test_probe_summary(rec, text):
     assert probe.summary(rec) == text
+
+
+def test_video_clip_must_be_ok_synchronized_and_lossless():
+    ok = {"ok": True, "skew_ms": 18.5, "fps": {"imx708": 27.4}, "lost": 0}
+    assert gate.evaluate(_rec(video=ok), {})["result"] == "PASS"
+    assert gate.evaluate(_rec(video={**ok, "skew_ms": 140.0}), {})["fail_reasons"] == [
+        "video_skew:140.0"]
+    assert gate.evaluate(_rec(video={**ok, "lost": 3}), {})["fail_reasons"] == ["video_lost:3"]
+    assert gate.evaluate(_rec(video={"ok": False, "error": "timeout"}), {})["fail_reasons"] == [
+        "video:timeout"]
+    assert gate.csv_row(gate.evaluate(_rec(video=ok), {}))["video"] == "ok"

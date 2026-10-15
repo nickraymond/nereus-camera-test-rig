@@ -13,9 +13,11 @@ How:
     each frame header carries the board ticks of its snapshot. Frames -> <cam>.mjpeg
     (concatenated JPEGs) + <cam>_frames.csv. The board's fire receipt ties its ticks to the Pi
     clock: frame_time = fire_host + (ticks - fire_rx_ticks).
-  - IMX708: ``rpicam-vid -t 0 --initial pause --signal`` (hardware H.264): the camera runs, the
-    encoder output is discarded until SIGUSR1 (record); SIGUSR1 again pauses, SIGUSR2 quits.
-    ``--save-pts`` + ``--metadata`` keep per-frame times (SensorTimestamp = CLOCK_MONOTONIC).
+  - IMX708: ``rpicam-vid -t 0`` (hardware H.264) records from the arm (~3 s pre-roll) with
+    ``--metadata``: one record per frame with SensorTimestamp (CLOCK_MONOTONIC, the Pi clock).
+    Its synchronized start is the first frame at/after the fire (<= 1 frame late). Not
+    pause/resume: rpicam-vid resumes only at the next keyframe (measured: 251 of ~300 frames,
+    up to the intra period late), which would make the IMX708 start late by up to ~2 s.
   - all three are armed in parallel and fired back to back (sub-ms on the host).
 
 Usage (Pi, repo root):
@@ -93,28 +95,58 @@ class BoardVideo:
         self.thread.start()
         return t
 
+    def _next_message(self) -> dict:
+        """The next protocol line. Resyncs after lost bytes: the N6 drops USB TX bytes when the
+        Pi reads too slowly (2026-10-14: 63 fps VGA + 1080p H.264 desynced after 124 frames), so
+        a JPEG body can land where a header was expected. Skip lines until one decodes."""
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            line = self.io.read_line(timeout=max(0.1, deadline - time.monotonic()))
+            if not line.strip().startswith(b"{"):
+                continue
+            try:
+                return cp.decode_message(line)
+            except (ValueError, UnicodeDecodeError, cp.ProtocolError):
+                self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
+        raise OpenMvError("timeout", f"{self.name}: no frame header for 10 s")
+
     def _read(self) -> None:
+        """USB reader: never touches the SD card. Frames go to a writer thread through a queue,
+        so an SD write stall (100s of ms) cannot stop the reads and make the board's USB send
+        time out and drop bytes (the N6 desync of 2026-10-14, soak #1)."""
+        import queue
+
         mjpeg = self.out / f"{self.name}.mjpeg"
         rows = []
-        try:
+        q: queue.Queue = queue.Queue()
+
+        def writer():
             with mjpeg.open("wb") as f:
-                while True:
-                    msg = self.io.read_message(timeout=10)
-                    if msg.get("status") == "frame":
-                        fr = msg["frame"]
-                        data = self.io.read_exact(fr["size_bytes"], timeout=10)
-                        rows.append({"seq": fr["seq"], "ticks_ms": fr.get("ticks_ms"),
-                                     "host_rx_mono": round(time.monotonic(), 4),
-                                     "bytes": len(data), "width": fr["width"],
-                                     "height": fr["height"]})
-                        f.write(data)
-                    elif msg.get("status") == "completed":
-                        self.rec["board_done"] = msg.get("output") or {}
-                        break
-                    else:
-                        raise OpenMvError("bad_frame", f"unexpected {msg}")
+                while (data := q.get()) is not None:
+                    f.write(data)
+
+        wt = threading.Thread(target=writer, daemon=True)
+        wt.start()
+        try:
+            while True:
+                msg = self._next_message()
+                if msg.get("status") == "frame":
+                    fr = msg["frame"]
+                    data = self.io.read_exact(fr["size_bytes"], timeout=10)
+                    rows.append({"seq": fr["seq"], "ticks_ms": fr.get("ticks_ms"),
+                                 "host_rx_mono": round(time.monotonic(), 4),
+                                 "bytes": len(data), "width": fr["width"],
+                                 "height": fr["height"]})
+                    q.put(data)
+                elif msg.get("status") == "completed":
+                    self.rec["board_done"] = msg.get("output") or {}
+                    break
+                else:
+                    self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
         except Exception as exc:  # noqa: BLE001 - recorded, never silent
             self.rec["error"] = repr(exc)
+        q.put(None)
+        wt.join()
         self.rows = rows
         with (self.out / f"{self.name}_frames.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["seq", "ticks_ms", "host_rx_mono", "bytes",
@@ -139,6 +171,8 @@ class BoardVideo:
         times = [fire_host + (r["ticks_ms"] - fire_rx) / 1000 for r in rows
                  if r["ticks_ms"] is not None and fire_rx is not None and fire_host]
         mjpeg = self.out / f"{self.name}.mjpeg"
+        sent = (self.rec.get("board_done") or {}).get("frames")
+        self.rec["frames_lost"] = (sent - len(rows)) if isinstance(sent, int) else None
         self.rec.update(frames=len(rows), first_frame_host_mono=times[0] if times else None,
                         last_frame_host_mono=times[-1] if times else None,
                         fps=round((len(times) - 1) / (times[-1] - times[0]), 2)
@@ -159,12 +193,17 @@ class ImxVideo:
     name = "imx708"
 
     def __init__(self, out: Path, width: int, height: int, fps: int, lens: float | None,
-                 warmup_s: float):
+                 warmup_s: float, buffers: int):
         self.out, self.warmup_s = out, warmup_s
         self.cmd = ["rpicam-vid", "-n", "-t", "0", "--codec", "h264", "--inline",
                     "--width", str(width), "--height", str(height), "--framerate", str(fps),
-                    "--initial", "pause", "--signal",
+                    "--metadata", "imx708.meta.json", "--metadata-format", "json",
                     "--save-pts", "imx708.pts", "-o", "imx708.h264"]
+        if buffers:
+            # CMA (nereus002 2026-10-14, 6 s 1080p H.264, n=1 each): default buffers took free
+            # CMA to 0 MB, --buffer-count 4 kept 16 MB (3 kept 21 MB but dropped 25 % of frames).
+            # ci-record hard-reset this Pi with CmaFree at 16 kB, so never run at the edge.
+            self.cmd[1:1] = ["--buffer-count", str(buffers)]
         if lens is not None:
             self.cmd[1:1] = ["--autofocus-mode", "manual", "--lens-position", str(lens)]
         self.rec: dict = {"camera": "imx708", "ok": False, "cmd": " ".join(self.cmd)}
@@ -180,17 +219,14 @@ class ImxVideo:
             time.sleep(0.05)
 
     def fire(self) -> float:
-        t = time.monotonic()
-        os.kill(self.proc.pid, signal.SIGUSR1)  # paused -> recording
+        t = time.monotonic()  # t=0 mark: already recording, frames are timestamped
         self.rec["fire_host_mono"] = t
         return t
 
     def stop(self) -> None:
+        self.rec["stop_host_mono"] = time.monotonic()
         if self.proc.poll() is None:
-            os.kill(self.proc.pid, signal.SIGUSR1)  # recording -> paused
-            self.rec["stop_host_mono"] = time.monotonic()
-            time.sleep(0.3)
-            os.kill(self.proc.pid, signal.SIGUSR2)  # quit
+            os.kill(self.proc.pid, signal.SIGINT)  # clean exit: file + metadata closed
 
     def finish(self) -> dict:
         try:
@@ -200,21 +236,25 @@ class ImxVideo:
             self.proc.wait()
         self.log.close()
         self.rec["rc"] = self.proc.returncode
-        h264, pts = self.out / "imx708.h264", self.out / "imx708.pts"
-        stamps = []
-        if pts.exists():
-            for line in pts.read_text().splitlines():
-                try:
-                    stamps.append(float(line))
-                except ValueError:
-                    continue  # header line ("# timecode format v2")
+        h264, meta = self.out / "imx708.h264", self.out / "imx708.meta.json"
+        try:
+            frames = json.loads(meta.read_text())
+        except (OSError, ValueError):
+            frames = []
+        allts = [f["SensorTimestamp"] / 1e9 for f in frames if f.get("SensorTimestamp")]
+        fire, stop_t = self.rec["fire_host_mono"], self.rec.get("stop_host_mono", 1e18)
+        times = [t for t in allts if fire <= t <= stop_t]  # the synchronized window
         self.rec.update(file=h264.name, bytes=h264.stat().st_size if h264.exists() else 0,
-                        sha256=sha256(h264) if h264.exists() else None, frames=len(stamps),
-                        fps=round((len(stamps) - 1) / ((stamps[-1] - stamps[0]) / 1000), 2)
-                        if len(stamps) > 1 and stamps[-1] > stamps[0] else None,
-                        max_gap_ms=round(max(b - a for a, b in zip(stamps, stamps[1:])), 1)
-                        if len(stamps) > 1 else None)
-        self.rec["ok"] = self.rec["rc"] == 0 and self.rec["bytes"] > 0 and len(stamps) > 0
+                        sha256=sha256(h264) if h264.exists() else None,
+                        frames_total=len(allts), preroll_frames=sum(t < fire for t in allts),
+                        scaler_crop=frames[0].get("ScalerCrop") if frames else None,
+                        frames=len(times),
+                        first_frame_host_mono=times[0] if times else None,
+                        fps=round((len(times) - 1) / (times[-1] - times[0]), 2)
+                        if len(times) > 1 and times[-1] > times[0] else None,
+                        max_gap_ms=round(max((b - a) * 1000 for a, b in zip(times, times[1:])),
+                                         1) if len(times) > 1 else None)
+        self.rec["ok"] = self.rec["rc"] == 0 and self.rec["bytes"] > 0 and bool(times)
         return self.rec
 
 
@@ -246,9 +286,14 @@ def main() -> int:
     ap.add_argument("--imx-size", default="1920x1080")
     ap.add_argument("--imx-fps", type=int, default=30)
     ap.add_argument("--lens-position", type=float, default=0.8)
+    ap.add_argument("--imx-buffers", type=int, default=4,
+                    help="rpicam-vid --buffer-count (CMA headroom; 0 = rpicam default)")
     ap.add_argument("--board-framesize", default="VGA", help="QVGA | VGA | HD")
     ap.add_argument("--board-quality", type=int, default=70)
-    ap.add_argument("--board-fps", type=float, default=0, help="0 = as fast as the board can")
+    ap.add_argument("--board-fps", type=float, default=10,
+                    help="board frame cap, both boards (0 = as fast as each can). 10: the AE3's "
+                         "VGA ceiling, and the N6 (full-speed USB) dropped bytes at 30-63 fps "
+                         "over minutes (soak 2026-10-14)")
     a = ap.parse_args()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(a.out) if a.out else ROOT / "results" / "video" / ts
@@ -260,7 +305,8 @@ def main() -> int:
                       "warmup_ms": 2000}
     devs = []
     if "imx708" in cams:
-        devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0))
+        devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
+                             buffers=a.imx_buffers))
     devs += [BoardVideo(n, s, out, board_settings) for n, s in BOARDS.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
 
@@ -291,11 +337,9 @@ def main() -> int:
     for name, err in errors.items():
         results[name] = {"camera": name, "ok": False, "error": err}
 
-    # Start skew: IMX708 first frame ~ its fire (encoder resumes on the next frame, <= 1 frame);
-    # boards: first frame on the Pi clock via the fire handshake.
+    # Start skew: each camera's first frame at/after the fire, all on the Pi monotonic clock
+    # (IMX708: SensorTimestamp; boards: snapshot ticks mapped through the fire handshake).
     firsts = {n: r.get("first_frame_host_mono") for n, r in results.items()}
-    if "imx708" in results and results["imx708"].get("ok"):
-        firsts["imx708"] = results["imx708"]["fire_host_mono"]  # upper bound: + 1 frame
     firsts = {n: t for n, t in firsts.items() if t}
     t0 = min(firsts.values()) if firsts else None
     summary = {
@@ -318,7 +362,8 @@ def main() -> int:
     for n, r in results.items():
         print(f"  {n}: {'ok' if r.get('ok') else 'FAIL'} frames {r.get('frames')} fps "
               f"{r.get('fps')} max_gap {r.get('max_gap_ms')} ms bytes {r.get('bytes')} "
-              f"{r.get('error', '')}", flush=True)
+              f"lost {r.get('frames_lost')} resyncs {r.get('resyncs', 0)} "
+              f"{str(r.get('error', ''))[:120]}", flush=True)
     print(f"sync_video: start skew {summary['start_skew_ms']} ms offsets "
           f"{summary['start_offsets_ms']} host {summary.get('host')} -> "
           f"{'OK' if summary['ok'] else 'FAIL'}", flush=True)
