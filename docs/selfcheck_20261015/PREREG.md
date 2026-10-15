@@ -1,6 +1,8 @@
 # nereus002 boot self-check + LED verdict: fault-injection bench test (pre-registered)
 
-Written 2026-10-15 ~4:55 PM PT, before any bench run. Scope: Nick's plan A (10/15 3:40 PM,
+Written 2026-10-15 ~3:50 PM PT, before any bench run. One driver smoke run (`all_ok`, bench id
+`smoke`, 3:52 PM, not counted) came before the commit (ba35c15, 3:52 PM); bench1 started 3:52 PM.
+Scope: Nick's plan A (10/15 3:40 PM,
 "freeze exception approved, I approve plan A"). A boot camera self-check and an LED verdict
 only: no automatic power cycle, and nothing else in startup changes. Hard rollback 8 PM: if the
 gate is not passed and QE-PASSED by then, the rig is re-armed with 38af78b exactly as at 3:30 PM.

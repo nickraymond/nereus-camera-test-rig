@@ -18,7 +18,11 @@ physical switch (= the UPS button: clean boot, clean shutdown). Code: `~/nereus-
 
   Details in `docs/rig_gate_20261014/RESULTS.md`.
 - **One dive program runs by itself from switch-on:** calibration at two distances, stills,
-  then video. It needs no network and no LED codes.
+  then video. It needs no network.
+- **The LED tells you if all three cameras work** (Nick 10/15, plan A). About 1 min after
+  switch-on: slow blink = all OK; N quick flashes + dark = camera N failed (1 IMX708, 2 N6,
+  3 AE3). The rig never fixes a camera itself: you switch off and on. Print
+  `docs/BLINK_CODES_nereus002.md`.
 
 ## The program (minutes from switch-on: start your dive watch when you switch on)
 
@@ -71,7 +75,7 @@ ssh pi@192.168.1.35 'cd ~/nereus-rig-poolcam && ~/nereus-camera-test-rig/.venv/b
 The gate and the pool loop must never both be armed.
 
 ```bash
-ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30 --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --hours 6'
+ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30 --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --hours 6 --self-check'
 ```
 Add `--depth-bus N` if the Bar30 has moved to its own I²C bus.
 
@@ -85,7 +89,11 @@ Then: charge to VBAT ≥ 3.4 V, and **switch OFF**.
 ## At the pool
 
 1. **Switch ON**, and start the dive watch.
-2. Wait ~1 min (boot + first shot).
+2. **Watch the LED for ~1 min** (blink-code card):
+   - slow blink (2 s on / 2 s off) = all three cameras OK;
+   - N quick flashes + 4 s dark = camera N failed (1 IMX708, 2 N6, 3 AE3): switch OFF, wait
+     10 s, switch ON, restart the watch, and look again. The same code twice = your call: the
+     program records with the other cameras.
 3. Seal and dive. Follow the program table.
 4. **Stop:** switch OFF. The set in flight may be lost; everything before it is on disk.
 5. **Pull everything before powering it for anything else** (Nick's rule, 10/14). The Mac joins
@@ -108,5 +116,7 @@ the camera and every set fails while it runs. Switch off/on afterwards to restar
 
 - **The program didn't start** (no new `results/pool/pool…` folder 2 min after switch-on): check
   `pool_mode.sh status`, then switch off/on.
-- **A camera missing in `pool.log`:** the IMX708 keeps going. A board is retried every 5 sets. A
-  switch off/on resets the boards; it is a clean cold boot now that the AE3 fix is in.
+- **A camera missing:** the LED's count at switch-on says which one (`SELF-CHECK` in `pool.log`).
+  The IMX708 keeps going, and a board is retried every 5 sets. A switch off/on resets the boards;
+  it is a clean cold boot now that the AE3 fix is in. The self-check only runs at switch-on:
+  a camera lost mid-dive does not change the LED.

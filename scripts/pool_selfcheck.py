@@ -56,8 +56,10 @@ def check_board(serial: str, wait_s: float = BOARD_WAIT_S, probe=None, port_of=N
     while port_of(serial) is None and time.monotonic() - t0 < wait_s:
         sleep(1.0)
     rec = probe(serial)
-    out = {"ok": bool(rec.get("ok")), "why": "ok" if rec.get("ok") else rec.get("stage", "?"),
-           "seconds": round(time.monotonic() - t0, 2)}
+    why = "ok" if rec.get("ok") else rec.get("stage", "?")
+    if why == "replied":  # a reply that is not "completed", e.g. a board at its REPL echoing
+        why = "bad_reply"  # the request back (bench 10/15): not an OK, so say so
+    out = {"ok": bool(rec.get("ok")), "why": why, "seconds": round(time.monotonic() - t0, 2)}
     for k in ("error", "write_s", "reply_s", "pending_bytes"):
         if k in rec:
             out[k] = rec[k]

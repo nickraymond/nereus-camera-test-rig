@@ -15,7 +15,7 @@ The rig is sealed in its housing, so a cable cannot be pulled. Instead:
   release-imx       undo: stop that holder (pid file).
   status            which faults look active (by-id links, holder pid).
 
-Verified 2026-10-15 ~4:05 PM on nereus002 (N6): detach rc 0, the link vanished; attach, the
+Verified 2026-10-15 ~3:47 PM on nereus002 (N6): detach rc 0, the link vanished; attach, the
 link was back in 2 s and board_probe answered ok.
 Usage (on the Pi): ~/nereus-camera-test-rig/.venv/bin/python scripts/selfcheck_inject.py detach ae3
 """

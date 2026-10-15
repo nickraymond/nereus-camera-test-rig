@@ -76,6 +76,9 @@ def test_check_board_absent_and_wedged_reasons():
     rec = sc.check_board("X", wait_s=0, port_of=lambda s: "/p",
                          probe=lambda s: {"ok": False, "stage": "write_timeout", "error": "t"})
     assert rec["why"] == "write_timeout" and rec["error"] == "t"
+    rec = sc.check_board("X", wait_s=0, port_of=lambda s: "/p",   # a REPL echo of the request
+                         probe=lambda s: {"ok": False, "stage": "replied"})
+    assert rec["why"] == "bad_reply" and not rec["ok"]
 
 
 def test_check_imx708_listed_open_in_use():
