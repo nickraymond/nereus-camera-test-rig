@@ -96,9 +96,9 @@ def i2c_lock(timeout_s: float = 2.0):
             fh.close()
 
 
-def ups_cli(*args: str, timeout: float = 5.0) -> str:
+def ups_cli(*args: str, timeout: float = 5.0, lock_timeout_s: float = 2.0) -> str:
     """lifepo4wered-cli under the I2C lock; '' on any failure (never raises)."""
-    with i2c_lock():
+    with i2c_lock(lock_timeout_s):
         try:
             return subprocess.run(["lifepo4wered-cli", *args], capture_output=True, text=True,
                                   timeout=timeout).stdout
@@ -146,8 +146,15 @@ def bar30_session(min_interval_s: float | None = None, max_wait_s: float = 10.0)
                     fh.write(f"{time.time():.3f}\n")
 
 
+# An LED write waits at most this long for the shared lock, then goes ahead unlocked: it is a
+# single register write, and the kernel serializes each SMBus transfer anyway. Bench 10/15: right
+# after a cold boot the UPS logger's 4 locked reads took ~1.7 s, and a blink phase waiting
+# behind them stretched from 2.0 s to 3.7 s (a fault code's flashes could split the same way).
+LED_LOCK_WAIT_S = 0.2
+
+
 def set_led(state: int) -> None:
-    ups_cli("set", "LED_STATE", str(state))
+    ups_cli("set", "LED_STATE", str(state), lock_timeout_s=LED_LOCK_WAIT_S)
 
 
 def decide(mode: str, vbat_hist: list[int], on_battery: bool, last_set_all_ok: bool | None,
@@ -190,12 +197,10 @@ class LedDriver(threading.Thread):
                 self._sleep(1.0)
                 continue
             if mode == "verdict_ok":
-                self._write(LED_ON)
                 self._shown = mode
-                if self._sleep(OK_ON_S):
+                if self._show(LED_ON, OK_ON_S):
                     continue
-                self._write(LED_OFF)
-                self._sleep(OK_OFF_S)
+                self._show(LED_OFF, OK_OFF_S)
                 continue
             if mode.startswith("fault:"):
                 self._shown = mode
@@ -219,14 +224,19 @@ class LedDriver(threading.Thread):
         mode change or stop (the caller re-reads the mode)."""
         for n in codes or [0]:
             for _ in range(max(1, n)):
-                self._write(LED_ON)
-                if self._sleep(F_ON_S):
+                if self._show(LED_ON, F_ON_S):
                     return
-                self._write(LED_OFF)
-                if self._sleep(F_OFF_S):
+                if self._show(LED_OFF, F_OFF_S):
                     return
             if self._sleep(F_DARK_S):
                 return
+
+    def _show(self, state: int, hold_s: float) -> bool:
+        """Write ``state`` and hold it ``hold_s`` from the START of the write, so a slow write
+        does not stretch the phase (verdict patterns only). True if woken early."""
+        t0 = time.monotonic()
+        self._write(state)
+        return self._sleep(max(0.0, hold_s - (time.monotonic() - t0)))
 
     def _sleep(self, s: float) -> bool:
         """Sleep up to ``s``; True if woken early by a mode change or stop."""

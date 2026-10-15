@@ -173,3 +173,28 @@ def test_low_battery_overrides_a_fault_code(monkeypatch):
     time.sleep(0.3)
     d.stop(final=None)
     assert w.writes[-1][1] == led.LED_FLASHING
+
+
+def test_a_slow_write_does_not_stretch_the_phase(monkeypatch):
+    """Bench 10/15 cold boot: a 1.7 s LED write stretched a 2 s blink phase to 3.7 s."""
+    monkeypatch.setattr(led, "OK_ON_S", 0.3)
+    monkeypatch.setattr(led, "OK_OFF_S", 0.3)
+    calls = []
+
+    def slow_writer(state):
+        calls.append(time.monotonic())
+        if len(calls) == 2:
+            time.sleep(0.2)          # one slow write (lock wait), shorter than the phase
+    d = led.LedDriver(writer=slow_writer, mode="verdict_ok")
+    d.start()
+    time.sleep(1.0)
+    d.stop(final=None)
+    gaps = [b - a for a, b in zip(calls, calls[1:])]
+    assert all(0.25 <= g <= 0.4 for g in gaps[:3]), gaps   # the phase is timed from the write start
+
+
+def test_led_writes_wait_only_briefly_for_the_shared_lock(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(led, "ups_cli", lambda *a, **k: seen.update(k) or "")
+    led.set_led(led.LED_ON)
+    assert seen["lock_timeout_s"] == led.LED_LOCK_WAIT_S <= 0.25
