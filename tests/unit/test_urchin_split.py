@@ -1,5 +1,7 @@
 """Reef Check urchin study: sampling + held-out split (edge_ml/urchin/PREREG.md)."""
 
+import json
+
 import pytest
 from edge_ml.urchin import split as sp
 
@@ -121,3 +123,91 @@ def test_frozen_reefcheck_group_map_matches_prereg():
     gmap = json.loads(raw)
     assert len(gmap) == 29 and len(set(gmap.values())) == 7
     assert gmap["South Wreck-25-09-16-0935-TrueBarnes-f9"] == "South Wreck|2025-09-11"
+
+
+def _stills_csv(tmp_path, n_videos=6, per=60):
+    import csv
+
+    path = tmp_path / "stills.csv"
+    groups = {}
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(
+            f, fieldnames=["video", "index", "t_s", "sharpness", "dhash", "status", "still"]
+        )
+        w.writeheader()
+        for v in range(n_videos):
+            stem = f"Site{v % 3} clip{v}"
+            groups[stem] = f"Site{v % 3}|2024-0{v // 3 + 1}-01"
+            for i in range(per):
+                w.writerow(
+                    {
+                        "video": f"{stem}.MP4",
+                        "index": i * 4,
+                        "t_s": i * 2.0,
+                        "sharpness": 1,
+                        "dhash": "0",
+                        "status": "kept",
+                        "still": f"{stem}_t{i * 20:06d}.jpg",
+                    }
+                )
+            w.writerow(
+                {
+                    "video": f"{stem}.MP4",
+                    "index": 1,
+                    "t_s": 0.5,
+                    "sharpness": 0,
+                    "dhash": "0",
+                    "status": "blur",
+                    "still": "",
+                }
+            )
+    (tmp_path / "groups.json").write_text(json.dumps(groups))
+    return path, groups
+
+
+def test_cli_screen_then_folds(tmp_path):
+    import csv
+
+    stills_csv, groups = _stills_csv(tmp_path)
+    assert sp.main(["q1-sample", str(stills_csv), str(tmp_path / "q1.txt")]) == 0
+    q1 = (tmp_path / "q1.txt").read_text().splitlines()
+    assert len(q1) == 100 and all("/" in x for x in q1)
+
+    screen = tmp_path / "group_screen.csv"
+    assert (
+        sp.main(["screen-list", str(stills_csv), str(tmp_path / "groups.json"), str(screen)]) == 0
+    )
+    rows = list(csv.DictReader(screen.open()))
+    order = [r["group"] for r in rows]
+    assert order == sorted(order)  # alphabetical, not hash order
+    assert len(rows) == 6 * 40
+
+    out = tmp_path / "folds"
+    with pytest.raises(ValueError, match="want yes/no/unsure"):  # blank screen
+        sp.main(["folds", str(stills_csv), str(tmp_path / "groups.json"), str(screen), str(out)])
+
+    for r in rows:
+        r["purple_urchin"] = "unsure" if r["group"].startswith("Site0") else "no"
+    rows[-1]["purple_urchin"] = "yes"
+    with screen.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["group", "still", "purple_urchin", "notes"])
+        w.writeheader()
+        w.writerows(rows)
+    elig = sp.eligible_from_screen(screen, set(groups.values()))
+    assert elig == {"Site0|2024-01-01", "Site0|2024-02-01", rows[-1]["group"]}
+    assert (
+        sp.main(["folds", str(stills_csv), str(tmp_path / "groups.json"), str(screen), str(out)])
+        == 0
+    )
+    dirs = sorted(d for d in out.iterdir() if d.is_dir())
+    assert len(dirs) == 3  # 3 eligible groups → leave-one-group-out
+    for fold_dir in dirs:
+        assert "|" not in fold_dir.name and " " not in fold_dir.name
+        info = json.loads((fold_dir / "fold.json").read_text())
+        assert info["mode"] == "leave_one_group_out"
+        (tg,) = info["test_groups"]
+        assert tg in elig and tg not in info["train_groups"] + info["val_groups"]
+        assert len((fold_dir / "train.txt").read_text().splitlines()) <= sp.CAPS["train"]
+        test = (fold_dir / "test.txt").read_text().splitlines()
+        assert len(test) == info["n"]["test"] <= sp.CAPS["test"]
+        assert all(groups[x.split("/")[0]] == tg for x in test)

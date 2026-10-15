@@ -65,7 +65,8 @@ with a Wilson 95 % lower bound ≥ 50 %, **and** the labelled set meets the Q2 m
 - Pre-labels: the zero-shot detector (model A below) at score ≥ 0.05, then NMS at IoU 0.5. The
   candidate crops are shown on contact sheets and each is marked urchin / not / ignore. Accepted
   boxes are tightened with SAM (`facebook/sam-vit-base`, box prompt), and the overlay is checked.
-- **Test stills** also get a full-frame search for misses: each missed urchin gets a point, SAM
+- **Test and validation stills** also get a full-frame search for misses (validation sets the
+  thresholds, so its labels must be as complete as the test labels): each missed urchin gets a point, SAM
   makes the box from it, and the overlay is checked.
 - **Training stills** get accept/reject only, with no search for misses. The resulting label
   noise lowers model B's recall, which works against "helped".
@@ -92,9 +93,11 @@ with a Wilson 95 % lower bound ≥ 50 %, **and** the labelled set meets the Q2 m
 - Secondary report (not part of the bar): F1 for held-out groups whose site has no training
   data ("new site") and for those whose site does ("same site, other day"), each with its n.
 - Eligibility screen (recorded in `labels/group_screen.csv`): for each group, up to 40 of its
-  stills, evenly spaced in time (all of them if it has fewer), are checked for a purple urchin.
-  A group with none in its screen is not eligible for the test set; it may still be used in
-  training as negatives. The screen is fixed before the split is drawn.
+  stills, evenly spaced in time (all of them if it has fewer), are checked for a purple urchin
+  (yes / no / unsure; **unsure counts as present**). A group with none in its screen is not
+  eligible for the test set; it may still be used in training as negatives. The screen is done
+  without looking at the group hash order, committed (SHA-256 in the MANIFEST), and only then are
+  the hashes and folds computed.
 - **≥ 4 eligible groups:** test = ⌈⅓⌉ of the eligible groups, at least 2, taken in ascending
   SHA-256 order of the group name (chosen without looking at content). The rest are training.
   Validation = the lowest-hash **eligible** training group if ≥ 3 training groups remain and one
@@ -106,8 +109,8 @@ with a Wilson 95 % lower bound ≥ 50 %, **and** the labelled set meets the Q2 m
   and 30 s between them is discarded (validation as above, inside the first 70 %). The outcome
   is "inconclusive (same dive)" whatever the numbers; if B beats A there, the note may describe
   it as promising, but it is not a "helped" result.
-- Caps: ≤ 150 test stills and ≤ 300 training stills, seeded random samples drawn in proportion to
-  each video's stills. The caps may change once, before labelling starts, via the amendment log.
+- Caps: ≤ 150 test stills, ≤ 100 validation stills and ≤ 300 training stills, seeded random
+  samples (seed 0) drawn in proportion to each video's stills. The caps may change once, before labelling starts, via the amendment log.
 - The test still list is written (`labels/test_stills.txt`, SHA-256 in the MANIFEST) before any
   model is trained or tuned.
 
@@ -188,3 +191,4 @@ training stills, to show whether more video would still help.
 | 2026-10-15 | Clarifications while writing the code (no video downloaded yet): ignore boxes are left out of model B's training targets (treated as background, which works against "helped"); bar condition 3 is checked for every seed, like 1 and 2; minimums are pooled over folds (held-out groups and test boxes). | Ambiguities in the original text | All — no data yet |
 | 2026-10-15 | Group = site + dive date instead of site. Decided after seeing only the Drive file list (names, dates, sizes) and before any frame was viewed or any group hash computed. Adds the new-site / same-site secondary report. | South Wreck holds 23 of 29 videos (91 % of the bytes) over 5 dive days in 4 years. With site groups, 2 of 4 sites are held out by hash, so half the time South Wreck would be test data and B would train on ~2 GB from small sites: the outcome would hinge on a coin flip, not on the stills. Site-day groups are still separate dives (other day, mostly other year and diver). | All — no frames viewed, no hashes computed |
 | 2026-10-15 | QE ruling on #118 (before any hash or frame): validation = lowest-hash *eligible* training group, and scoring fails if validation has no boxes; the 29-row video → group map is frozen with its SHA-256; same-site dates within 7 days merge (South Wreck 2025-09-11 + 09-16), giving 7 groups; claim scope wording when no held-out group is a new site. | QE FAIL items 1–4 on #118 | All — no frames viewed, no hashes computed |
+| 2026-10-15 | QE PASS on #118 delta, plus: "unsure" in the group screen counts as present; screen committed before hashes and folds are computed; validation capped at 100 stills and labelled like test stills (miss search), since it sets the thresholds. | QE nit + gap in the original (validation labelling was unspecified) | All — no frames viewed, no hashes computed |

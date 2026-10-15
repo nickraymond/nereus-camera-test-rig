@@ -4,7 +4,8 @@
         --out <dir>
 
 Fold dir layout (written by the run scripts):
-    fold.json                    {"name", "mode", "test_groups"}
+    fold.json     split.Fold.info(): {"name", "mode", "test_groups", "train_groups" (required),
+                  "val_groups", "n", ...}; written by `python -m edge_ml.urchin.split folds`
     labels_val.json, labels_test.json          COCO (review.to_coco)
     a/pred_labels_val.json, a/pred_labels_test.json            model A (owl.py)
     b/seed<k>/pred_labels_val.json, b/seed<k>/pred_labels_test.json   model B (train_b.py)
@@ -191,7 +192,12 @@ def site_of(group: str) -> str:
 
 def new_site_groups(info: dict) -> list[str]:
     """Held-out groups whose site has no training group (validation does not count)."""
-    train_sites = {site_of(g) for g in info.get("train_groups", [])}
+    if "train_groups" not in info:
+        raise KeyError(
+            f"fold {info.get('name')!r}: fold.json has no train_groups; write it with "
+            "split.Fold.info() (python -m edge_ml.urchin.split folds)"
+        )
+    train_sites = {site_of(g) for g in info["train_groups"]}
     return [g for g in info["test_groups"] if site_of(g) not in train_sites]
 
 

@@ -19,7 +19,7 @@ def _write_fold(tmp_path, n_per_video=30, mode="held_out_groups", b_quality="per
     coco = to_coco(stills, labels)
     fold.mkdir(parents=True)
     (fold / "fold.json").write_text(
-        json.dumps({"name": "f", "mode": mode, "test_groups": ["g1", "g2"]})
+        json.dumps({"name": "f", "mode": mode, "test_groups": ["g1", "g2"], "train_groups": ["g0"]})
     )
     (fold / "labels_val.json").write_text(json.dumps(coco))
     (fold / "labels_test.json").write_text(json.dumps(coco))
@@ -122,3 +122,12 @@ def test_claim_scope_when_no_new_site_is_held_out(tmp_path):
     r = ev.evaluate_fold(fold, groups)
     assert r["secondary_new_vs_same_site"]["new_site"]["groups"] == ["S2|2024-01-01"]
     assert ev.outcome([r])[0] == "helped"
+
+
+def test_fold_json_without_train_groups_fails_closed(tmp_path):
+    fold, groups = _write_fold(tmp_path)
+    info = json.loads((fold / "fold.json").read_text())
+    del info["train_groups"]
+    (fold / "fold.json").write_text(json.dumps(info))
+    with pytest.raises(KeyError, match="train_groups"):
+        ev.evaluate_fold(fold, groups)

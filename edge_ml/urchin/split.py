@@ -2,15 +2,27 @@
 
 Pure Python + numpy. A still is identified by its file name; its video, time and group come
 from stills.csv (extract_stills.py) plus a group map {video: group} written by hand from the
-dataset's folder names / Reef Check's notes and committed with the run's MANIFEST.
+dataset's folder names / Reef Check's notes, frozen in git (groups_reefcheck.json).
+
+    python -m edge_ml.urchin.split q1-sample   <stills.csv> <q1_sample.txt>
+    python -m edge_ml.urchin.split screen-list <stills.csv> <groups.json> <group_screen.csv>
+    python -m edge_ml.urchin.split folds       <stills.csv> <groups.json> <group_screen.csv> <out>
+
+Order (PREREG): fill and commit group_screen.csv (yes / no / unsure) BEFORE running `folds`,
+which is the first step that computes group hashes.
 """
 
 from __future__ import annotations
 
+import argparse
+import csv
 import hashlib
+import json
 import math
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 
@@ -59,6 +71,11 @@ def evenly_spaced(stills: list[Still], k: int = 40) -> list[Still]:
         return ordered
     idx = np.unique(np.round(np.linspace(0, len(ordered) - 1, k)).astype(int))
     return [ordered[i] for i in idx]
+
+
+def safe_name(group: str) -> str:
+    """Group name as a directory name: exFAT (the data SSD) forbids | and friends."""
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in group)
 
 
 def name_hash(group: str) -> str:
@@ -130,7 +147,7 @@ def make_folds(stills: list[Still], groups: dict[str, str], eligible: set[str]) 
         test_groups = [elig[i] for i in range(max(2, math.ceil(len(elig) / 3)))]
         plan = [("held_out", test_groups, "held_out_groups")]
     elif len(elig) >= 2:
-        plan = [(f"logo_{g}", [g], "leave_one_group_out") for g in elig]
+        plan = [(f"logo_{safe_name(g)}", [g], "leave_one_group_out") for g in elig]
     else:
         plan = []
     folds = []
@@ -147,3 +164,94 @@ def make_folds(stills: list[Still], groups: dict[str, str], eligible: set[str]) 
         train, val = train_val(train_all, groups, eligible)
         folds.append(Fold("same_dive", train, val, test, [g], "same_dive"))
     return folds
+
+
+CAPS = {"train": 300, "val": 100, "test": 150}  # PREREG caps
+SCREEN_K = 40
+SCREEN_VALUES = {"yes", "no", "unsure"}
+
+
+def read_stills_csv(path: Path) -> list[Still]:
+    """Kept stills from extract_stills.py's stills.csv; name = '<video stem>/<still>'."""
+    out = []
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            if row["status"] == "kept":
+                stem = Path(row["video"]).stem
+                out.append(Still(f"{stem}/{row['still']}", stem, float(row["t_s"])))
+    return out
+
+
+def eligible_from_screen(path: Path, groups: set[str]) -> set[str]:
+    """Groups with any 'yes' or 'unsure' (PREREG: unsure counts as present). Fails on blanks."""
+    seen, elig = set(), set()
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            v = row["purple_urchin"].strip().lower()
+            if v not in SCREEN_VALUES:
+                raise ValueError(f"{path}: {row['still']}: purple_urchin={v!r}, want yes/no/unsure")
+            seen.add(row["group"])
+            if v in ("yes", "unsure"):
+                elig.add(row["group"])
+    if missing := groups - seen:
+        raise ValueError(f"{path}: groups not screened: {sorted(missing)}")
+    return elig
+
+
+def write_folds(folds: list[Fold], groups: dict[str, str], out_dir: Path) -> None:
+    """Per fold: capped train/val/test lists + fold.json (Fold.info, with caps recorded)."""
+    for fold in folds:
+        d = out_dir / fold.name
+        d.mkdir(parents=True, exist_ok=False)
+        before = {"train": len(fold.train), "val": len(fold.val), "test": len(fold.test)}
+        for part in ("train", "val", "test"):
+            capped = proportional_sample(getattr(fold, part), CAPS[part], seed=0)
+            setattr(fold, part, capped)
+            (d / f"{part}.txt").write_text("".join(f"{s.name}\n" for s in capped))
+        info = fold.info(groups)
+        info["n_before_caps"] = before
+        info["caps"] = CAPS
+        (d / "fold.json").write_text(json.dumps(info, indent=1) + "\n")
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    q = sub.add_parser("q1-sample", help="100 stills (seed 0) for the Q1 usability review")
+    q.add_argument("stills_csv", type=Path)
+    q.add_argument("out", type=Path)
+    s = sub.add_parser("screen-list", help="per-group screen rows to fill (alphabetical order)")
+    s.add_argument("stills_csv", type=Path)
+    s.add_argument("groups", type=Path)
+    s.add_argument("out", type=Path)
+    fo = sub.add_parser("folds", help="eligible groups from the screen → capped folds")
+    fo.add_argument("stills_csv", type=Path)
+    fo.add_argument("groups", type=Path)
+    fo.add_argument("screen", type=Path)
+    fo.add_argument("out_dir", type=Path)
+    args = ap.parse_args(argv)
+    stills = read_stills_csv(args.stills_csv)
+    if args.cmd == "q1-sample":
+        args.out.write_text("".join(f"{x.name}\n" for x in proportional_sample(stills, 100, 0)))
+        return 0
+    groups = json.loads(args.groups.read_text())
+    if missing := {x.video for x in stills} - set(groups):
+        raise ValueError(f"videos missing from the group map: {sorted(missing)}")
+    if args.cmd == "screen-list":
+        with args.out.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["group", "still", "purple_urchin", "notes"])
+            for g in sorted(set(groups.values())):  # alphabetical, never hash order
+                for x in evenly_spaced([x for x in stills if groups[x.video] == g], SCREEN_K):
+                    w.writerow([g, x.name, "", ""])
+        return 0
+    eligible = eligible_from_screen(args.screen, {groups[x.video] for x in stills})
+    folds = make_folds(stills, groups, eligible)
+    write_folds(folds, groups, args.out_dir)
+    for fold in folds:
+        print(json.dumps(fold.info(groups)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
