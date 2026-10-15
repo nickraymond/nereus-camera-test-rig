@@ -10,7 +10,7 @@ Output: per cycle (decoded frames, metadata frames, verdict) on stdout, ``audit_
 
 Usage:
   python -m host_tools.gate_audit ~/NereusPool/20261015/nereus002/gate/gate007_...
-Needs ffprobe on PATH. Rule: decoded >= 200 (2/3 x 30 fps x 10 s) AND decoded >=
+Needs ffprobe on PATH. Rule: decoded >= 2/3 x 30 fps x video_s (200 for 10 s) AND decoded >=
   metadata records - 2, AND ffprobe exit 0. A cycle that was not PASS keeps its result.
 """
 
@@ -23,8 +23,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-MIN_FRAMES = 200          # 2/3 x 30 fps x 10 s (A8)
+NOMINAL_FPS = 30          # IMX708 H.264 (sync_video default)
 META_SLACK = 2
+
+
+def min_frames(run: Path) -> int:
+    """A8: 2/3 of the nominal frames for this run's clip length (run_manifest video_s)."""
+    try:
+        video_s = float(json.loads((run / "run_manifest.json").read_text()).get("video_s") or 10)
+    except (OSError, ValueError):
+        video_s = 10.0
+    return int(NOMINAL_FPS * video_s * 2 / 3)
 
 
 def decoded_frames(h264: Path) -> tuple[int | None, str]:
@@ -51,6 +60,7 @@ def meta_records(meta: Path) -> int:
 
 def audit(run: Path) -> dict:
     rows = list(csv.DictReader((run / "cycles.csv").open()))
+    floor = min_frames(run)
     out, streak, best = [], 0, 0
     for r in rows:
         n = int(r["cycle"])
@@ -59,7 +69,7 @@ def audit(run: Path) -> dict:
         if r["result"] == "PASS":
             frames, err = decoded_frames(clip / "imx708.h264")
             meta = meta_records(clip / "imx708.meta.json")
-            ok = frames is not None and frames >= MIN_FRAMES and frames >= meta - META_SLACK
+            ok = frames is not None and frames >= floor and frames >= meta - META_SLACK
             rec.update(decoded=frames, meta=meta, ffprobe=err, a8="ok" if ok else "FAIL")
             if not ok:
                 rec["audited_result"] = "FAIL"
@@ -77,7 +87,7 @@ def audit(run: Path) -> dict:
                                           "meta", "a8", "ffprobe", "audited_streak"])
         w.writeheader()
         w.writerows(out)
-    summary = {"run": run.name, "cycles": len(out),
+    summary = {"run": run.name, "cycles": len(out), "min_frames": floor,
                "a8_failures": [o["cycle"] for o in out if o.get("a8") == "FAIL"],
                "best_audited_streak": best, "final_audited_streak": streak}
     (run / "audit_a8.json").write_text(json.dumps(summary, indent=2) + "\n")
