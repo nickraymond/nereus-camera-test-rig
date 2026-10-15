@@ -43,6 +43,13 @@ Shots taken before you are in position just have no board in them; the pipeline 
 - **N6 video (PgM d40):** about 1 clip in 50 loses the N6 stream partway. Its USB drops bytes
   (gate008 cycle 22: 47 of ~100 frames). The IMX708 and AE3 clips are unaffected. Flash the
   torch early in each clip.
+- **N6 RAW (Block B calibration uses the N6 Bayer):**
+  - The N6 loses about 1 RAW frame in 67 with nothing else loading the Pi (gate008 cycle 36). It
+    lost 2 more while a Mac pull loaded the Pi.
+  - CAL B gives ~46 shots in 10 min, so expect 1–2 N6 frames lost and ~44 good. The calibration
+    pre-reg needs ≥ 15 distinct usable poses (B1).
+  - A lost frame only removes the N6 from that one pose. The real risk is coverage (corners and
+    edges), not the count.
 
 ## Bench, before leaving (Thursday)
 

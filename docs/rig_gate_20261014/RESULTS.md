@@ -193,6 +193,16 @@ three.
   - re-calibrate the IMX708 lead;
   - check against a visible ms clock. That is still open: the skews here are timestamp-based.
 
+### N6 RAW byte loss (matters for Friday CAL B, which uses the N6 Bayer)
+
+- Unloaded: 1 N6 RAW lost in 67 cycles (1.5 %), gate008 c36 (`timed out reading 1024000 bytes`).
+- Under harness pull load: 2 more (gate007 c5–6).
+- RAWs are not gated.
+- Friday CAL B (10 min, ~46 shots at ~13 s): expect ~1–2 N6 RAWs lost and ~44 good, against
+  the calibration pre-reg's B1 (≥ 15 distinct usable poses). Not at risk from loss; coverage is
+  the real risk.
+- The IMX708 and AE3 RAWs never failed.
+
 ### Run 2 (repeat): gate008, from 9:59 AM
 
 Armed automatically when run 1 passed (A6). The STOP at cycle 1 was the planned pause for the
