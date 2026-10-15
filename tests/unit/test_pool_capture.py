@@ -231,6 +231,7 @@ def test_dive_program_phases_are_cumulative_and_video_counts_its_clips():
     prog = pool_capture.parse_program("cal_a:12,cal_b:10,stills:10,video:6x30")
     assert [(p["name"], p["start_min"], p["end_min"]) for p in prog] == [
         ("cal_a", 0, 12), ("cal_b", 12, 22), ("stills", 22, 32), ("video", 32, 38)]
+    assert prog[3]["period_s"] == 60.0  # 30 s clip + ~30 s arm/finish -> one per minute
     assert pool_capture.phase_at(prog, 12.5)["name"] == "cal_b"
     tail = pool_capture.phase_at(prog, 40)
     assert tail["name"] == "stills" and tail["tail"]

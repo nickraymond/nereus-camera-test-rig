@@ -425,7 +425,10 @@ def parse_program(spec: str) -> list[dict]:
         if name == "video":
             clips, _, secs = val.partition("x")
             ph = {"name": name, "clips": int(clips), "clip_s": float(secs)}
-            minutes = ph["clips"] * (ph["clip_s"] + 30) / 60  # + arm / finish per clip
+            # one clip per period on a fixed grid (the diver knows when a clip runs): period =
+            # the clip + ~30 s of board reset / arm / finish, rounded up to whole minutes
+            ph["period_s"] = 60.0 * -(-(ph["clip_s"] + 30) // 60)
+            minutes = ph["clips"] * ph["period_s"] / 60
         else:
             ph = {"name": name}
             minutes = float(val)
@@ -707,6 +710,14 @@ def run(args) -> int:
         read_now = args.depth and depth_errors < DEPTH_DISABLE_AFTER
         depth = {"start": read_depth(ref_mbar, args.depth_bus)} if read_now else {}
         if phase and phase["name"] == "video":
+            # Start on the clip grid: phase start + k x period (minutes from switch-on).
+            t_rel = (line["clock"]["uptime_s"] or 0) if args.started_by == "boot" \
+                else time.monotonic() - t_start
+            k = -(-(t_rel - phase["start_min"] * 60) // phase["period_s"])
+            wait = phase["start_min"] * 60 + k * phase["period_s"] - t_rel
+            if 0 < wait < phase["period_s"]:
+                time.sleep(wait)
+            line["clip_grid_s"] = round(phase["start_min"] * 60 + k * phase["period_s"], 1)
             line["video"] = run_video_clip(run_dir, n, phase["clip_s"])
         elif phase and phase["name"] in ("cal_a", "cal_b"):
             line.update(run_one_set(n, run_dir, cal_config, run_id, cams_now,
