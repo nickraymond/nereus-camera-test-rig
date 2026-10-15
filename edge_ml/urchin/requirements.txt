@@ -1,0 +1,19 @@
+# Reef Check urchin study (edge_ml/urchin/PREREG.md). Study-only: never imported from src/,
+# not in pyproject.toml. Licences: torch/torchvision BSD-3, transformers Apache-2.0,
+# numpy/scipy BSD-3, Pillow MIT-CMU, OpenCV Apache-2.0. No Ultralytics (AGPL-3.0).
+# Model weights: google/owlv2-base-patch16-ensemble and facebook/sam-vit-base (Apache-2.0),
+# torchvision COCO fasterrcnn_mobilenet_v3_large_fpn (BSD-3).
+#
+# Env used (Mac, Python 3.13.5): ~/NereusData/nereus-camera-test-rig/_env/urchin-ml
+#   python3 -m venv <env> && <env>/bin/pip install -r edge_ml/urchin/requirements.txt
+# extract_stills.py needs only numpy + OpenCV + ffmpeg (runs in the repo .venv too).
+huggingface_hub==2.2.0
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+pillow==12.3.0
+safetensors==0.8.0
+scipy==1.18.1
+tokenizers==0.23.3
+torch==2.14.1
+torchvision==0.29.1
+transformers==5.19.0
