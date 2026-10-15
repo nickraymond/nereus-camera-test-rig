@@ -79,6 +79,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import pool_led  # noqa: E402  (Nick's LED codes + the shared I2C lock)
+import pool_selfcheck  # noqa: E402  (boot camera self-check, --self-check)
 from hil_soak import SERIALS, PowerLog, pi_health  # noqa: E402  (reuse, not a copy)
 
 
@@ -673,7 +674,22 @@ def run(args) -> int:
         power.start()
     # Nick 2026-10-13 ~9:25 PM: "remove any custom LED flashing sequence". The LED codes (#101)
     # are opt-in (--led-codes); by default the loop never touches the LED (firmware default).
-    led = pool_led.LedDriver() if args.led_codes else None
+    led = None
+    if args.self_check:
+        # The self-check verdict owns the LED (Nick 10/15, plan A); every write is traced.
+        trace_fh = (run_dir / "led_trace.csv").open("a")
+        trace_fh.write("t_mono_s,utc,led_state,mode\n")
+
+        def traced(state: int) -> None:
+            trace_fh.write(f"{time.monotonic():.3f},"
+                           f"{datetime.now(timezone.utc).isoformat(timespec='milliseconds')},"
+                           f"{state},{led.mode if led else ''}\n")
+            trace_fh.flush()
+            pool_led.set_led(state)
+
+        led = pool_led.LedDriver(writer=traced, mode="idle")
+    elif args.led_codes:
+        led = pool_led.LedDriver()
     if led:
         led.start()
         # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the
@@ -688,6 +704,16 @@ def run(args) -> int:
         say("  program (minutes from " + ("switch-on" if args.started_by == "boot" else
                                           "run start") + "): " + " · ".join(
             f"{ph['name']} {ph['start_min']:g}-{ph['end_min']:g}" for ph in program))
+    verdict_mode, verdict_t = None, 0.0
+    if args.self_check:
+        say("  self-check: IMX708 (1), N6 (2), AE3 (3); read-only, no fixes "
+            "(on a fault Nick switches off/on)")
+        sc = pool_selfcheck.run_check(SERIALS)
+        verdict_mode, verdict_t = pool_selfcheck.led_mode(sc), time.monotonic()
+        manifest["self_check"] = sc
+        atomic_json(run_dir / "run_manifest.json", manifest)
+        led.set_mode(verdict_mode)
+        say(pool_selfcheck.summary(sc))
     vbat_hist: list[int] = []
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False
@@ -809,7 +835,13 @@ def run(args) -> int:
             vbat_hist.append(p_now["vbat_mv"])
         else:
             vbat_hist.clear()
-        if led:
+        if led and verdict_mode:  # --self-check: the boot verdict, only low battery overrides
+            low = pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")), None,
+                                  args.low_vbat_mv) == "lowbatt"
+            led.set_mode(pool_selfcheck.verdict_led_mode(
+                verdict_mode, time.monotonic() - verdict_t, low))
+            line["led"] = led.mode
+        elif led:
             led.set_mode(pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")),
                                          len(good) == 3, args.low_vbat_mv))
             line["led"] = led.mode
@@ -943,6 +975,10 @@ def main() -> int:
                         "the UPS and Nick is moving it to its own bus)")
     r.add_argument("--led-codes", action="store_true",
                    help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
+    r.add_argument("--self-check", action="store_true",
+                   help="boot camera self-check before set 1, verdict on the UPS LED: slow "
+                        "blink = all OK, N quick flashes = camera N failed (1 IMX708, 2 N6, "
+                        "3 AE3). Read-only: no power cycle, no retries (Nick 10/15, plan A)")
     r.add_argument("--sync", action="store_true",
                    help="synchronized sets: all three cameras shoot the same moment")
     r.add_argument("--program", default="",
