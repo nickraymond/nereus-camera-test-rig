@@ -74,6 +74,17 @@ class Fold:
     test_groups: list[str] = field(default_factory=list)
     mode: str = ""  # "held_out_groups" | "leave_one_group_out" | "same_dive"
 
+    def info(self, groups: dict[str, str]) -> dict:
+        """fold.json content: what evaluate.py needs to know about this fold."""
+        return {
+            "name": self.name,
+            "mode": self.mode,
+            "test_groups": self.test_groups,
+            "train_groups": sorted({groups[s.video] for s in self.train}),
+            "val_groups": sorted({groups[s.video] for s in self.val}),
+            "n": {"train": len(self.train), "val": len(self.val), "test": len(self.test)},
+        }
+
 
 def time_split(stills: list[Still], fraction_first: float) -> tuple[list[Still], list[Still]]:
     """Per video: first `fraction_first` of its duration vs the rest, GAP_S discarded between."""
@@ -93,12 +104,15 @@ def _key(s: Still) -> tuple[str, float]:
     return (s.video, s.t_s)
 
 
-def train_val(stills: list[Still], groups: dict[str, str]) -> tuple[list[Still], list[Still]]:
-    """PREREG validation: one training group (lowest hash) if >= 3 training groups, else the
-    last 20 % of each training video with GAP_S discarded before it."""
+def train_val(
+    stills: list[Still], groups: dict[str, str], eligible: set[str]
+) -> tuple[list[Still], list[Still]]:
+    """PREREG validation: the lowest-hash *eligible* training group if >= 3 training groups
+    remain and one is eligible, else the last 20 % of each training video after GAP_S."""
     tg = sorted({groups[s.video] for s in stills}, key=name_hash)
-    if len(tg) >= 3:
-        val_group = tg[0]
+    elig = [g for g in tg if g in eligible]
+    if len(tg) >= 3 and elig:
+        val_group = elig[0]
         return (
             [s for s in stills if groups[s.video] != val_group],
             [s for s in stills if groups[s.video] == val_group],
@@ -122,7 +136,7 @@ def make_folds(stills: list[Still], groups: dict[str, str], eligible: set[str]) 
     folds = []
     for name, test_groups, mode in plan:
         train_all = [s for s in stills if groups[s.video] not in test_groups]
-        train, val = train_val(train_all, groups)
+        train, val = train_val(train_all, groups, eligible)
         test = [s for s in stills if groups[s.video] in test_groups]
         folds.append(Fold(name, train, val, sorted(test, key=_key), test_groups, mode))
     if not plan:  # one eligible group: same-dive time split (outcome "inconclusive")
@@ -130,6 +144,6 @@ def make_folds(stills: list[Still], groups: dict[str, str], eligible: set[str]) 
         in_g = [s for s in stills if groups[s.video] == g]
         first, test = time_split(in_g, SAME_DIVE_TRAIN)
         train_all = first + [s for s in stills if groups[s.video] != g]
-        train, val = train_val(train_all, groups)
+        train, val = train_val(train_all, groups, eligible)
         folds.append(Fold("same_dive", train, val, test, [g], "same_dive"))
     return folds

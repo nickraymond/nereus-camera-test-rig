@@ -101,6 +101,12 @@ def evaluate_fold(fold_dir: Path, groups: dict[str, str]) -> dict:
     info = json.loads((fold_dir / "fold.json").read_text())
     val_l = from_coco(json.loads((fold_dir / "labels_val.json").read_text()))
     test_l = from_coco(json.loads((fold_dir / "labels_test.json").read_text()))
+    n_val_boxes = sum(len(gt) for gt, _ in val_l.values())
+    if n_val_boxes == 0:
+        raise ValueError(
+            f"{fold_dir}: validation has no label boxes ({len(val_l)} stills); thresholds "
+            "would freeze at the top score. PREREG: stop here."
+        )
     names = sorted(test_l)
     vt = [still_video_time(n) for n in names]
     still_groups = {n: groups[v] for n, (v, _) in zip(names, vt, strict=True)}
@@ -151,6 +157,20 @@ def evaluate_fold(fold_dir: Path, groups: dict[str, str]) -> dict:
             "b_ge_a_every_group": bool(groups_ok),
         }
         seeds[sd.name] = b
+    new_site = new_site_groups(info)
+    split_f1 = {}
+    for label, gs in (
+        ("new_site", new_site),
+        ("same_site", [g for g in info["test_groups"] if g not in new_site]),
+    ):
+        idx = [i for i, n in enumerate(names) if still_groups[n] in gs]
+        split_f1[label] = {
+            "groups": gs,
+            "n_stills": len(idx),
+            "n_boxes": int(a["_counts"][idx, 0].sum() + a["_counts"][idx, 2].sum()),
+            "f1_A": f1_of(a["_counts"][idx]),
+            "f1_B": {s: f1_of(b["_counts"][idx]) for s, b in seeds.items()},
+        }
     n_boxes = int(a["_counts"][:, 0].sum() + a["_counts"][:, 2].sum())
     n_ignore = int(sum(len(ign) for _, ign in test_l.values()))
     return {
@@ -161,7 +181,18 @@ def evaluate_fold(fold_dir: Path, groups: dict[str, str]) -> dict:
         "n_test_videos": len({v for v, _ in vt}),
         "A": a,
         "B": seeds,
+        "secondary_new_vs_same_site": split_f1,
     }
+
+
+def site_of(group: str) -> str:
+    return group.split("|", 1)[0]
+
+
+def new_site_groups(info: dict) -> list[str]:
+    """Held-out groups whose site has no training group (validation does not count)."""
+    train_sites = {site_of(g) for g in info.get("train_groups", [])}
+    return [g for g in info["test_groups"] if site_of(g) not in train_sites]
 
 
 def outcome(folds: list[dict]) -> tuple[str, str]:
@@ -186,7 +217,10 @@ def outcome(folds: list[dict]) -> tuple[str, str]:
     ]
     if fails:
         return "not shown", "; ".join(fails)
-    return "helped", f"all bar conditions hold in {len(folds)} fold(s) x every seed"
+    reason = f"all bar conditions hold in {len(folds)} fold(s) x every seed"
+    if not any(new_site_groups(f["fold"]) for f in folds):
+        return "helped on other dives at sites in training", reason + "; no held-out new site"
+    return "helped", reason
 
 
 def _fmt(x: float) -> str:

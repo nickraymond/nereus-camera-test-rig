@@ -92,3 +92,33 @@ def test_main_writes_reports(tmp_path):
     assert data["outcome"] == "helped"
     assert "_counts" not in json.dumps(data)
     assert "Outcome: helped" in (out / "eval.md").read_text()
+
+
+def test_empty_validation_fails_loudly(tmp_path):
+    fold, groups = _write_fold(tmp_path)
+    coco = json.loads((fold / "labels_val.json").read_text())
+    coco["annotations"] = []
+    (fold / "labels_val.json").write_text(json.dumps(coco))
+    with pytest.raises(ValueError, match="validation has no label boxes"):
+        ev.evaluate_fold(fold, groups)
+
+
+def test_claim_scope_when_no_new_site_is_held_out(tmp_path):
+    fold, groups = _write_fold(tmp_path)
+    groups = {"vA1": "S1|2024-01-01", "vB1": "S2|2024-01-01"}
+    info = {
+        "name": "f",
+        "mode": "held_out_groups",
+        "test_groups": sorted(groups.values()),
+        "train_groups": ["S1|2023-01-01", "S2|2023-01-01"],
+    }
+    (fold / "fold.json").write_text(json.dumps(info))
+    r = ev.evaluate_fold(fold, groups)
+    assert r["secondary_new_vs_same_site"]["new_site"]["groups"] == []
+    assert r["secondary_new_vs_same_site"]["same_site"]["n_boxes"] == 120
+    assert ev.outcome([r])[0] == "helped on other dives at sites in training"
+    info["train_groups"] = ["S1|2023-01-01"]  # S2 is now a new site → plain "helped"
+    (fold / "fold.json").write_text(json.dumps(info))
+    r = ev.evaluate_fold(fold, groups)
+    assert r["secondary_new_vs_same_site"]["new_site"]["groups"] == ["S2|2024-01-01"]
+    assert ev.outcome([r])[0] == "helped"

@@ -84,3 +84,40 @@ def test_no_eligible_group_fails_loudly():
     stills, groups = _groups(2)
     with pytest.raises(ValueError, match="no eligible"):
         sp.make_folds(stills, groups, set())
+
+
+def test_validation_is_lowest_hash_eligible_training_group():
+    stills, groups = _groups(6)
+    train_groups = sorted(groups.values(), key=sp.name_hash)
+    inelig = train_groups[0]  # the lowest hash overall has no urchins
+    train = [s for s in stills]
+    tr, val = sp.train_val(train, groups, set(groups.values()) - {inelig})
+    assert {groups[s.video] for s in val} == {train_groups[1]}
+    assert any(groups[s.video] == inelig for s in tr)
+
+
+def test_validation_falls_back_to_time_split_without_eligible_training_group():
+    stills, groups = _groups(3)
+    tr, val = sp.train_val(stills, groups, set())
+    assert len({groups[s.video] for s in val}) == 3  # last 20 % of every video
+
+
+def test_fold_info_lists_train_and_val_groups():
+    stills, groups = _groups(6)
+    (fold,) = sp.make_folds(stills, groups, set(groups.values()))
+    info = fold.info(groups)
+    assert set(info["test_groups"]).isdisjoint(info["train_groups"] + info["val_groups"])
+    assert info["n"]["test"] == len(fold.test)
+
+
+def test_frozen_reefcheck_group_map_matches_prereg():
+    import hashlib
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "edge_ml" / "urchin"
+    raw = (root / "groups_reefcheck.json").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() in (root / "PREREG.md").read_text()
+    gmap = json.loads(raw)
+    assert len(gmap) == 29 and len(set(gmap.values())) == 7
+    assert gmap["South Wreck-25-09-16-0935-TrueBarnes-f9"] == "South Wreck|2025-09-11"
