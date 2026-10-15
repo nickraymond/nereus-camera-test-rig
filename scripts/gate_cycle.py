@@ -75,7 +75,7 @@ MAX_FAILS_IN_ROW = 3              # auto mode stops power-cycling after this man
 BYID_TIMEOUT_S = 60.0
 CSV_FIELDS = [
     "cycle", "started_by", "utc", "boot_id", "uptime_start_s", "prev_end", "prev_by",
-    "vin_mv", "vbat_mv", "on_battery", "throttled", "ae3_enum_s", "n6_enum_s",
+    "vin_mv", "vbat_mv", "on_battery", "throttled", "msc_quirk", "ae3_enum_s", "n6_enum_s",
     "ae3_tty_s", "n6_tty_s", "ae3_contact", "ae3_board_ticks_s", "ae3_import_ms",
     "n6_contact", "n6_board_ticks_s", "boards_power_cycled", "set_s",
     "imx_still", "n6_still", "ae3_still", "raws_ok", "still_skew_s", "sync_still_ms",
@@ -286,6 +286,9 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
             break
         time.sleep(1.5)
     rec["throttled"] = sh(["vcgencmd", "get_throttled"]).strip().split("=")[-1]
+    # The AE3 cold-boot fix (RESULTS.md): usb-storage never claims the OpenMV boards. Recorded per
+    # boot so runs before/after Nick applies it stay separable.
+    rec["msc_quirk"] = "usb-storage.quirks=" in Path("/proc/cmdline").read_text()
     rec["tty_uptime_s"] = wait_ttys(BYID_TIMEOUT_S)
     rec["kernel"] = kernel_events()
     log(f"prev boot end {rec['prev']} · power {rec['power']} · throttled {rec['throttled']} · "
@@ -411,6 +414,7 @@ def csv_row(rec: dict) -> dict:
         "prev_by": (rec.get("prev") or {}).get("by"),
         "vin_mv": pw.get("vin_mv"), "vbat_mv": pw.get("vbat_mv"),
         "on_battery": pw.get("on_battery"), "throttled": rec.get("throttled"),
+        "msc_quirk": rec.get("msc_quirk"),
         "ae3_enum_s": (k.get("openmv_ae3") or {}).get("enum_s"),
         "n6_enum_s": (k.get("openmv_n6") or {}).get("enum_s"),
         "ae3_tty_s": (rec.get("tty_uptime_s") or {}).get("openmv_ae3"),
