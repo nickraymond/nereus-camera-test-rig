@@ -136,8 +136,9 @@ cmd_supervise() {  # runs detached; restarts an abnormal exit
       3|4) say "loop refused to start (rc=$rc), not restarting"; break ;;
     esac
     # Abnormal exit mid LED pattern: back to the firmware default, but ONLY if this run drives
-    # the LED (--led-codes); otherwise pool mode never touches the LED (Nick, 2026-10-13).
-    case " $* " in *" --led-codes "*) lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true ;; esac
+    # the LED (--led-codes, or --self-check's verdict); otherwise pool mode never touches the
+    # LED (Nick, 2026-10-13).
+    case " $* " in *" --led-codes "*|*" --self-check "*) lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true ;; esac
     [ -e "$NO_RESTART" ] && { say "stop requested, not restarting (rc=$rc)"; break; }
     restarts=$((restarts + 1))
     [ "$restarts" -gt "$MAX_RESTARTS" ] && { say "FAIL: $MAX_RESTARTS restarts used, giving up"; break; }
