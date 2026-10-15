@@ -8,6 +8,7 @@ Runs on the board under MicroPython. Imported flat there (``import device_info``
 """
 
 import os
+import time
 
 
 def build(board_config):
@@ -27,6 +28,9 @@ def build(board_config):
         "micropython": u.version,   # e.g. "v1.26.0-77 on 2025-12-22"
         "machine": u.machine,       # e.g. "OpenMV N6 with STM32N657X0"
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
+        # Board uptime (ms, wraps after ~12 days): a value larger than the Pi's uptime means
+        # the board kept power across a Pi power cycle (2026-10-14 boot-wedge work).
+        "ticks_ms": time.ticks_ms(),
     }
     # Free/total bytes on the capture transfer buffer (/flash). Cheap (one statvfs) and
     # makes a filling filesystem visible in health checks *before* captures start failing
