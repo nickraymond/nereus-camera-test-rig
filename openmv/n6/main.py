@@ -18,11 +18,19 @@ regain control for redeploy. Binary only flows board -> host.
 
 import time
 
-import board_config
-import capture_service
-import command_protocol as cp
-import device_info
-import usb_console
+# Boot diagnostics (AE3 cold-boot wedge, 2026-10-14): board uptime when main.py starts, when
+# the imports (incl. the camera module) are done and when the read loop starts. Reported by
+# get_device_info so the host can see a slow or stuck start and prove a power cycle reached
+# the board (ticks_ms < the Pi's uptime).
+BOOT_MS = {"main": time.ticks_ms()}
+
+import board_config  # noqa: E402  (after the BOOT_MS stamp)
+import capture_service  # noqa: E402  (after the BOOT_MS stamp)
+import command_protocol as cp  # noqa: E402  (after the BOOT_MS stamp)
+import device_info  # noqa: E402  (after the BOOT_MS stamp)
+import usb_console  # noqa: E402  (after the BOOT_MS stamp)
+
+BOOT_MS["imported"] = time.ticks_ms()
 
 
 def _send(usb, message):
@@ -39,9 +47,11 @@ def _handle_line(usb, line):
         action, command_id, settings = cp.validate_request(request)
 
         if action == "get_device_info":
-            _send(usb, cp.completed_response(command_id, device_info.build(board_config)))
+            info = device_info.build(board_config)
+            info["boot_ms"] = BOOT_MS
+            _send(usb, cp.completed_response(command_id, info))
         elif action == "capture_image":
-            output = capture_service.capture_image(board_config, settings)
+            output = capture_service.capture_image(board_config, settings, usb, command_id)
             _send(usb, cp.completed_response(command_id, output))
         elif action == "capture_raw":
             # Bayer RAW at a locked exposure, streamed from RAM (S3); emits its own framed
@@ -82,6 +92,7 @@ def _open_usb():
 def run():
     """Read-dispatch loop. Accumulates bytes and processes complete newline lines."""
     usb = _open_usb()
+    BOOT_MS["run"] = time.ticks_ms()
     buffer = b""
     while True:
         chunk = usb.read(256) if usb.any() else None

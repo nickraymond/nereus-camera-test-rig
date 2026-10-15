@@ -137,3 +137,7 @@ def test_health_check(monkeypatch):
     health = cam.health_check()
     assert health["healthy"] is True
     assert health["cameras_detected"] == 1
+
+
+def test_control_args_ev_offset():
+    assert imx708._control_args({"exposure": {"ev": -1}}) == ["--ev", "-1.00"]
