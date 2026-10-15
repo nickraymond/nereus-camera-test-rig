@@ -105,6 +105,10 @@ def _control_args(controls: dict[str, Any]) -> list[str]:
         args += ["--shutter", str(int(exposure["shutter_us"]))]
     if exposure.get("analogue_gain") is not None:
         args += ["--gain", f"{float(exposure['analogue_gain']):.4f}"]
+    if exposure.get("ev") is not None:
+        # AE target offset in stops (calibration blocks run ~1 stop dark so the ChArUco white
+        # squares do not clip: over half the IMX708's 10/14 pool frames failed on clipping).
+        args += ["--ev", f"{float(exposure['ev']):.2f}"]
 
     return args
 

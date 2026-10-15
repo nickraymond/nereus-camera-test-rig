@@ -255,7 +255,10 @@ def capture_raw(usb, command_id, board_config, settings):
     while time.ticks_diff(time.ticks_ms(), t_start) < warmup_ms:
         cam.snapshot()
     metered = {"exposure_us": cam.exposure_us(), "gain_db": _finite(cam.gain_db())}
-    exposure_us = int(settings.get("exposure_us") or metered["exposure_us"])
+    # exposure_scale (default 1): lock at metered x scale, e.g. 0.5 = one stop dark for the
+    # calibration block, so the ChArUco white squares stay under ~250 (8-bit Bayer).
+    scale = float(settings.get("exposure_scale") or 1.0)
+    exposure_us = int(settings.get("exposure_us") or metered["exposure_us"] * scale)
     gain_db = float(settings.get("gain_db") or metered["gain_db"] or 0.0)
     cam.auto_exposure(False, exposure_us=exposure_us)
     cam.auto_gain(False, gain_db=gain_db)
