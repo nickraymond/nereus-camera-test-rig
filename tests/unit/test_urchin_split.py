@@ -211,3 +211,36 @@ def test_cli_screen_then_folds(tmp_path):
         test = (fold_dir / "test.txt").read_text().splitlines()
         assert len(test) == info["n"]["test"] <= sp.CAPS["test"]
         assert all(groups[x.split("/")[0]] == tg for x in test)
+
+
+def test_two_eligible_training_groups_use_time_split_not_a_group():
+    stills, groups = _groups(4)
+    elig = set(sorted(groups.values())[:2])
+    tr, val = sp.train_val(stills, groups, elig)
+    assert {groups[s.video] for s in val} == set(groups.values())  # last 20 % of every video
+    assert elig <= {groups[s.video] for s in tr}
+
+
+def test_b_never_loses_all_urchin_groups_on_the_real_map():
+    """QE #118: every eligible subset of the frozen 7-group map, every fold."""
+    from itertools import combinations
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "edge_ml" / "urchin"
+    gmap = json.loads((root / "groups_reefcheck.json").read_text())
+    stills = [s for v in gmap for s in _stills(v, 120)]
+    names = sorted(set(gmap.values()))
+    checked = 0
+    for k in range(1, len(names) + 1):
+        for elig in map(set, combinations(names, k)):
+            for fold in sp.make_folds(stills, gmap, elig):
+                train_g = {gmap[s.video] for s in fold.train}
+                avail = ({gmap[s.video] for s in fold.train + fold.val}) & elig
+                if avail:
+                    assert train_g & elig, (sorted(elig), fold.name)
+                if len(avail) >= 3:
+                    assert len(train_g & elig) >= 2, (sorted(elig), fold.name)
+                if fold.mode == "same_dive":
+                    assert {gmap[s.video] for s in fold.val} <= train_g  # time split
+                checked += 1
+    assert checked > 127

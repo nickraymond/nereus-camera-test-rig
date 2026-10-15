@@ -100,13 +100,14 @@ with a Wilson 95 % lower bound ≥ 50 %, **and** the labelled set meets the Q2 m
   the hashes and folds computed.
 - **≥ 4 eligible groups:** test = ⌈⅓⌉ of the eligible groups, at least 2, taken in ascending
   SHA-256 order of the group name (chosen without looking at content). The rest are training.
-  Validation = the lowest-hash **eligible** training group if ≥ 3 training groups remain and one
-  of them is eligible; otherwise the last 20 % (by time) of each training video, with the 30 s
-  before it discarded. Scoring stops with an error if validation has no label boxes.
+  Validation = the lowest-hash **eligible** training group only if ≥ 3 eligible training groups
+  remain (so B keeps ≥ 2 groups with urchins); otherwise the last 20 % (by time) of each
+  training video, with the 30 s before it discarded. Scoring stops with an error if validation has no label boxes.
 - **2–3 eligible groups:** leave-one-group-out. Each fold is reported, and the bar must hold in
   every fold. A fold's validation comes from its training groups only, by the rule above.
 - **1 group:** split within each video by time: the first 70 % is training, the last 30 % is test,
-  and 30 s between them is discarded (validation as above, inside the first 70 %). The outcome
+  and 30 s between them is discarded (validation is always the time split, inside the first
+  70 %). The outcome
   is "inconclusive (same dive)" whatever the numbers; if B beats A there, the note may describe
   it as promising, but it is not a "helped" result.
 - Caps: ≤ 150 test stills, ≤ 100 validation stills and ≤ 300 training stills, seeded random
@@ -192,3 +193,4 @@ training stills, to show whether more video would still help.
 | 2026-10-15 | Group = site + dive date instead of site. Decided after seeing only the Drive file list (names, dates, sizes) and before any frame was viewed or any group hash computed. Adds the new-site / same-site secondary report. | South Wreck holds 23 of 29 videos (91 % of the bytes) over 5 dive days in 4 years. With site groups, 2 of 4 sites are held out by hash, so half the time South Wreck would be test data and B would train on ~2 GB from small sites: the outcome would hinge on a coin flip, not on the stills. Site-day groups are still separate dives (other day, mostly other year and diver). | All — no frames viewed, no hashes computed |
 | 2026-10-15 | QE ruling on #118 (before any hash or frame): validation = lowest-hash *eligible* training group, and scoring fails if validation has no boxes; the 29-row video → group map is frozen with its SHA-256; same-site dates within 7 days merge (South Wreck 2025-09-11 + 09-16), giving 7 groups; claim scope wording when no held-out group is a new site. | QE FAIL items 1–4 on #118 | All — no frames viewed, no hashes computed |
 | 2026-10-15 | QE PASS on #118 delta, plus: "unsure" in the group screen counts as present; screen committed before hashes and folds are computed; validation capped at 100 stills and labelled like test stills (miss search), since it sets the thresholds. | QE nit + gap in the original (validation labelling was unspecified) | All — no frames viewed, no hashes computed |
+| 2026-10-15 | Validation takes a whole eligible group only if ≥ 3 eligible training groups remain; else the time split. Same-dive case always uses the time split. | QE simulation on the 7-group map: with 1–2 eligible groups the previous rule left B with zero urchin groups in every fold ("not shown" by construction) | All — no frames viewed, no screen done, no hashes computed |

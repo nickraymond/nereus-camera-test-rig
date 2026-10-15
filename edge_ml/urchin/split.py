@@ -124,11 +124,11 @@ def _key(s: Still) -> tuple[str, float]:
 def train_val(
     stills: list[Still], groups: dict[str, str], eligible: set[str]
 ) -> tuple[list[Still], list[Still]]:
-    """PREREG validation: the lowest-hash *eligible* training group if >= 3 training groups
-    remain and one is eligible, else the last 20 % of each training video after GAP_S."""
-    tg = sorted({groups[s.video] for s in stills}, key=name_hash)
-    elig = [g for g in tg if g in eligible]
-    if len(tg) >= 3 and elig:
+    """PREREG validation: the lowest-hash *eligible* training group only if >= 3 eligible
+    training groups remain (B keeps >= 2 with urchins), else the last 20 % of each training
+    video after GAP_S."""
+    elig = sorted({groups[s.video] for s in stills} & eligible, key=name_hash)
+    if len(elig) >= 3:
         val_group = elig[0]
         return (
             [s for s in stills if groups[s.video] != val_group],
@@ -161,7 +161,7 @@ def make_folds(stills: list[Still], groups: dict[str, str], eligible: set[str]) 
         in_g = [s for s in stills if groups[s.video] == g]
         first, test = time_split(in_g, SAME_DIVE_TRAIN)
         train_all = first + [s for s in stills if groups[s.video] != g]
-        train, val = train_val(train_all, groups, eligible)
+        train, val = time_split(train_all, 1 - VAL_FRACTION)  # always, in the first 70 %
         folds.append(Fold("same_dive", train, val, test, [g], "same_dive"))
     return folds
 
