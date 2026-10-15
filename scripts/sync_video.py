@@ -97,16 +97,18 @@ class BoardVideo:
 
     def _next_message(self) -> dict:
         """The next protocol line. Resyncs after lost bytes: the N6 drops USB TX bytes when the
-        Pi reads too slowly (2026-10-14: 63 fps VGA + 1080p H.264 desynced after 124 frames), so
-        a JPEG body can land where a header was expected. Skip lines until one decodes."""
+        Pi reads too slowly (2026-10-14: 63 fps VGA desynced; gate008 c22 2026-10-15: 10 fps VGA
+        desynced and never recovered, because a header that follows JPEG bytes on the same
+        "line" was never tried). The header always ends its line, so decode the line's tail."""
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             line = self.io.read_line(timeout=max(0.1, deadline - time.monotonic()))
-            if not line.strip().startswith(b"{"):
-                continue
-            try:
-                return cp.decode_message(line)
-            except (ValueError, UnicodeDecodeError, cp.ProtocolError):
+            msg = decode_tail(line)
+            if msg is not None:
+                if not line.lstrip().startswith(b"{"):
+                    self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
+                return msg
+            if line.strip():
                 self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
         raise OpenMvError("timeout", f"{self.name}: no frame header for 10 s")
 
@@ -133,6 +135,11 @@ class BoardVideo:
                 if msg.get("status") == "frame":
                     fr = msg["frame"]
                     data = self.io.read_exact(fr["size_bytes"], timeout=10)
+                    data, rest = split_short_jpeg(data)
+                    if rest:  # bytes were lost: this frame ended early, the next one began
+                        self.io._buf[0:0] = rest
+                        self.rec["short_frames"] = self.rec.get("short_frames", 0) + 1
+                        continue  # a damaged frame is dropped (counted below via seq gaps)
                     rows.append({"seq": fr["seq"], "ticks_ms": fr.get("ticks_ms"),
                                  "host_rx_mono": round(time.monotonic(), 4),
                                  "bytes": len(data), "width": fr["width"],
@@ -184,6 +191,8 @@ class BoardVideo:
                  if r["ticks_ms"] is not None and fire_rx is not None and fire_host]
         mjpeg = self.out / f"{self.name}.mjpeg"
         sent = (self.rec.get("board_done") or {}).get("frames")
+        if not isinstance(sent, int) and rows:  # stream ended badly: count the seq gaps
+            sent = rows[-1]["seq"] + 1
         self.rec["frames_lost"] = (sent - len(rows)) if isinstance(sent, int) else None
         self.rec.update(frames=len(rows), first_frame_host_mono=times[0] if times else None,
                         last_frame_host_mono=times[-1] if times else None,
@@ -294,6 +303,33 @@ class ImxVideo:
         self.rec["ok"] = (self.rec["bytes"] > 0 and bool(times)
                           and len(times) >= window * self.fps * 2 / 3)
         return self.rec
+
+
+def decode_tail(line: bytes) -> dict | None:
+    """The protocol message at the END of ``line`` (bytes lost from a frame can leave JPEG bytes
+    in front of the next header). Tries each '{' from the right; None if nothing decodes."""
+    end = len(line)
+    start = max(0, end - 512)  # a header line is ~170 B; never scan a whole JPEG
+    i = line.rfind(b"{", start, end)
+    while i >= 0:
+        try:
+            msg = cp.decode_message(line[i:])
+            if isinstance(msg, dict) and "status" in msg:
+                return msg
+        except (ValueError, UnicodeDecodeError, cp.ProtocolError):
+            pass
+        i = line.rfind(b"{", start, i)
+    return None
+
+
+def split_short_jpeg(data: bytes) -> tuple[bytes, bytes]:
+    """A frame payload that ends (JPEG EOI) before its declared size lost bytes in transit:
+    return (that frame, the bytes after it, which belong to the next frame). EOI (FF D9) cannot
+    occur inside JPEG entropy data (FF is byte-stuffed), so an early EOI is a sure sign."""
+    eoi = data.find(b"\xff\xd9")
+    if 0 <= eoi < len(data) - 2:
+        return data[:eoi + 2], data[eoi + 2:]
+    return data, b""
 
 
 def read_frame_metadata(path: Path) -> list[dict]:
@@ -446,6 +482,7 @@ def main() -> int:
         print(f"  {n}: {'ok' if r.get('ok') else 'FAIL'} frames {r.get('frames')} fps "
               f"{r.get('fps')} max_gap {r.get('max_gap_ms')} ms bytes {r.get('bytes')} "
               f"lost {r.get('frames_lost')} resyncs {r.get('resyncs', 0)} "
+              f"short {r.get('short_frames', 0)} "
               f"{str(r.get('error', ''))[:120]}", flush=True)
     print(f"sync_video: start skew {summary['start_skew_ms']} ms offsets "
           f"{summary['start_offsets_ms']} host {summary.get('host')} -> "
