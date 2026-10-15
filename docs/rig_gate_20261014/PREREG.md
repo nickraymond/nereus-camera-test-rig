@@ -163,3 +163,19 @@ black board frame while the IMX708 sees a lit scene.
   evidence. The counted gate starts by itself when sunlight reaches the scene.
 - The ≥ 3 real switch cycles (Nick) are done in the morning by switching the run to
   `mode switch` for 3 cycles.
+
+**A7 (2026-10-14 10:05 PM, after gate006 cycle 1): video is judged by its files, and
+`rpicam-vid` exits by its own timer.**
+- gate006 c1 FAILED its video: `rpicam-vid` segfaulted at teardown (rc −11) after the SIGINT
+  stop. It left the H.264 written (12.8 MB) but its per-frame metadata cut off mid-record, so 0
+  frames were parsed. In ~15 earlier clips with the same stop it exited 0.
+- Changes:
+  - `rpicam-vid` now runs with `-t` = warm-up + clip + 1.5 s and exits by its own timer, its
+    normal path. It is started after the boards are armed.
+  - The truncated metadata is repaired: every complete record is kept.
+  - The IMX708 clip passes on its artifacts: a non-empty H.264 and ≥ 2/3 of the nominal frames
+    (30 fps) inside the synchronized window.
+  - A non-zero exit is logged as a warning in `video_sync.json`.
+- The other video FAIL conditions (A2) are unchanged.
+- gate006 is stopped. Its c1 FAIL stays in the record. The gate restarts on the fixed build
+  (new run, streak 0).

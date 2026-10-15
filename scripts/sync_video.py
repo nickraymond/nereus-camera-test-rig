@@ -206,9 +206,13 @@ class ImxVideo:
     name = "imx708"
 
     def __init__(self, out: Path, width: int, height: int, fps: int, lens: float | None,
-                 warmup_s: float, buffers: int):
-        self.out, self.warmup_s = out, warmup_s
-        self.cmd = ["rpicam-vid", "-n", "-t", "0", "--codec", "h264", "--inline",
+                 warmup_s: float, buffers: int, seconds: float):
+        self.out, self.warmup_s, self.fps = out, warmup_s, fps
+        # rpicam-vid stops on its own timer (-t), its normal exit path: stopping it with a
+        # signal segfaulted it at teardown once in ~15 clips (gate006 c1, rc -11, metadata cut
+        # off mid-frame). Started after the boards are armed: warm-up + clip + 1.5 s margin.
+        run_ms = int((warmup_s + seconds + 1.5) * 1000)
+        self.cmd = ["rpicam-vid", "-n", "-t", str(run_ms), "--codec", "h264", "--inline",
                     "--width", str(width), "--height", str(height), "--framerate", str(fps),
                     "--metadata", "imx708.meta.json", "--metadata-format", "json",
                     "--save-pts", "imx708.pts", "-o", "imx708.h264"]
@@ -237,9 +241,7 @@ class ImxVideo:
         return t
 
     def stop(self) -> None:
-        self.rec["stop_host_mono"] = time.monotonic()
-        if self.proc.poll() is None:
-            os.kill(self.proc.pid, signal.SIGINT)  # clean exit: file + metadata closed
+        self.rec["stop_host_mono"] = time.monotonic()  # it exits by its own -t timer
 
     def abort(self) -> None:
         """Idempotent cleanup for any exit path: rpicam-vid must never outlive this script
@@ -260,15 +262,19 @@ class ImxVideo:
         try:
             self.proc.wait(timeout=15)
         except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait()
+            os.kill(self.proc.pid, signal.SIGINT)  # its timer did not end it: ask, then kill
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
         self.log.close()
         self.rec["rc"] = self.proc.returncode
         h264, meta = self.out / "imx708.h264", self.out / "imx708.meta.json"
-        try:
-            frames = json.loads(meta.read_text())
-        except (OSError, ValueError):
-            frames = []
+        frames = read_frame_metadata(meta)
+        if self.rec["rc"] != 0:
+            self.rec["warning"] = (f"rpicam-vid exit rc={self.rec['rc']}; judged by its files "
+                                   f"({len(frames)} metadata records recovered)")
         allts = [f["SensorTimestamp"] / 1e9 for f in frames if f.get("SensorTimestamp")]
         fire, stop_t = self.rec["fire_host_mono"], self.rec.get("stop_host_mono", 1e18)
         times = [t for t in allts if fire <= t <= stop_t]  # the synchronized window
@@ -282,8 +288,33 @@ class ImxVideo:
                         if len(times) > 1 and times[-1] > times[0] else None,
                         max_gap_ms=round(max((b - a) * 1000 for a, b in zip(times, times[1:])),
                                          1) if len(times) > 1 else None)
-        self.rec["ok"] = self.rec["rc"] == 0 and self.rec["bytes"] > 0 and bool(times)
+        # Judged by the artifacts (CLAUDE.md: trust the artifacts): a file, and >= 2/3 of the
+        # nominal frames inside the synchronized window.
+        window = (stop_t - fire) if stop_t < 1e17 else 0
+        self.rec["ok"] = (self.rec["bytes"] > 0 and bool(times)
+                          and len(times) >= window * self.fps * 2 / 3)
         return self.rec
+
+
+def read_frame_metadata(path: Path) -> list[dict]:
+    """rpicam-vid --metadata: a JSON list, one object per frame, closed at exit. A process that
+    died at teardown leaves it cut off mid-object: keep every complete record."""
+    try:
+        text = path.read_text()
+    except OSError:
+        return []
+    try:
+        data = json.loads(text)
+        return data if isinstance(data, list) else []
+    except ValueError:
+        pass
+    cut = text.rfind("}")
+    while cut > 0:
+        try:
+            return json.loads(text[:cut + 1].rstrip().rstrip(",") + "]")
+        except ValueError:
+            cut = text.rfind("}", 0, cut)
+    return []
 
 
 def host_sampler(path: Path, stop: threading.Event) -> None:
@@ -334,7 +365,7 @@ def main() -> int:
     devs = []
     if "imx708" in cams:
         devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
-                             buffers=a.imx_buffers))
+                             buffers=a.imx_buffers, seconds=a.seconds))
     devs += [BoardVideo(n, s, out, board_settings) for n, s in BOARDS.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
 
@@ -353,9 +384,15 @@ def main() -> int:
     results: dict = {}
     fire: dict = {}
     try:
-        threads = [threading.Thread(target=arm, args=(d,)) for d in devs]
+        # Boards first (reset + warm-up, then they wait armed up to 20 s), then the IMX708:
+        # its -t timer must cover only its warm-up and the clip.
+        boards = [d for d in devs if not isinstance(d, ImxVideo)]
+        threads = [threading.Thread(target=arm, args=(d,)) for d in boards]
         [t.start() for t in threads]
         [t.join(timeout=60) for t in threads]
+        for d in devs:
+            if isinstance(d, ImxVideo):
+                arm(d)
         armed = [d for d in devs if d.name not in errors]
         print(f"sync_video: armed {[d.name for d in armed]} errors {errors}", flush=True)
         for d in list(armed):  # back to back, sub-ms apart; a board not reading fails alone
