@@ -34,6 +34,16 @@ Shots taken before you are in position just have no board in them; the pipeline 
 - **After:** pull a subset and run the calibration pipeline's `coverage.png` before leaving.
   A redo is cheap: switch off and on to restart the program.
 
+## Known limits (decided 10/15; no code change before Friday)
+
+- **Sync bar (PgM d42):** ≤ 100 ms applies to the **RAW** synced shots (gate: 0/53 over, max
+  64 ms). This includes every calibration pose. The **JPEG** still shot's skew is report-only:
+  median 92 ms, 1 in 3 over 100 ms, because the AE3 waits one frame and the IMX708 still is
+  quantised to 70 ms frames. Each set's skew is in its `sync.json`.
+- **N6 video (PgM d40):** about 1 clip in 50 loses the N6 stream partway. Its USB drops bytes
+  (gate008 cycle 22: 47 of ~100 frames). The IMX708 and AE3 clips are unaffected. Flash the
+  torch early in each clip.
+
 ## Bench, before leaving (Thursday)
 
 ```bash
