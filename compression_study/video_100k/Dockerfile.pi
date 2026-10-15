@@ -1,0 +1,8 @@
+# Pi Zero 2 W software stand-in: the same Debian release (trixie, arm64) and packages as the rig
+# Pi (ffmpeg 7.1.5, SVT-AV1 2.3.0, libaom 3.12.1, x264 0.164, x265 4.1, rav1e 0.7.1,
+# libjxl 0.11.2). CPU speed is NOT emulated: pi_emulate.py calibrates time against real runs.
+#   docker build --platform linux/arm64 -t video100k-pi:trixie -f Dockerfile.pi .
+FROM debian:trixie
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ffmpeg svt-av1 aom-tools libjxl-tools x264 x265 rav1e dav1d time python3 python3-numpy procps \
+    && rm -rf /var/lib/apt/lists/*
