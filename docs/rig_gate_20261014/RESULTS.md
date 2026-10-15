@@ -104,6 +104,68 @@ them.
 
 Historical clean boots: 1 wedge (pool007) in 5.
 
+## Phase 2: the 25× start/stop gate (2026-10-15)
+
+**Build:** rig #115 at `dcac9e0`.
+- Host files and board firmware were sha256-checked against the repo; the run manifest records
+  `dcac9e0`.
+- The boot fix was active on every boot (`msc_quirk = True`).
+
+**Cycle:** the UPS cuts power to the Pi and the boards, then wakes after 1 min. Each cycle:
+- cold boot;
+- first-contact probe of both boards;
+- one synchronized set (still + RAW, all three cameras);
+- still verification (sha256, size, full decode at the expected size);
+- a 10 s synchronized video clip on all three cameras;
+- clean poweroff.
+
+Bars: PREREG §4 + A1–A8.
+
+**Light.** Daylight in the room, so no cycle was VOID (A5):
+
+| camera | still mean grey (0–255) | still bytes |
+|---|---|---|
+| IMX708 | 101–116 | 1.43–1.55 MB |
+| N6 | 84–96 | 490–530 kB |
+| AE3 | 73–91 | 232–256 kB |
+
+**Power.** On the charger throughout. UPS log: VIN 4.94–4.96 V, VBAT 3.606–3.611 V. The gate's
+own UPS read came back empty at every boot (I²C read under the lock), a logging gap. The UPS
+cycle log has the values.
+
+### Run 1: gate007, 8:49–9:59 AM. **PASSED: 25 PASS in a row (25/25, 0 FAIL, 0 VOID)**
+
+| measure (n = 25) | result |
+|---|---|
+| previous shutdown | clean 25/25 (gate timer) |
+| boards power-cycled | 25/25. AE3 uptime at first contact 34–39 s vs Pi ~28 s (A1) |
+| AE3 / N6 first contact | ok 25/25 / ok 25/25. The recovery ladder was never needed |
+| AE3 enumeration (kernel) | 3.3–3.9 s; tty bound 27–32 s uptime |
+| last verified still (Pi uptime) | median 59.7 s, p90 63.4 s, max 84.2 s (bar 180 s) |
+| synchronized set | median 27.7 s (max 52.6 s, cycles 5–6, see RAW below) |
+| still skew (timestamps) | median 91 ms, p90 110 ms, max 131 ms. The AE3 is the late camera (e.g. offsets IMX 0 / N6 29 / AE3 131 ms) |
+| RAW skew | median 50 ms, max 62 ms |
+| RAWs | 3/3 in 23 cycles. In cycles 5–6 the N6 RAW lost 239 / 1262 bytes (`timed out reading 1024000 bytes`), see below |
+| video | ok 25/25. Start skew median 14 ms, p90 38 ms, max 55 ms. Board frames lost: 0. fps IMX708 ~27.5, N6 10.0, AE3 ~9.6 |
+| **A8 audit** (`host_tools/gate_audit.py`, Mac) | **25/25 clips decode fully**, 301–404 frames, decoded = metadata records. Audited streak 25 |
+
+**The N6 RAW losses (cycles 5–6) were caused by the test harness, not the rig.**
+- My incremental rsync of finished clips to the Mac (1.5 MB/s cap) loaded the Pi during those
+  two cycles. The N6, a full-speed USB device, dropped bytes on its 1 MB RAW stream when the Pi
+  read slowly. This is the same mechanism as the uncapped video soak.
+- Pulls stopped at 9:10. 0 losses in the 19 cycles after.
+- RAWs are not gated; stills are, and the N6 still verified in both cycles.
+- **Friday rule:** never pull or preview while the loop runs (the dive card says so).
+
+### Run 2 (repeat): gate008, from 9:59 AM
+
+Armed automatically when run 1 passed (A6). The STOP at cycle 1 was the planned pause for the
+audit and switch cycles (A9). Results: _filled when it completes_.
+
+### Nick's real switch cycles (A9)
+
+_Filled after the run (planned ~11:25 AM, on battery)._
+
 ## Simultaneous stills (Nick, 10/14 ~7:40 PM)
 
 - **Before (sequential):** the stills were 19.8–31.4 s apart across 3 sets (gate001 c1,
