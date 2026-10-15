@@ -406,6 +406,97 @@ def ups_power_cycle(reason: str) -> int:
                           capture_output=True, text=True, timeout=60).returncode
 
 
+# -- dive program (Friday 2026-10-16: calibration A/B, stills, synchronized video) ------------
+# "cal_a:12,cal_b:10,stills:10,video:6x30" = phases in order, minutes each; video = N clips of
+# S seconds back to back. Times run from switch-on (uptime) when started at boot, so the diver
+# follows a watch (no LED codes: Nick 2026-10-13). After the program the loop keeps taking
+# synchronized stills until stopped.
+CAL_IMX_EV = -1.0          # calibration: ~1 stop dark (10/14: clipping cost the IMX708 half its
+CAL_BOARD_EXPOSURE = 0.5   # frames; white squares must stay under ~250)
+
+
+def parse_program(spec: str) -> list[dict]:
+    """Phase list with cumulative [start, end) minutes; raises ValueError on a bad spec."""
+    phases, t = [], 0.0
+    for item in [x for x in spec.split(",") if x.strip()]:
+        name, _, val = item.strip().partition(":")
+        if name not in ("cal_a", "cal_b", "stills", "video"):
+            raise ValueError(f"unknown phase {name!r} (cal_a | cal_b | stills | video)")
+        if name == "video":
+            clips, _, secs = val.partition("x")
+            ph = {"name": name, "clips": int(clips), "clip_s": float(secs)}
+            minutes = ph["clips"] * (ph["clip_s"] + 30) / 60  # + arm / finish per clip
+        else:
+            ph = {"name": name}
+            minutes = float(val)
+        ph.update(start_min=round(t, 2), end_min=round(t + minutes, 2))
+        phases.append(ph)
+        t += minutes
+    return phases
+
+
+def phase_at(phases: list[dict], t_min: float) -> dict:
+    for ph in phases:
+        if ph["start_min"] <= t_min < ph["end_min"]:
+            return ph
+    return {"name": "stills", "start_min": phases[-1]["end_min"] if phases else 0,
+            "end_min": None, "tail": True}
+
+
+def write_cal_config(run_dir: Path, run_config: Path) -> Path:
+    """The calibration-block rig.yaml: profile copies with the IMX708 at EV -1 and the boards'
+    RAW locked at metered x 0.5 (exposure_scale)."""
+    import yaml
+
+    cfg = yaml.safe_load(run_config.read_text())
+    prof_dir = run_dir / "profiles_cal"
+    prof_dir.mkdir(exist_ok=True)
+    for name, cam in cfg.get("cameras", {}).items():
+        profile = yaml.safe_load(Path(cam["profile"]).read_text()) or {}
+        if name == "imx708":
+            profile.setdefault("camera_controls", {}).setdefault("exposure", {})["ev"] = CAL_IMX_EV
+        else:
+            profile["exposure_scale"] = CAL_BOARD_EXPOSURE
+        dst = prof_dir / f"{name}.yaml"
+        dst.write_text(f"# calibration block: {Path(cam['profile']).name} + 1 stop dark\n"
+                       + yaml.safe_dump(profile, sort_keys=False))
+        cam["profile"] = str(dst)
+    out = run_dir / "rig_cal.yaml"
+    out.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    return out
+
+
+def append_pose(run_dir: Path, n: int, block: str, line: dict) -> None:
+    """poses.csv: one row per calibration pose, one file per camera (extrinsics later)."""
+    path = run_dir / "poses.csv"
+    new = not path.exists()
+    cams = line.get("cameras", {})
+    files = {c: (cams.get(c, {}).get("still") or {}).get("file") or "" for c in CAMERAS}
+    with path.open("a") as f:
+        if new:
+            f.write("pose_id,utc,block,experiment," + ",".join(CAMERAS) + "\n")
+        f.write(f"{n},{line['clock']['pi_utc']},{block},{line.get('experiment', '')},"
+                + ",".join(files[c] for c in CAMERAS) + "\n")
+
+
+def run_video_clip(run_dir: Path, n: int, seconds: float) -> dict:
+    """One synchronized clip (scripts/sync_video.py) into <run>/video/clipNNN; its summary."""
+    out = run_dir / "video" / f"clip{n:03d}"
+    try:
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "sync_video.py"), "--seconds",
+                        str(seconds), "--out", str(out)], capture_output=True, text=True,
+                       timeout=seconds + 120)
+        summary = json.loads((out / "video_sync.json").read_text())
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "error": repr(exc)[:200], "dir": str(out.relative_to(run_dir))}
+    cams = summary.get("cameras") or {}
+    return {"ok": bool(summary.get("ok")), "skew_ms": summary.get("start_skew_ms"),
+            "frames": {c: r.get("frames") for c, r in cams.items()},
+            "fps": {c: r.get("fps") for c, r in cams.items()},
+            "lost": sum(r.get("frames_lost") or 0 for r in cams.values()),
+            "host": summary.get("host"), "dir": str(out.relative_to(run_dir))}
+
+
 def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
                 cameras: list, extra_args: tuple = ()) -> dict:
     before = set(run_dir.glob("*/exp_*"))
@@ -445,6 +536,15 @@ def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
 
 
 def health_text(line: dict) -> str:
+    if "video" in line:
+        v = line["video"]
+        return (f"[set {line['set']:03d} | {line.get('phase', 'video')}] VIDEO "
+                f"{'ok' if v.get('ok') else 'FAIL ' + str(v.get('error', ''))[:80]} · skew "
+                f"{v.get('skew_ms')} ms · fps {v.get('fps')} · lost {v.get('lost')}")
+    return _health_text(line)
+
+
+def _health_text(line: dict) -> str:
     """The one human line per set (pool.log). OK n/3 counts a camera only if still AND raw."""
     cams = line.get("cameras", {})
     ok = [c for c in CAMERAS if all((cams.get(c, {}).get(k) or {}).get("status") == "completed"
@@ -539,6 +639,15 @@ def run(args) -> int:
         # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the
         # firmware default at interpreter exit if the normal stop below never ran (QE #101).
         atexit.register(lambda: None if led.stopped else led.stop())
+    program = parse_program(args.program) if args.program else []
+    cal_config = write_cal_config(run_dir, run_config) if any(
+        ph["name"].startswith("cal") for ph in program) else None
+    if program:
+        manifest["program"] = program
+        atomic_json(run_dir / "run_manifest.json", manifest)
+        say("  program (minutes from " + ("switch-on" if args.started_by == "boot" else
+                                          "run start") + "): " + " · ".join(
+            f"{ph['name']} {ph['start_min']:g}-{ph['end_min']:g}" for ph in program))
     vbat_hist: list[int] = []
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False
@@ -589,9 +698,24 @@ def run(args) -> int:
         cams_now, benched = cameras_for_set(n, fails_in_row, args.retry_every)
         line = {"set": n, "run_id": run_id, "clock": clocks(), "run_s": round(t0 - t_start, 1),
                 "usb_before": present, "benched": benched, "pi_before": pi_health(run_dir)}
+        phase = None
+        if program:
+            t_min = ((line["clock"]["uptime_s"] or 0) if args.started_by == "boot"
+                     else t0 - t_start) / 60
+            phase = phase_at(program, t_min)
+            line["phase"] = phase["name"] + ("_tail" if phase.get("tail") else "")
         read_now = args.depth and depth_errors < DEPTH_DISABLE_AFTER
         depth = {"start": read_depth(ref_mbar, args.depth_bus)} if read_now else {}
-        line.update(run_one_set(n, run_dir, run_config, run_id, cams_now))
+        if phase and phase["name"] == "video":
+            line["video"] = run_video_clip(run_dir, n, phase["clip_s"])
+        elif phase and phase["name"] in ("cal_a", "cal_b"):
+            line.update(run_one_set(n, run_dir, cal_config, run_id, cams_now,
+                                    ("--sync-raw-only",)))
+        else:
+            line.update(run_one_set(n, run_dir, run_config, run_id, cams_now,
+                                    ("--sync",) if (program or args.sync) else ()))
+        if phase and phase["name"] in ("cal_a", "cal_b") and line.get("cameras"):
+            append_pose(run_dir, n, phase["name"], line)
         if read_now:
             depth["end"] = read_depth(ref_mbar, args.depth_bus)
             for d in depth.values():
@@ -617,11 +741,16 @@ def run(args) -> int:
             fh.flush()
             os.fsync(fh.fileno())
         cams = line.get("cameras", {})
+        # Calibration sets take one RAW shot (recorded as the capture); video clips are scored
+        # in their own summary and never bench a board.
+        kinds = ("still",) if line.get("phase", "").startswith("cal") else ("still", "raw")
         good = [c for c in CAMERAS if all((cams.get(c, {}).get(k) or {}).get("status")
-                                          == "completed" for k in ("still", "raw"))]
+                                          == "completed" for k in kinds)]
+        if "video" in line:
+            good = [c for c in CAMERAS if (line["video"].get("frames") or {}).get(c)]
         for c in good:
             manifest["ok_counts"][c] += 1
-        for c in cams_now:
+        for c in ([] if "video" in line else cams_now):
             fails_in_row[c] = 0 if c in good else fails_in_row[c] + 1
         manifest["fails_in_row"] = dict(fails_in_row)
         manifest.update({"sets": n, "last_set": {"set": n, "clock": line["clock"],
@@ -766,11 +895,21 @@ def main() -> int:
                         "the UPS and Nick is moving it to its own bus)")
     r.add_argument("--led-codes", action="store_true",
                    help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
+    r.add_argument("--sync", action="store_true",
+                   help="synchronized sets: all three cameras shoot the same moment")
+    r.add_argument("--program", default="",
+                   help="dive program, e.g. cal_a:12,cal_b:10,stills:10,video:6x30 (minutes from "
+                        "switch-on; implies --sync; stills continue after it)")
     r.add_argument("--no-depth", dest="depth", action="store_false",
                    help="skip the MS5837 depth/temperature read at the start and end of each set")
     s = sub.add_parser("summary")
     s.add_argument("run_dir")
     args = ap.parse_args()
+    if args.cmd == "run" and args.program:
+        try:
+            parse_program(args.program)
+        except ValueError as exc:
+            ap.error(f"--program: {exc}")
     if args.cmd == "run" and args.lens_position != "auto":
         lp = float(args.lens_position)
         if not 0.0 <= lp <= 15.0:

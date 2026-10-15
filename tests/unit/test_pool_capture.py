@@ -8,6 +8,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
 from host_tools import pool_pull
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -224,3 +225,17 @@ def test_summary_survives_a_torn_last_line(tmp_path, capsys):
     assert pool_capture.summary(argparse.Namespace(run_dir=str(run))) == 0
     out = capsys.readouterr().out
     assert "1 sets" in out and "1 torn line(s) skipped" in out and "switched off" in out
+
+
+def test_dive_program_phases_are_cumulative_and_video_counts_its_clips():
+    prog = pool_capture.parse_program("cal_a:12,cal_b:10,stills:10,video:6x30")
+    assert [(p["name"], p["start_min"], p["end_min"]) for p in prog] == [
+        ("cal_a", 0, 12), ("cal_b", 12, 22), ("stills", 22, 32), ("video", 32, 38)]
+    assert pool_capture.phase_at(prog, 12.5)["name"] == "cal_b"
+    tail = pool_capture.phase_at(prog, 40)
+    assert tail["name"] == "stills" and tail["tail"]
+
+
+def test_dive_program_rejects_unknown_phase():
+    with pytest.raises(ValueError):
+        pool_capture.parse_program("cal_a:5,warp:3")
