@@ -32,6 +32,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+MIN_JUMP_GREY = 8.0  # a real light step moves the mean grey level far more than sensor noise
+
 
 def imx_series(run: Path) -> list[tuple[float, float]]:
     """(Pi monotonic s, mean grey) for every IMX708 frame: decoded order == metadata order."""
@@ -90,12 +92,23 @@ def main() -> int:
     for name in ("openmv_n6", "openmv_ae3"):
         if (run / f"{name}_frames.csv").exists():
             series[name] = board_series(run, name, summary)
+    # Only the window every camera recorded (the IMX708 has a pre-roll with its AE settling).
+    lo = max(s[0][0] for s in series.values() if s)
+    hi = min(s[-1][0] for s in series.values() if s)
+    series = {n: [(t, m) for t, m in s if lo <= t <= hi] for n, s in series.items()}
     # The reference event: the IMX708's largest absolute jump; its sign (on/off) for all.
     ref = max(((t1, m1 - m0) for (t0, m0), (t1, m1) in zip(series["imx708"],
                                                             series["imx708"][1:])),
               key=lambda x: abs(x[1]))
     sign = 1 if ref[1] > 0 else -1
     steps = {n: step_time(s, sign, ref[0], a.window) for n, s in series.items()}
+    weak = {n: v for n, v in steps.items() if v is None or v[1] < MIN_JUMP_GREY}
+    if weak:
+        res = {"run": run.name, "error": "no clear light step in every camera (need a jump of "
+               f">= {MIN_JUMP_GREY} grey levels)", "jump_grey": {
+                   n: (round(v[1], 1) if v else None) for n, v in steps.items()}}
+        print(json.dumps(res, indent=2))
+        return 1
     t0 = min(v[0] for v in steps.values())
     res = {"run": run.name, "event": "light on" if sign > 0 else "light off",
            "step_host_mono": {n: round(v[0], 4) for n, v in steps.items()},
