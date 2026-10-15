@@ -111,3 +111,68 @@ def test_video_clip_must_be_ok_synchronized_and_lossless():
 
 def test_slow_start_fails_on_the_monotonic_set_end():
     assert gate.evaluate(_rec(uptime_set_end_s=181.0), {})["fail_reasons"] == ["slow:181s"]
+
+
+def _dark_still(mean=0.0, size_ok=False):
+    return {"ok": size_ok, "why": None if size_ok else "size_ok", "sha_ok": True,
+            "decode_ok": True, "size_ok": size_ok, "bytes": 28794, "mean": mean,
+            "mtime": 1000.0}
+
+
+def test_dark_scene_is_void_and_keeps_the_streak():
+    rec = _rec()
+    rec["verify"]["imx708"]["still"] = {**_still(), "mean": 1.5}
+    rec["verify"]["openmv_ae3"]["still"] = _dark_still()
+    out = gate.evaluate(rec, {"streak": 7})
+    assert out["result"] == "VOID" and out["streak"] == 7
+
+
+def test_black_board_frame_in_a_lit_scene_is_a_fail():
+    rec = _rec()
+    rec["verify"]["imx708"]["still"] = {**_still(), "mean": 120.0}
+    rec["verify"]["openmv_ae3"]["still"] = _dark_still()
+    out = gate.evaluate(rec, {"streak": 7})
+    assert out["result"] == "FAIL" and out["streak"] == 0
+
+
+def test_dark_cycle_with_any_other_failure_is_a_fail():
+    rec = _rec(video={"ok": False, "error": "timeout"})
+    rec["verify"]["imx708"]["still"] = {**_still(), "mean": 1.5}
+    rec["verify"]["openmv_ae3"]["still"] = _dark_still()
+    assert gate.evaluate(rec, {"streak": 3})["result"] == "FAIL"
+    rec2 = _rec()
+    rec2["verify"]["imx708"]["still"] = {**_still(), "mean": 1.5}
+    rec2["verify"]["openmv_ae3"]["still"] = {**_dark_still(), "sha_ok": False}
+    assert gate.evaluate(rec2, {"streak": 3})["result"] == "FAIL"
+
+
+def test_passing_run_arms_the_repeat_run_and_power_cycles(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(gate, "GATE_ROOT", tmp_path / "gate")
+    monkeypatch.setattr(gate, "DIVE_FLAG", tmp_path / "dive_flag")
+    monkeypatch.setattr(gate, "POOL_ARMED", tmp_path / "pool_armed")
+    cron: list = []
+    monkeypatch.setattr(gate, "crontab_lines", lambda: list(cron))
+    monkeypatch.setattr(gate, "set_crontab", lambda lines: cron.__setitem__(slice(None), lines))
+    monkeypatch.setattr(gate.pc, "write_run_config", lambda d, a: d / "rig.yaml")
+    monkeypatch.setattr(gate.pc, "git_sha", lambda: "test")
+    monkeypatch.setattr(gate, "uptime_s", lambda: 123.4)  # no /proc on the Mac
+    ups = []
+    monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: ups.append(cmd) or
+                        type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    args = type("A", (), dict(target=60, mode="auto", wake_min=1, stop_after_fails=3,
+                              label="gate25a", sync=True, video_s=10, until_streak=25, repeat=2,
+                              dark_wake_min=10, lens_position="0.8",
+                              config="configs/rig.example.yaml"))()
+    assert gate.cmd_arm(args) == 0
+    state = gate.load_state()
+    first = state["run_id"]
+    state.update(streak=25, cycles_done=31)
+    gate.save_state(state)
+    gate.next_step(state, {"cycle": 31, "result": "PASS"}, Path(state["run_dir"]),
+                   gate.Log(Path(state["run_dir"]) / "gate.log"))
+    new = gate.load_state()
+    assert new["run_id"] != first and new["previous_run"] == first
+    assert new["repeat"] == 1 and new["streak"] == 0 and new["label"] == "gate25a-repeat"
+    assert sum(gate.CRON_MARK in ln for ln in cron) == 1
+    assert ups and "--wake-min" in ups[-1]

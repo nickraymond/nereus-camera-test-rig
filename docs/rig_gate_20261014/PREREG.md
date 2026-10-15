@@ -136,3 +136,30 @@ This is stricter than the "5 clean video starts/stops" in the brief.
 - The proposed ≤ 100 ms still bar (§5) is measured per cycle (`sync.json`).
 - It is not a FAIL condition until it has been checked against a visible clock in a lit scene.
   In the dark, the AE3's 66 ms frame period alone makes 58–102 ms.
+
+**A5 (2026-10-14 9:50 PM, Nick: "kick this off in the early morning when the sun enters the
+room"): darkness makes a cycle VOID, never a PASS.** A cycle is **VOID** only if **every**
+failure is a board still that is:
+
+- intact: its sha256 matches and it decodes at full size;
+- under the size bar only because the scene is dark: the board frame's mean grey is
+  < 10/255 **and** the IMX708 still's mean grey is < 40/255 (the IMX708 auto-exposes; a dim
+  scene).
+
+A VOID neither adds to nor resets the streak, and does not count toward "3 FAILs in a row".
+Everything else stays a FAIL that resets to 0: a board that does not answer, a sha or decode
+error, failed video, an unclean shutdown, a board that kept power, a slow start, or a
+black board frame while the IMX708 sees a lit scene.
+
+- Why: the size bar exists to catch truncated or empty files. A black AE3 JPEG of a dark room
+  is 28.8 kB, just under the 30 kB bar, and is indistinguishable from a dead sensor. So the
+  dark cycles test everything except that one check, and cannot count toward 25.
+
+**A6 (same time): one armed run does both 25×.**
+- After 25 PASS in a row (A5 VOIDs excluded), the harness arms a fresh run (`…-repeat`, streak
+  from 0) and continues until a second 25 in a row. The cycle cap is 200 per run.
+- After a VOID the next wake is 10 min (waiting for light). After a PASS or FAIL it is 1 min.
+- The rig is armed tonight, so the overnight dark cycles (VOID) are extra post-fix cold-boot
+  evidence. The counted gate starts by itself when sunlight reaches the scene.
+- The ≥ 3 real switch cycles (Nick) are done in the morning by switching the run to
+  `mode switch` for 3 cycles.

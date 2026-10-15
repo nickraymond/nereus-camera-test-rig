@@ -70,6 +70,12 @@ STILL_BARS = {"imx708": (300_000, (4608, 2592)), "openmv_n6": (30_000, (1280, 80
 RAW_MIN_BYTES = {"imx708": 10_000_000, "openmv_n6": 1_000_000, "openmv_ae3": 1_000_000}
 MAX_LAST_STILL_UPTIME_S = 180.0   # last verified still within this of kernel start
 MAX_VIDEO_SKEW_MS = 100.0         # synchronized video: start skew bar (PREREG §5)
+# PREREG A5 (darkness): a cycle is VOID, not FAIL, only if its ONLY failures are board stills
+# that are intact (sha + decode OK) but under the size bar because the scene is dark: the
+# board frame itself is near-black AND the IMX708 (auto exposure, most sensitive) sees a dim
+# scene. A black board frame while the IMX708 sees a lit scene is still a FAIL.
+DARK_BOARD_MEAN = 10.0            # grey 0-255: a near-black board frame
+DARK_IMX_MEAN = 40.0              # grey 0-255: the IMX708 still of a dim scene
 MAX_FAILS_IN_ROW = 3              # auto mode stops power-cycling after this many FAILs
                                   # (arm --stop-after-fails; 0 = never, for baseline runs)
 BYID_TIMEOUT_S = 60.0
@@ -391,10 +397,30 @@ def evaluate(rec: dict, state: dict) -> dict:
             fails.append(f"video_skew:{vid.get('skew_ms')}")
         elif vid.get("lost"):
             fails.append(f"video_lost:{vid['lost']}")
-    rec["result"] = "FAIL" if fails else "PASS"
     rec["fail_reasons"] = fails
-    rec["streak"] = 0 if fails else state.get("streak", 0) + 1
+    if fails and _only_dark(fails, v):
+        rec["result"] = "VOID"   # too dark to verify: neither a PASS nor a reset (PREREG A5)
+        rec["streak"] = state.get("streak", 0)
+    else:
+        rec["result"] = "FAIL" if fails else "PASS"
+        rec["streak"] = 0 if fails else state.get("streak", 0) + 1
     return rec
+
+
+def _only_dark(fails: list[str], v: dict) -> bool:
+    """PREREG A5: every failure is an intact-but-small board still of a dark scene."""
+    imx = (v.get("imx708") or {}).get("still") or {}
+    if not imx.get("ok") or imx.get("mean") is None or imx["mean"] >= DARK_IMX_MEAN:
+        return False
+    for f in fails:
+        cam, _, why = f.partition("_still:")
+        still = (v.get(cam) or {}).get("still") or {}
+        if why != "size_ok" or cam == "imx708" or not (still.get("sha_ok") and
+                                                         still.get("decode_ok")):
+            return False
+        if still.get("mean") is None or still["mean"] >= DARK_BOARD_MEAN:
+            return False
+    return True
 
 
 def csv_row(rec: dict) -> dict:
@@ -501,7 +527,10 @@ def cmd_arm(a) -> int:
              "fails_in_row": 0, "dive_flag_before": flag, "armed_utc": now_utc(),
              "sha": pc.git_sha(), "wake_min": a.wake_min,
              "stop_after_fails": a.stop_after_fails, "label": a.label, "sync": a.sync,
-             "video_s": a.video_s, "until_streak": a.until_streak}
+             "video_s": a.video_s, "until_streak": a.until_streak,
+             "repeat": getattr(a, "repeat", 1), "dark_wake_min": getattr(a, "dark_wake_min", 0),
+             "lens": a.lens_position, "config": a.config,
+             "previous_run": getattr(a, "previous_run", None)}
     save_state(state)
     pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg":
                    "docs/rig_gate_20261014/PREREG.md", "host": os.uname().nodename})
@@ -529,8 +558,8 @@ def cmd_status(_a) -> int:
     if not state:
         print("gate: not armed")
         return 0
-    keys = ("run_id", "mode", "target", "until_streak", "cycles_done", "streak", "best_streak",
-            "fails_in_row")
+    keys = ("run_id", "mode", "target", "until_streak", "repeat", "cycles_done", "streak",
+            "best_streak", "fails_in_row", "voids", "previous_run")
     print(json.dumps({k: state[k] for k in keys if k in state}))
     path = Path(state["run_dir"]) / "cycles.csv"
     if path.exists():
@@ -561,9 +590,28 @@ def cmd_mode(a) -> int:
 def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
     """Auto mode: power-cycle through the UPS for the next cycle, unless a stop condition holds."""
     if state.get("until_streak") and state.get("streak", 0) >= state["until_streak"]:
-        log(f"GATE PASSED: {state['streak']} PASS in a row — disarming, rig stays up")
+        left = int(state.get("repeat", 1)) - 1
+        if left <= 0:
+            log(f"GATE PASSED: {state['streak']} PASS in a row — disarming, rig stays up")
+            cmd_disarm(None)
+            return
+        # Repeatability (Nick: "then run it once more"): a fresh run, streak from 0.
+        log(f"GATE PASSED: {state['streak']} PASS in a row — arming the repeat run "
+            f"({left} to go)")
+        prev = dict(state)
         cmd_disarm(None)
-        return
+        cmd_arm(SimpleNamespace(
+            target=prev["target"], mode=prev["mode"], wake_min=prev.get("wake_min", 1),
+            stop_after_fails=prev.get("stop_after_fails", MAX_FAILS_IN_ROW),
+            label=f"{prev.get('label', '')}-repeat", sync=prev.get("sync", False),
+            video_s=prev.get("video_s", 0), until_streak=prev["until_streak"], repeat=left,
+            dark_wake_min=prev.get("dark_wake_min", 0), lens_position=prev.get("lens", "0.8"),
+            config=prev.get("config", "configs/rig.example.yaml"),
+            previous_run=prev["run_id"]))
+        state = load_state()
+        run_dir = Path(state["run_dir"])
+        log = Log(run_dir / "gate.log")
+        log(f"repeat run armed after {prev['run_id']} passed")
     if state.get("cycles_done", 0) >= state.get("target", 0):
         log(f"cycle cap {state['target']} reached (streak {state.get('streak', 0)}) — "
             "disarming, rig stays up")
@@ -579,10 +627,13 @@ def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
     if state.get("mode") != "auto":
         log("mode switch: READY — Nick: switch OFF, wait for the LED to go dark, switch ON")
         return
-    log(f"gate_cycle: requesting UPS power cycle (wake {state.get('wake_min', 1)} min)")
-    env = {**os.environ, "MAX_PER_DAY": "200", "MIN_UPTIME_S": "0"}
+    wake = state.get("wake_min", 1)
+    if rec.get("result") == "VOID" and state.get("dark_wake_min"):
+        wake = state["dark_wake_min"]  # dark: wait for light instead of burning cycles
+    log(f"gate_cycle: requesting UPS power cycle (wake {wake} min)")
+    env = {**os.environ, "MAX_PER_DAY": "400", "MIN_UPTIME_S": "0"}
     r = subprocess.run(["bash", str(ROOT / "scripts" / "ups_power_cycle.sh"), "--yes",
-                        "--force", "--tag", "gate", "--wake-min", str(state.get("wake_min", 1)),
+                        "--force", "--tag", "gate", "--wake-min", str(wake),
                         "--reason", f"gate {state['run_id']} cycle {rec['cycle']}"],
                        env=env, capture_output=True, text=True, timeout=60)
     log(f"ups_power_cycle rc={r.returncode}: {(r.stdout + r.stderr).strip()[-300:]}")
@@ -608,7 +659,11 @@ def cmd_cycle(a) -> int:
     record(run_dir, rec)
     state["cycles_done"] = rec["cycle"]
     state["streak"] = rec["streak"]
-    state["fails_in_row"] = 0 if rec["result"] == "PASS" else state.get("fails_in_row", 0) + 1
+    if rec["result"] == "VOID":
+        state["voids"] = state.get("voids", 0) + 1  # dark: fails_in_row unchanged
+    else:
+        state["fails_in_row"] = (0 if rec["result"] == "PASS"
+                                 else state.get("fails_in_row", 0) + 1)
     state["best_streak"] = max(state.get("best_streak", 0), rec["streak"])
     save_state(state)
     log(f"cycle {rec['cycle']} {rec['result']} {';'.join(rec.get('fail_reasons') or [])} "
@@ -625,6 +680,11 @@ def main() -> int:
     arm = sub.add_parser("arm")
     arm.add_argument("--target", type=int, default=25,
                      help="cycle cap: stop after this many cycles in total")
+    arm.add_argument("--repeat", type=int, default=1,
+                     help="after --until-streak passes, arm a fresh run this many times in all "
+                          "(2 = the gate, then once more for repeatability)")
+    arm.add_argument("--dark-wake-min", type=int, default=0,
+                     help="after a VOID (dark) cycle, wake after N min instead of --wake-min")
     arm.add_argument("--until-streak", type=int, default=0,
                      help="stop as soon as this many PASS in a row (Nick's bar: 25); "
                           "0 = run to --target")
