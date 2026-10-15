@@ -1,63 +1,88 @@
-# nereus002 Friday dive card (Fri 2026-10-16). DRAFT 10/14 9 PM
+# nereus002 Friday dive card (Fri 2026-10-16)
 
-Rig: Pi Zero 2 W + IMX708 + OpenMV N6 + OpenMV AE3 in one housing, LiFePO4wered/Pi+ UPS,
-physical switch (= the UPS button: clean boot / clean shutdown). Code `~/nereus-rig-poolcam`.
+Rig: Pi Zero 2 W + IMX708 + OpenMV N6 + OpenMV AE3 in one housing, LiFePO4wered/Pi+ UPS, and a
+physical switch (= the UPS button: clean boot, clean shutdown). Code: `~/nereus-rig-poolcam`
+(rig PR #115).
 
 **What's new since the pool (10/14):**
 
-- **All three cameras shoot the same moment.** One trigger fires all three. Measured skew on
-  the bench: stills ~60–100 ms in the dark, RAW ~15 ms, video starts 11–23 ms. Every frame is on
-  one clock.
-- **The AE3 cold-boot wedge is fixed** (pending Nick's one-line boot change) and gated with
-  25 + 25 clean starts. See `docs/rig_gate_20261014/`.
-- **One dive program** runs by itself from switch-on: calibration (two distances), stills,
+- **All three cameras shoot the same moment.** One trigger fires all three, and every frame is
+  on one clock. Bench skew: stills 60–110 ms (set by the AE3's frame time), RAW 10–50 ms,
+  video start 10–50 ms.
+- **The AE3 cold-boot wedge is fixed.** Cause: the kernel read the board's USB disk at
+  power-on. Fix: `usb-storage.quirks=…` on the kernel line (Nick, 10/14). The 25 + 25
+  start/stop gate results are in `docs/rig_gate_20261014/RESULTS.md`.
+- **One dive program runs by itself from switch-on:** calibration at two distances, stills,
   then video. It needs no network and no LED codes.
 
-## The program (minutes from switch-on; set your dive watch at switch-on)
+## The program (minutes from switch-on: start your dive watch when you switch on)
 
-| T+ (min) | Block | What you do | What the rig does |
+| T+ min | Block | You | The rig |
 |---|---|---|---|
-| 0 – 1 | boot | Seal, enter the water | Boots (~40 s) |
-| 0 – 12 | **CAL A** (IMX708) | Start posing once you are down (~T+2). | ChArUco board at **0.7–0.9 m**. 9 places: 4 corners, 4 edge midpoints, centre; a board corner touching the frame edge each time. At each place: flat, ±30° left/right, ±30° up/down. **Hold each pose ~10 s** | One synchronized RAW shot every ~10 s, 1 stop dark: IMX708 DNG + JPEG, N6 + AE3 Bayer. `poses.csv` |
-| 12 – 22 | **CAL B** (N6 / AE3) | The same board at **1.5–2.0 m**, posed for the boards' narrower view (they see ~46°; aim was top-left on 10/14) | Same shots |
-| 22 – 32 | **STILLS** | Scene / reference card at your test distance | Synchronized sets (still + RAW, all three) every ~30 s |
-| 32 – 38 | **VIDEO** | One clip per minute (T+32, 33, … 37). **At about :15 past each minute, flash a torch once in view of all three**, then the scene | 6 synchronized 30 s clips (each starts ~5 s after the minute): IMX708 H.264 1080p30, N6 + AE3 MJPEG VGA 10 fps, one clock |
-| 38 → | stills | Anything | Synchronized sets until switch-off or low battery |
+| 0–12 | **CAL A** (for the IMX708) | Once down (~T+2): ChArUco board at **0.7–0.9 m**. 9 places: 4 corners, 4 edge midpoints, centre, a board corner touching the frame edge each time. At each place: flat, ±30° left/right, ±30° up/down. **Hold each pose ~15 s.** | One synchronized RAW shot every ~13 s, 1 stop dark: IMX708 DNG + JPEG, N6 + AE3 Bayer. Writes `poses.csv` |
+| 12–22 | **CAL B** (for the N6 / AE3) | The same board at **1.5–2.0 m**, posed for the boards' narrower view (~46°; on 10/14 their aim was top-left) | Same shots |
+| 22–32 | **STILLS** | Scene / reference card at your test distance | Synchronized sets (still + RAW, all three), every ~25 s |
+| 32–38 | **VIDEO** | One clip per minute (T+32 … 37). **At about :20 past each minute, flash a torch once in view of all three cameras**, then film the scene | 6 synchronized 30 s clips (each starts ~10 s after the minute): IMX708 H.264 1080p30, N6 + AE3 MJPEG VGA 10 fps |
+| 38 → | stills | Anything | Synchronized sets until switch-off or low battery (stops itself at 3.05 V) |
 
-Shots taken before you are in position simply have no board in them; the pipeline skips them.
+Shots taken before you are in position just have no board in them; the pipeline skips them.
 
-- **Full-frame coverage:** there is no live preview underwater (no Wi-Fi through water).
-  - **Before the dive**, in air at the pool edge: rehearse the 9 places on the full-frame preview
-    pages (`focus_stream` :8081 AE3 / :8082 N6, `focus_stream --imx708` :8083). **Only with the
-    loop stopped** (`pool_mode.sh stop`): a preview holds the camera and every set fails while it runs. Underwater the view is
-    ~1.33× narrower (flat port), so place the board a little closer to centre than it looked in
-    air.
-  - **After the dive:** pull a subset and run the calibration pipeline's `coverage.png` before
-    leaving the pool. A redo is cheap: switch off/on to restart the program.
+**Coverage:** there is no preview underwater (no Wi-Fi through water).
+- **Before:** rehearse the 9 places in air at the pool edge, on the preview pages (loop stopped
+  first, see below). Underwater the view is ~1.33× narrower (flat port), so place the board a
+  little closer to the centre than it looked in air.
+- **After:** pull a subset and run the calibration pipeline's `coverage.png` before leaving.
+  A redo is cheap: switch off and on to restart the program.
 
-## Before leaving for the pool (bench)
+## Bench, before leaving (Thursday)
 
-- [ ] Boot fix present: `cat /boot/firmware/cmdline.txt` contains
-      `usb-storage.quirks=37c5:16e3:i,37c5:1206:i`.
-- [ ] Gate passed (25 + 25), with results in `docs/rig_gate_20261014/RESULTS.md`.
-- [ ] Charged: VBAT ≥ 3.4 V on the charger.
-- [ ] Gate disarmed first (`python scripts/gate_cycle.py disarm`; the gate and pool mode must never both be armed).
-- [ ] Armed with the program: `pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30`
-      (exact args in the final card).
-- [ ] Switched **OFF**.
+```bash
+ssh pi@192.168.1.35 'grep -o "usb-storage[^ ]*" /proc/cmdline'
+```
+Expect `usb-storage.quirks=37c5:16e3:i,37c5:1206:i`.
+
+```bash
+ssh pi@192.168.1.35 'cd ~/nereus-rig-poolcam && ~/nereus-camera-test-rig/.venv/bin/python scripts/gate_cycle.py disarm'
+```
+The gate and the pool loop must never both be armed.
+
+```bash
+ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program cal_a:12,cal_b:10,stills:10,video:6x30 --lens-position 0.8 --ups-recover-after 0 --hours 6'
+```
+Add `--depth-bus N` if the Bar30 has moved to its own I²C bus.
+
+```bash
+ssh pi@192.168.1.35 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh status'
+```
+Expect `armed: YES (… --program …)`, `crontab: 1 pool line(s)`, `dive flag: present`.
+
+Then: charge to VBAT ≥ 3.4 V, and **switch OFF**.
 
 ## At the pool
 
-1. **Switch ON**, start the dive watch.
-2. Wait ~1 min.
-3. Seal and dive.
+1. **Switch ON**, and start the dive watch.
+2. Wait ~1 min (boot + first shot).
+3. Seal and dive. Follow the program table.
 4. **Stop:** switch OFF. The set in flight may be lost; everything before it is on disk.
-5. **Pull everything before you power it for anything else** (Nick's rule, 10/14):
-   `python -m host_tools.pool_pull …` (final command in the final card).
+5. **Pull everything before powering it for anything else** (Nick's rule, 10/14). The Mac joins
+   the rig's Wi-Fi `nereus002`, which comes up ~60 s after boot when no home Wi-Fi is around:
+   ```bash
+   python -m host_tools.pool_pull --host pi@10.42.0.1 --no-dng
+   ```
+   That is the fast pass. Run it again without `--no-dng` for the archive.
 
-## Open items (to close before Friday)
+**Previews** (in-air rehearsal only):
 
-- Nick: the boot fix (one `sudo` line, in chat), a lamp + a ms clock for the skew check, and a
-  light switched on/off during one video run (ground truth).
-- The calibration session's `.bayer` reader on development (Bayer for the boards).
-- Block lengths and video clip count/length: these are defaults. Tell me your dive time.
+```bash
+ssh pi@10.42.0.1 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh stop'
+```
+Then run `python -m host_tools.focus_stream --imx708` on the Pi; it serves :8083 (the boards
+are on :8081 AE3 and :8082 N6). **Never run a preview with the loop running:** a preview holds
+the camera and every set fails while it runs. Switch off/on afterwards to restart the program.
+
+## If something looks wrong
+
+- **The program didn't start** (no new `results/pool/pool…` folder 2 min after switch-on): check
+  `pool_mode.sh status`, then switch off/on.
+- **A camera missing in `pool.log`:** the IMX708 keeps going. A board is retried every 5 sets. A
+  switch off/on resets the boards; it is a clean cold boot now that the AE3 fix is in.
