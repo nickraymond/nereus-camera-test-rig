@@ -28,12 +28,15 @@ import numpy as np
 
 from edge_ml.urchin import metrics as m
 from edge_ml.urchin.review import from_coco
+from edge_ml.urchin.train_b import RECIPE
 
 STILL_RE = re.compile(r"^(?:.*/)?(?P<video>.+)_t(?P<tenths>\d{6})\.jpg$")
 MIN_GROUPS = 2  # PREREG minimums
 MIN_TEST_BOXES = 100
 MIN_DELTA_F1 = 0.10  # PREREG bar condition 1
 N_BOOT = 2000
+SEEDS = ("seed0", "seed1", "seed2")  # PREREG: exactly these, each a full run
+SCORE_FLOOR = 0.01  # PREREG: both models scored down to this score
 
 
 def still_video_time(name: str) -> tuple[str, float]:
@@ -115,7 +118,10 @@ def evaluate_fold(fold_dir: Path, groups: dict[str, str]) -> dict:
     strata = [still_groups[n] for n in names]
 
     def load(p: Path) -> dict:
-        return json.loads(p.read_text())["detections"]
+        d = json.loads(p.read_text())
+        if d.get("min_score") != SCORE_FLOOR:
+            raise ValueError(f"{p}: min_score {d.get('min_score')} != {SCORE_FLOOR} (PREREG)")
+        return d["detections"]
 
     a = score_model(
         val_l,
@@ -125,7 +131,10 @@ def evaluate_fold(fold_dir: Path, groups: dict[str, str]) -> dict:
         still_groups,
     )
     seeds = {}
+    seed_problems = seed_run_problems(fold_dir / "b")
     for sd in sorted((fold_dir / "b").glob("seed*")):
+        if sd.name not in SEEDS or any(p.startswith(sd.name + ":") for p in seed_problems):
+            continue
         b = score_model(
             val_l,
             test_l,
@@ -183,7 +192,29 @@ def evaluate_fold(fold_dir: Path, groups: dict[str, str]) -> dict:
         "A": a,
         "B": seeds,
         "secondary_new_vs_same_site": split_f1,
+        "seed_problems": seed_problems,
     }
+
+
+def seed_run_problems(b_dir: Path) -> list[str]:
+    """PREREG: B is exactly seeds 0-2, each a full run of the fixed recipe."""
+    problems = []
+    found = {p.name for p in b_dir.glob("seed*")}
+    if extra := sorted(found - set(SEEDS)):
+        problems.append(f"unexpected seed dirs {extra}")
+    for name in SEEDS:
+        run = b_dir / name / "run.json"
+        if not run.exists():
+            problems.append(f"{name}: missing run.json")
+            continue
+        r = json.loads(run.read_text())
+        if r.get("epochs_run") != RECIPE["epochs"]:
+            problems.append(f"{name}: epochs_run {r.get('epochs_run')} != {RECIPE['epochs']}")
+        if r.get("recipe") != RECIPE:
+            problems.append(f"{name}: recipe differs from train_b.RECIPE")
+        if r.get("seed") != int(name[4:]):
+            problems.append(f"{name}: run.json seed {r.get('seed')}")
+    return problems
 
 
 def site_of(group: str) -> str:
@@ -212,8 +243,8 @@ def outcome(folds: list[dict]) -> tuple[str, str]:
             "inconclusive — need more labelled video",
             f"{n_groups} held-out groups, {n_boxes} test boxes (need >= 2 and >= 100)",
         )
-    if not all(f["B"] for f in folds):
-        return "incomplete", "a fold has no model B seeds"
+    if problems := [f"{f['fold']['name']}: {p}" for f in folds for p in f["seed_problems"]]:
+        return "incomplete", "; ".join(problems)
     fails = [
         f"{f['fold']['name']}/{s}: {k}"
         for f in folds

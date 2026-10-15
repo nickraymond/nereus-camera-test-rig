@@ -5,6 +5,7 @@ import json
 import pytest
 from edge_ml.urchin import evaluate as ev
 from edge_ml.urchin.review import to_coco
+from edge_ml.urchin.train_b import RECIPE
 
 
 def _write_fold(tmp_path, n_per_video=30, mode="held_out_groups", b_quality="perfect"):
@@ -37,12 +38,16 @@ def _write_fold(tmp_path, n_per_video=30, mode="held_out_groups", b_quality="per
                     {"box": [10, 10, 50, 50], "score": 0.6},
                     {"box": [400, 400, 440, 440], "score": 0.5},
                 ]
-        return {"detections": out}
+        return {"detections": out, "min_score": 0.01}
 
-    for sub, kind in [("a", "half"), ("b/seed0", b_quality), ("b/seed1", b_quality)]:
+    subs = [("a", "half")] + [(f"b/seed{k}", b_quality) for k in range(3)]
+    for sub, kind in subs:
         (fold / sub).mkdir(parents=True)
         for split in ("val", "test"):
             (fold / sub / f"pred_labels_{split}.json").write_text(json.dumps(preds(kind)))
+        if sub.startswith("b/"):
+            run = {"epochs_run": 24, "recipe": RECIPE, "seed": int(sub[-1])}
+            (fold / sub / "run.json").write_text(json.dumps(run))
     return fold, groups
 
 
@@ -130,4 +135,29 @@ def test_fold_json_without_train_groups_fails_closed(tmp_path):
     del info["train_groups"]
     (fold / "fold.json").write_text(json.dumps(info))
     with pytest.raises(KeyError, match="train_groups"):
+        ev.evaluate_fold(fold, groups)
+
+
+def test_incomplete_unless_exactly_three_full_seed_runs(tmp_path):
+    import shutil
+
+    fold, groups = _write_fold(tmp_path)
+    shutil.rmtree(fold / "b" / "seed2")  # a crashed seed
+    r = ev.evaluate_fold(fold, groups)
+    assert ev.outcome([r]) == ("incomplete", "f: seed2: missing run.json")
+    fold, groups = _write_fold(tmp_path / "smoke")
+    run = json.loads((fold / "b/seed1/run.json").read_text())
+    run["epochs_run"] = 2  # a smoke run
+    (fold / "b/seed1/run.json").write_text(json.dumps(run))
+    r = ev.evaluate_fold(fold, groups)
+    assert ev.outcome([r])[0] == "incomplete" and "seed1: epochs_run 2" in ev.outcome([r])[1]
+    assert "seed1" not in r["B"]
+
+
+def test_scoring_floor_is_pinned(tmp_path):
+    fold, groups = _write_fold(tmp_path)
+    d = json.loads((fold / "a/pred_labels_test.json").read_text())
+    d["min_score"] = 0.05  # owl.py's pre-label default, not the scoring floor
+    (fold / "a/pred_labels_test.json").write_text(json.dumps(d))
+    with pytest.raises(ValueError, match="min_score"):
         ev.evaluate_fold(fold, groups)

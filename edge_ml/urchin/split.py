@@ -168,6 +168,7 @@ def make_folds(stills: list[Still], groups: dict[str, str], eligible: set[str]) 
 
 CAPS = {"train": 300, "val": 100, "test": 150}  # PREREG caps
 SCREEN_K = 40
+PREREG_PATH = Path(__file__).with_name("PREREG.md")
 SCREEN_VALUES = {"yes", "no", "unsure"}
 
 
@@ -198,19 +199,38 @@ def eligible_from_screen(path: Path, groups: set[str]) -> set[str]:
     return elig
 
 
-def write_folds(folds: list[Fold], groups: dict[str, str], out_dir: Path) -> None:
-    """Per fold: capped train/val/test lists + fold.json (Fold.info, with caps recorded)."""
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_folds(
+    folds: list[Fold], groups: dict[str, str], out_dir: Path, inputs: dict[str, str] | None = None
+) -> None:
+    """Per fold: capped train/val/test lists + fold.json (Fold.info, caps and input SHA-256s).
+
+    Fails before writing anything if a held-out group has no test stills after the cap."""
+    capped_folds = []
     for fold in folds:
-        d = out_dir / fold.name
-        d.mkdir(parents=True, exist_ok=False)
         before = {"train": len(fold.train), "val": len(fold.val), "test": len(fold.test)}
         for part in ("train", "val", "test"):
-            capped = proportional_sample(getattr(fold, part), CAPS[part], seed=0)
-            setattr(fold, part, capped)
-            (d / f"{part}.txt").write_text("".join(f"{s.name}\n" for s in capped))
+            setattr(fold, part, proportional_sample(getattr(fold, part), CAPS[part], seed=0))
+        if empty := [
+            g for g in fold.test_groups if not any(groups[x.video] == g for x in fold.test)
+        ]:
+            raise ValueError(
+                f"fold {fold.name}: held-out group(s) {empty} have 0 test stills "
+                f"after the cap of {CAPS['test']}"
+            )
+        capped_folds.append((fold, before))
+    for fold, before in capped_folds:
+        d = out_dir / fold.name
+        d.mkdir(parents=True, exist_ok=False)
+        for part in ("train", "val", "test"):
+            (d / f"{part}.txt").write_text("".join(f"{s.name}\n" for s in getattr(fold, part)))
         info = fold.info(groups)
         info["n_before_caps"] = before
         info["caps"] = CAPS
+        info["inputs_sha256"] = inputs or {}
         (d / "fold.json").write_text(json.dumps(info, indent=1) + "\n")
 
 
@@ -245,9 +265,17 @@ def main(argv: list[str] | None = None) -> int:
                 for x in evenly_spaced([x for x in stills if groups[x.video] == g], SCREEN_K):
                     w.writerow([g, x.name, "", ""])
         return 0
+    groups_sha = sha256_file(args.groups)
+    if groups_sha not in PREREG_PATH.read_text():
+        raise ValueError(f"{args.groups}: SHA-256 {groups_sha} is not the map frozen in PREREG.md")
     eligible = eligible_from_screen(args.screen, {groups[x.video] for x in stills})
     folds = make_folds(stills, groups, eligible)
-    write_folds(folds, groups, args.out_dir)
+    inputs = {
+        "groups": groups_sha,
+        "group_screen": sha256_file(args.screen),
+        "stills_csv": sha256_file(args.stills_csv),
+    }
+    write_folds(folds, groups, args.out_dir, inputs)
     for fold in folds:
         print(json.dumps(fold.info(groups)))
     return 0

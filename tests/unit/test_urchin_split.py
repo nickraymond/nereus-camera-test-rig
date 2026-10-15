@@ -165,7 +165,7 @@ def _stills_csv(tmp_path, n_videos=6, per=60):
     return path, groups
 
 
-def test_cli_screen_then_folds(tmp_path):
+def test_cli_screen_then_folds(tmp_path, monkeypatch):
     import csv
 
     stills_csv, groups = _stills_csv(tmp_path)
@@ -183,6 +183,11 @@ def test_cli_screen_then_folds(tmp_path):
     assert len(rows) == 6 * 40
 
     out = tmp_path / "folds"
+    with pytest.raises(ValueError, match="not the map frozen"):  # synthetic map ≠ PREREG map
+        sp.main(["folds", str(stills_csv), str(tmp_path / "groups.json"), str(screen), str(out)])
+    prereg = tmp_path / "PREREG.md"
+    prereg.write_text(sp.sha256_file(tmp_path / "groups.json"))
+    monkeypatch.setattr(sp, "PREREG_PATH", prereg)
     with pytest.raises(ValueError, match="want yes/no/unsure"):  # blank screen
         sp.main(["folds", str(stills_csv), str(tmp_path / "groups.json"), str(screen), str(out)])
 
@@ -211,6 +216,7 @@ def test_cli_screen_then_folds(tmp_path):
         test = (fold_dir / "test.txt").read_text().splitlines()
         assert len(test) == info["n"]["test"] <= sp.CAPS["test"]
         assert all(groups[x.split("/")[0]] == tg for x in test)
+        assert info["inputs_sha256"]["group_screen"] == sp.sha256_file(screen)
 
 
 def test_two_eligible_training_groups_use_time_split_not_a_group():
@@ -244,3 +250,17 @@ def test_b_never_loses_all_urchin_groups_on_the_real_map():
                     assert {gmap[s.video] for s in fold.val} <= train_g  # time split
                 checked += 1
     assert checked > 127
+
+
+def test_write_folds_fails_when_a_held_out_group_has_no_test_stills(tmp_path):
+    stills, groups = _groups(3, per=20)
+    fold = sp.Fold(
+        "f",
+        train=[s for s in stills if s.video == "vid2"],
+        test=[s for s in stills if s.video == "vid0"],  # site1 held out but has no stills
+        test_groups=["site0", "site1"],
+        mode="held_out_groups",
+    )
+    with pytest.raises(ValueError, match=r"\['site1'\] have 0 test stills"):
+        sp.write_folds([fold], groups, tmp_path / "out")
+    assert not (tmp_path / "out").exists()  # nothing written

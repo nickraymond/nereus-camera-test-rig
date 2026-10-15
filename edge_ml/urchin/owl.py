@@ -4,8 +4,8 @@
 
 stills.txt lists still paths relative to stills_root, one per line. out.json maps each still to
 its detections: {"still": [{"box": [x1, y1, x2, y2], "score": s}, ...]}, sorted by score.
-The same tiled detector makes the pre-labels (score >= 0.05) and is scored as baseline A
-(lower --min-score, so the threshold can be chosen on validation).
+The same tiled detector makes the pre-labels (default --min-score 0.05) and is scored as
+baseline A with --min-score 0.01 (PREREG floor, same as B; evaluate.py rejects any other).
 
 The tiling and NMS helpers are numpy-only; the model needs torch + transformers
 (edge_ml/urchin/requirements.txt).
