@@ -77,7 +77,8 @@ CSV_FIELDS = [
     "vin_mv", "vbat_mv", "on_battery", "throttled", "ae3_enum_s", "n6_enum_s",
     "ae3_tty_s", "n6_tty_s", "ae3_contact", "ae3_board_ticks_s", "ae3_import_ms",
     "n6_contact", "n6_board_ticks_s", "boards_power_cycled", "set_s",
-    "imx_still", "n6_still", "ae3_still", "raws_ok", "still_skew_s",
+    "imx_still", "n6_still", "ae3_still", "raws_ok", "still_skew_s", "sync_still_ms",
+    "sync_raw_ms",
     "last_still_uptime_s", "result", "fail_reasons", "streak",
 ]
 
@@ -276,7 +277,11 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
                  "uptime_start_s": round(t_start, 1), "mode": state.get("mode")}
     log(f"=== cycle {n} ({started_by}) boot {rec['boot_id'][:8]} uptime {t_start:.1f}s")
     rec["prev"] = previous_boot_end()
-    rec["power"] = pc.ups_power()
+    for _ in range(4):  # {} when one register read fails (I2C busy at boot): retry briefly
+        rec["power"] = pc.ups_power()
+        if rec["power"]:
+            break
+        time.sleep(1.5)
     rec["throttled"] = sh(["vcgencmd", "get_throttled"]).strip().split("=")[-1]
     rec["tty_uptime_s"] = wait_ttys(BYID_TIMEOUT_S)
     rec["kernel"] = kernel_events()
@@ -288,7 +293,8 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
 
     # One set through the production path (pool_capture's own CLI call + run config).
     t_set = time.monotonic()
-    line = pc.run_one_set(n, run_dir, Path(state["run_config"]), state["run_id"], list(CAMERAS))
+    line = pc.run_one_set(n, run_dir, Path(state["run_config"]), state["run_id"], list(CAMERAS),
+                          ("--sync",) if state.get("sync") else ())
     rec["set_s"] = round(time.monotonic() - t_set, 1)
     rec["set_exit"] = line.get("exit_code")
     rec["set_tail"] = line.get("stdout_tail") or []
@@ -296,6 +302,11 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
     rec["experiment"] = exp
     if exp:
         rec["verify"] = verify_set(run_dir / exp)
+        sync_path = run_dir / exp / "sync.json"
+        if sync_path.is_file():  # synchronized mode: per-shot skew from the frame timestamps
+            shots = json.loads(sync_path.read_text()).get("shots", [])
+            rec["sync"] = {s["shot"]: {"skew_ms": s.get("skew_ms"),
+                                       "offsets_ms": s.get("frame_offset_ms")} for s in shots}
         try:
             pc.write_sha256sums(run_dir / exp)
         except OSError as exc:
@@ -370,6 +381,8 @@ def csv_row(rec: dict) -> dict:
         "imx_still": still("imx708"), "n6_still": still("openmv_n6"),
         "ae3_still": still("openmv_ae3"), "raws_ok": f"{raws}/3",
         "still_skew_s": rec.get("still_skew_s"),
+        "sync_still_ms": ((rec.get("sync") or {}).get("still") or {}).get("skew_ms"),
+        "sync_raw_ms": ((rec.get("sync") or {}).get("raw") or {}).get("skew_ms"),
         "last_still_uptime_s": rec.get("last_still_uptime_s"), "result": rec.get("result"),
         "fail_reasons": ";".join(rec.get("fail_reasons") or []), "streak": rec.get("streak"),
     }
@@ -434,7 +447,7 @@ def cmd_arm(a) -> int:
              "target": a.target, "mode": a.mode, "cycles_done": 0, "streak": 0,
              "fails_in_row": 0, "dive_flag_before": flag, "armed_utc": now_utc(),
              "sha": pc.git_sha(), "wake_min": a.wake_min,
-             "stop_after_fails": a.stop_after_fails, "label": a.label}
+             "stop_after_fails": a.stop_after_fails, "label": a.label, "sync": a.sync}
     save_state(state)
     pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg":
                    "docs/rig_gate_20261014/PREREG.md", "host": os.uname().nodename})
@@ -556,6 +569,8 @@ def main() -> int:
     arm.add_argument("--stop-after-fails", type=int, default=MAX_FAILS_IN_ROW,
                      help="auto mode stops power-cycling after N FAILs in a row (0 = never)")
     arm.add_argument("--label", default="", help="appended to the run id (e.g. baseline)")
+    arm.add_argument("--sync", action="store_true",
+                     help="synchronized capture (experiment --sync): all cameras one moment")
     arm.add_argument("--lens-position", default="0.8")
     arm.add_argument("--config", default="configs/rig.example.yaml")
     for name in ("boot", "once"):

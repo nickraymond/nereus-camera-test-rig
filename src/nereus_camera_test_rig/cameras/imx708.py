@@ -128,6 +128,7 @@ class Imx708Camera(CameraDevice):
         self._video_command = video_command
         self._runner = runner  # injectable for host unit tests
         self._clock = clock
+        self._armed: dict[str, Any] = {}  # the signal-mode rpicam-still in flight
 
     # -- interface -----------------------------------------------------------
     def get_device_info(self) -> dict[str, Any]:
@@ -160,6 +161,33 @@ class Imx708Camera(CameraDevice):
         lock it); card metering is ``scripts/capture_raw_imx708.py --card``."""
         return self._still(Path(destination).with_suffix(".jpg"), request, raw=True)
 
+    def _still_cmd(self, dest: Path, request: CaptureRequest, raw: bool,
+                   timeout_arg: str) -> tuple[list[str], dict[str, Any]]:
+        """The rpicam-still command line (``-t timeout_arg``) and the resolved settings."""
+        path, _backend = select_command("image", self._still_command)
+        settings = {**self._settings, **(request.settings or {})}
+        source = settings.get("source") or {}
+        width = int(_setting(source, settings, "width", DEFAULT_WIDTH))
+        height = int(_setting(source, settings, "height", DEFAULT_HEIGHT))
+        quality = int(_setting(source, settings, "jpeg_quality", DEFAULT_JPEG_QUALITY))
+        cmd = [
+            path, "-n",
+            "-t", timeout_arg,
+            "--width", str(width),
+            "--height", str(height),
+            "-q", str(quality),
+            "--metadata", dest.name + ".rpicam.json",
+            "--metadata-format", "json",
+        ]
+        cmd += _control_args(settings.get("camera_controls") or {})
+        if raw:
+            cmd += ["--raw", "--mode", f"{width}:{height}"]
+        cmd += ["-o", dest.name]
+        return cmd, {"width": width, "height": height,
+                     "warmup_ms": int(settings.get("warmup_ms", DEFAULT_WARMUP_MS)),
+                     "timeout": float(request.timeout_seconds
+                                      or settings.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS))}
+
     def _still(self, dest: Path, request: CaptureRequest, raw: bool) -> CaptureResult:
         dest.parent.mkdir(parents=True, exist_ok=True)
         meta_path = dest.with_suffix(dest.suffix + ".rpicam.json")
@@ -168,37 +196,104 @@ class Imx708Camera(CameraDevice):
         # select_command + run are both inside the guard so a missing binary yields a
         # failed result (fail loudly, not a traceback — CLAUDE.md §17).
         try:
-            path, _backend = select_command("image", self._still_command)
             settings = {**self._settings, **(request.settings or {})}
-            source = settings.get("source") or {}
-            width = int(_setting(source, settings, "width", DEFAULT_WIDTH))
-            height = int(_setting(source, settings, "height", DEFAULT_HEIGHT))
-            quality = int(_setting(source, settings, "jpeg_quality", DEFAULT_JPEG_QUALITY))
             warmup = int(settings.get("warmup_ms", DEFAULT_WARMUP_MS))
-            timeout = float(
-                request.timeout_seconds or settings.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
-            )
-            cmd = [
-                path, "-n",
-                "-t", str(warmup),
-                "--width", str(width),
-                "--height", str(height),
-                "-q", str(quality),
-                "--metadata", meta_path.name,
-                "--metadata-format", "json",
-            ]
-            cmd += _control_args(settings.get("camera_controls") or {})
-            if raw:
-                cmd += ["--raw", "--mode", f"{width}:{height}"]
-            cmd += ["-o", dest.name]
-            self._run(cmd, timeout, cwd=dest.parent)
+            cmd, s = self._still_cmd(dest, request, raw, str(warmup))
+            self._run(cmd, s["timeout"], cwd=dest.parent)
         except CaptureError as exc:
             elapsed = self._clock() - started
             return self._failed(camera, request, "capture_failed", str(exc), elapsed)
 
         result = self._validate_still(camera, request, dest, meta_path, self._clock() - started)
-        return self._validate_dng(result, dest.with_suffix(".dng"), width, height) if raw \
-            else result
+        return self._validate_dng(result, dest.with_suffix(".dng"), s["width"], s["height"]) \
+            if raw else result
+
+    # -- synchronized capture (Nick 2026-10-14: the three stills must be one moment) ---------
+    # rpicam-still in signal mode (verified on nereus002, rpicam-apps 1.12, 2026-10-14 8 PM):
+    # ``-t 0 --signal`` keeps the preview running (AE/AWB settle); SIGUSR1 takes the still —
+    # with ``--raw`` the DNG and the JPEG from one exposure — and the process keeps running;
+    # SIGUSR2 quits (rc 0). Signal-to-SensorTimestamp latency measured 186-231 ms (n=7, still
+    # mode switch from the 2304x1296 preview; spread ~ one 70 ms frame in a dark room).
+    def arm(self, kind: str, destination: str, request: CaptureRequest) -> None:
+        """Start rpicam-still in signal mode and return once its warm-up has elapsed."""
+        raw = kind == "raw"
+        dest = Path(destination).with_suffix(".jpg") if raw else Path(destination)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        cmd, s = self._still_cmd(dest, request, raw, "0")
+        cmd.insert(cmd.index("-o"), "--signal")
+        log = (dest.parent / (dest.name + ".rpicam.log")).open("wb")
+        started = self._clock()
+        try:
+            proc = subprocess.Popen(cmd, cwd=dest.parent, stdout=log, stderr=subprocess.STDOUT)
+        except OSError as exc:
+            log.close()
+            raise CaptureError(f"could not start {cmd[0]}: {exc}") from exc
+        self._armed = {"proc": proc, "log": log, "dest": dest, "raw": raw, "request": request,
+                       "started": started, **s}
+        # rpicam needs ~1 s to open the camera before the AE warm-up counts; wait it out here
+        # (the boards warm up in parallel threads, so this costs no wall time).
+        deadline = started + 1.0 + s["warmup_ms"] / 1000
+        while self._clock() < deadline:
+            if proc.poll() is not None:
+                raise CaptureError(f"rpicam-still exited rc={proc.returncode} while arming "
+                                   f"(see {dest.name}.rpicam.log)")
+            time.sleep(0.05)
+
+    def fire(self) -> float:
+        """SIGUSR1: take the still now. Returns the host monotonic time of the signal."""
+        import os
+        import signal
+
+        t = time.monotonic()
+        os.kill(self._armed["proc"].pid, signal.SIGUSR1)
+        self._armed["fire_host"] = t
+        return t
+
+    def finish(self) -> CaptureResult:
+        """Wait for the metadata (written after the image), quit rpicam, validate like
+        ``capture_image`` / ``capture_raw``; ``sensor_metadata["sync"]`` holds the fire time
+        and the frame's SensorTimestamp (CLOCK_MONOTONIC, s) for the skew computation."""
+        import os
+        import signal
+
+        a = self._armed
+        dest, proc = a["dest"], a["proc"]
+        meta_path = dest.with_suffix(dest.suffix + ".rpicam.json")
+        camera = CameraIdentity(driver=self.driver, platform="raspberry_pi", sensor="imx708")
+        deadline = self._clock() + a["timeout"]
+        while not (meta_path.is_file() and dest.is_file()) and self._clock() < deadline \
+                and proc.poll() is None:
+            time.sleep(0.05)
+        if proc.poll() is None:
+            os.kill(proc.pid, signal.SIGUSR2)  # quit: the still handler already wrote files
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        a["log"].close()
+        duration = self._clock() - a["started"]
+        if not meta_path.is_file():
+            return self._failed(camera, a["request"], "capture_failed",
+                                f"no still after the fire (rc={proc.returncode}, see "
+                                f"{dest.name}.rpicam.log)", duration)
+        result = self._validate_still(camera, a["request"], dest, meta_path, duration)
+        if a["raw"]:
+            result = self._validate_dng(result, dest.with_suffix(".dng"), a["width"],
+                                        a["height"])
+        if result.ok:
+            ts = None
+            try:
+                data = json.loads(meta_path.read_text())
+                ts = (data[-1] if isinstance(data, list) else data).get("SensorTimestamp")
+            except (OSError, ValueError, AttributeError, IndexError):
+                pass
+            result.sensor_metadata["sync"] = {
+                "fire_host_mono": a.get("fire_host"),
+                "sensor_ts_mono": ts / 1e9 if ts else None,
+                "fire_to_frame_ms": round((ts / 1e9 - a["fire_host"]) * 1000, 1)
+                if ts and a.get("fire_host") else None}
+        return result
 
     def _validate_dng(self, still: CaptureResult, dng: Path, width: int,
                       height: int) -> CaptureResult:

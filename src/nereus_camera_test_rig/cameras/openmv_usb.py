@@ -174,6 +174,7 @@ class OpenMvUsbCamera(CameraDevice):
         self._owns_transport = transport is None
         self._io: Optional[_SerialIO] = None
         self._identity: Optional[CameraIdentity] = None
+        self._armed: dict[str, Any] = {}  # the trigger-mode capture in flight (arm/fire/finish)
 
     # -- transport lifecycle -------------------------------------------------
     def _ensure_io(self) -> _SerialIO:
@@ -292,12 +293,21 @@ class OpenMvUsbCamera(CameraDevice):
         """
         dest = Path(destination)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        identity = self._current_identity()
         started = time.monotonic()
         try:
             settings = {**self._settings, **(request.settings or {}), "filename": dest.name}
             io = self._ensure_io()
             io.write_message(cp.make_request("capture_raw", uuid.uuid4().hex[:12], settings))
+        except OpenMvError as exc:
+            return self._failed(self._current_identity(), request, exc.code, exc.message,
+                                time.monotonic() - started)
+        return self._finish_raw(dest, request, started)
+
+    def _finish_raw(self, dest: Path, request: CaptureRequest, started: float) -> CaptureResult:
+        """Receive one framed ``capture_raw`` reply into ``dest`` + its ``.json`` sidecar."""
+        identity = self._current_identity()
+        try:
+            io = self._ensure_io()
             data, footer = self._receive_framed(io, "capture_raw", CAPTURE_TIMEOUT)
             output = footer.get("output") or {}
             expected = output["width"] * output["height"] * output["bits"] // 8
@@ -327,6 +337,69 @@ class OpenMvUsbCamera(CameraDevice):
             identity, request, "not_supported",
             "capture_video not implemented for OpenMV yet (OQ-4)", 0.0,
         )
+
+    # -- synchronized capture (Nick 2026-10-14: the three stills must be one moment) ---------
+    def arm(self, kind: str, destination: str, request: CaptureRequest) -> None:
+        """Start a trigger-mode ``capture_image`` (kind "image") or ``capture_raw`` ("raw"):
+        the board warms up, answers ``armed`` and keeps its autos running; nothing is taken
+        until ``fire()``. Raises ``OpenMvError`` if the board does not arm. On the AE3 this is
+        a camera session (``reset_board`` first, OQ-19)."""
+        dest = Path(destination)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        action = {"image": "capture_image", "raw": "capture_raw"}[kind]
+        settings = {**self._settings, **(request.settings or {}), "filename": dest.name,
+                    "trigger": True}
+        command_id = uuid.uuid4().hex[:12]
+        started = time.monotonic()
+        io = self._ensure_io()
+        io.write_message(cp.make_request(action, command_id, settings))
+        msg = io.read_message(timeout=CAPTURE_TIMEOUT)
+        if msg.get("status") == "failed":
+            err = msg.get("error") or {}
+            raise OpenMvError(err.get("code", "arm_failed"), err.get("message", "arm failed"))
+        if msg.get("status") != "armed":
+            raise OpenMvError("bad_arm", "expected an armed line, got %r" % msg)
+        self._armed = {"kind": kind, "dest": dest, "request": request, "started": started,
+                       "armed_host": time.monotonic(),
+                       "armed_ticks": (msg.get("armed") or {}).get("ticks_ms")}
+
+    def fire(self) -> float:
+        """Release the armed capture (any byte; a bare newline is ignored by the service's
+        line loop). Returns the host monotonic time of the write."""
+        t = time.monotonic()
+        self._ensure_io()._t.write(b"\n")
+        self._armed["fire_host"] = t
+        return t
+
+    def finish(self) -> CaptureResult:
+        """Collect the fired capture: retrieve + verify like ``capture_image`` /
+        ``capture_raw``; the board's sync ticks (armed, fire received, snapshot) and the host
+        fire time are in ``sensor_metadata["sync"]``."""
+        a = self._armed
+        if a["kind"] == "raw":
+            result = self._finish_raw(a["dest"], a["request"], a["started"])
+        else:
+            identity = self._current_identity()
+            try:
+                resp = self._ensure_io().read_message(timeout=CAPTURE_TIMEOUT)
+                if resp.get("status") == "failed":
+                    err = resp.get("error") or {}
+                    raise OpenMvError(err.get("code", "unknown"),
+                                      err.get("message", "board reported failure"))
+                output = resp.get("output") or {}
+                self._retrieve_file(output.get("filename", a["dest"].name), a["dest"], output)
+            except OpenMvError as exc:
+                return self._failed(identity, a["request"], exc.code, exc.message,
+                                    time.monotonic() - a["started"])
+            result = self._validate(identity, a["request"], a["dest"], output,
+                                    time.monotonic() - a["started"])
+            result.sensor_metadata["sync"] = output.get("sync")
+        sync = result.sensor_metadata.get("sync") or {}
+        if result.ok and isinstance(sync, dict):
+            sync["fire_host_mono"] = a.get("fire_host")
+            if sync.get("fire_rx_ms") is not None and sync.get("snap_ms") is not None:
+                sync["fire_to_snap_ms"] = sync["snap_ms"] - sync["fire_rx_ms"]
+        return result
 
     def reset_board(self, timeout: float = RESET_TIMEOUT) -> dict[str, Any]:
         """Hard-reset the board and wait until its capture service answers again.
@@ -513,7 +586,7 @@ class OpenMvUsbCamera(CameraDevice):
 
 _RAW_KEYS = ("width", "height", "framesize", "cfa", "bits", "black_level", "white_level",
              "exposure_us", "gain_db", "requested", "frame_time_us", "metered", "isp_rgb_gain_db",
-             "mount_rotation_deg", "timing_ms")
+             "mount_rotation_deg", "timing_ms", "sync")
 
 
 def _raw_metadata(output: dict) -> dict[str, Any]:

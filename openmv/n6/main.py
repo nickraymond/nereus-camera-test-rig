@@ -51,7 +51,7 @@ def _handle_line(usb, line):
             info["boot_ms"] = BOOT_MS
             _send(usb, cp.completed_response(command_id, info))
         elif action == "capture_image":
-            output = capture_service.capture_image(board_config, settings)
+            output = capture_service.capture_image(board_config, settings, usb, command_id)
             _send(usb, cp.completed_response(command_id, output))
         elif action == "capture_raw":
             # Bayer RAW at a locked exposure, streamed from RAM (S3); emits its own framed

@@ -407,12 +407,13 @@ def ups_power_cycle(reason: str) -> int:
 
 
 def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
-                cameras: list) -> dict:
+                cameras: list, extra_args: tuple = ()) -> dict:
     before = set(run_dir.glob("*/exp_*"))
     env = {**os.environ, "PYTHONPATH": f"{ROOT / 'src'}:{ROOT}"}
     cmd = [sys.executable, "-m", "nereus_camera_test_rig.cli", "--config", str(run_config),
            "experiment", "--type", "pool", "--env", "pool", "--raw", "--no-analysis",
-           "--cameras", ",".join(cameras), "--notes", f"pool_capture {run_id} set {n}"]
+           "--cameras", ",".join(cameras), "--notes", f"pool_capture {run_id} set {n}",
+           *extra_args]
     line: dict = {}
     # Own process group: on a timeout the whole group is killed, so an rpicam-still or serial
     # grandchild cannot outlive the set and hold a camera into the next one (QE #97).

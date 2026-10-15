@@ -86,11 +86,40 @@ def _sha256_file(path):
     return binascii.hexlify(h.digest()).decode()
 
 
-def capture_image(board_config, settings):
+# Synchronized capture (2026-10-14, Nick: the three cameras must shoot the same moment). After
+# warm-up the board says "armed" and keeps snapshotting (autos stay live) until the host's fire
+# byte arrives, then takes the next frame. A host that never fires cannot hang the board.
+TRIGGER_MAX_WAIT_MS = 20000
+
+
+def _wait_fire(usb, command_id, snap):
+    """Armed loop: returns board ticks of armed / fire receipt + the frame period seen while
+    waiting (the fire-to-frame latency is up to about one frame period)."""
+    t_armed = time.ticks_ms()
+    usb.write(cp.encode_message(cp.armed_response(command_id, t_armed)))
+    frames = 0
+    while True:
+        if usb.any():
+            t_fire = time.ticks_ms()
+            usb.read(64)  # consume the fire byte(s)
+            break
+        if time.ticks_diff(time.ticks_ms(), t_armed) > TRIGGER_MAX_WAIT_MS:
+            t_fire = None
+            break
+        snap()
+        frames += 1
+    waited = time.ticks_diff(time.ticks_ms(), t_armed)
+    return {"armed_ms": t_armed, "fire_rx_ms": t_fire, "timed_out": t_fire is None,
+            "frame_ms": (waited // frames) if frames else None}
+
+
+def capture_image(board_config, settings, usb=None, command_id=None):
     """Configure the sensor, snapshot to STORAGE_DIR, return output metadata (§8).
 
     Validates framesize/pixel_format against the board allowlist; raises ProtocolError
     (mapped to a structured failure by the caller) on bad settings or capture error.
+    ``settings["trigger"]``: synchronized capture — after warm-up, wait for the host's fire
+    byte (``_wait_fire``; needs ``usb`` + ``command_id``) and report the board ticks.
     """
     name = _safe_basename(settings.get("filename"))
     fs_const, fs_name = _resolve_framesize(board_config, settings)
@@ -103,7 +132,12 @@ def capture_image(board_config, settings):
     sensor.set_framesize(fs_const)
     if warmup_ms > 0:
         sensor.skip_frames(time=warmup_ms)
+    sync = None
+    if settings.get("trigger") and usb is not None:
+        sync = _wait_fire(usb, command_id, sensor.snapshot)
     img = sensor.snapshot()
+    if sync is not None:
+        sync["snap_ms"] = time.ticks_ms()
 
     path = STORAGE_DIR + "/" + name
     img.save(path, quality=quality)
@@ -120,6 +154,8 @@ def capture_image(board_config, settings):
         "sha256": _sha256_file(path),
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
     }
+    if sync is not None:
+        out["sync"] = sync
     # Settled 3A state at snapshot time (§12 exposure settings where available). Makes a
     # stuck auto-exposure/AWB episode diagnosable from capture.json alone: a "normal"
     # scene captured at extreme exposure/gain is the stale-state signature. Capability-
@@ -235,19 +271,25 @@ def capture_raw(usb, command_id, board_config, settings):
         cam.auto_exposure(False, exposure_us=exposure_us)
     try:
         _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
-                                 metered, exposure_us, gain_db, frame_time_us)
+                                 metered, exposure_us, gain_db, frame_time_us,
+                                 trigger=bool(settings.get("trigger")))
     finally:
         if default_ft is not None:
             _set_frame_time(cam, default_ft)
 
 
 def _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
-                             metered, exposure_us, gain_db, frame_time_us):
+                             metered, exposure_us, gain_db, frame_time_us, trigger=False):
     t_locked = time.ticks_ms()
     for _ in range(3):
         _snap(cam)
+    sync = None
+    if trigger:
+        sync = _wait_fire(usb, command_id, lambda: _snap(cam))
     img = _snap(cam)
     t_snap = time.ticks_ms()
+    if sync is not None:
+        sync["snap_ms"] = t_snap
 
     data = memoryview(img.bytearray())
     size = len(data)
@@ -276,6 +318,8 @@ def _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, 
         "sha256": sha,
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
     }
+    if sync is not None:
+        out["sync"] = sync
     usb.write(cp.encode_message(cp.sending_response(command_id, name, size, sha)))
     for off in range(0, size, _RAW_CHUNK):
         usb.write(data[off:off + _RAW_CHUNK])

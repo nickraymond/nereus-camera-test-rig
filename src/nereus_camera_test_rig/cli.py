@@ -49,6 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_experiment.add_argument(
         "--raw", action="store_true",
         help="also take a RAW after each still (Phase 8 S3; overrides the profiles' raw flag)")
+    p_experiment.add_argument(
+        "--sync", action="store_true",
+        help="all cameras shoot the same moment (per-shot skew in sync.json; no analysis)")
     p_experiment.set_defaults(func=_cmd_experiment)
 
     return parser
@@ -110,8 +113,9 @@ def _cmd_experiment(args: argparse.Namespace) -> int:
         environment_label=args.env,
         operator_notes=args.notes,
         camera_names=subset,
-        analysis=not args.no_analysis,
+        analysis=not args.no_analysis and not args.sync,
         raw=True if args.raw else None,
+        sync=args.sync,
     )
 
     print(f"[nereus-rig] experiment {outcome.record.experiment_id}")

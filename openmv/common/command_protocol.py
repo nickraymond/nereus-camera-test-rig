@@ -21,6 +21,12 @@ Control response (board -> host)::
     {"version":1,"command_id":"<id>","status":"completed","output":{...}}\\n
     {"version":1,"command_id":"<id>","status":"failed","error":{"code":..,"message":..}}\\n
 
+Synchronized capture (``"trigger": true`` in ``capture_image`` / ``capture_raw`` settings): the
+board warms up, then sends one non-terminal line and keeps its autos running until the host
+sends any byte (the "fire"); it then snapshots and answers as usual::
+
+    {"version":1,"command_id":"<id>","status":"armed","armed":{"ticks_ms":N}}\\n
+
 File transfer (board -> host), framed per §10 — never mix JSON and raw binary
 without a length::
 
@@ -138,6 +144,12 @@ def sending_response(command_id, filename, size_bytes, sha256, version=PROTOCOL_
         "status": "sending",
         "transfer": {"filename": filename, "size_bytes": size_bytes, "sha256": sha256},
     }
+
+
+def armed_response(command_id, ticks_ms, version=PROTOCOL_VERSION):
+    """Non-terminal line: warmed up, waiting for the host's fire byte (synchronized capture)."""
+    return {"version": version, "command_id": command_id, "status": "armed",
+            "armed": {"ticks_ms": ticks_ms}}
 
 
 def frame_response(command_id, seq, size_bytes, sharpness, width, height,
