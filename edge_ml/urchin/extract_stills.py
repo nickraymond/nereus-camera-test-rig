@@ -44,6 +44,28 @@ JPEG_QUALITY = 95  # E5
 # different pixels, which can flip near-tie picks. PREREG: VideoToolbox, one decoder per out_dir.
 DECODERS = ("videotoolbox", "software")
 DEFAULT_DECODER = "videotoolbox"
+# VideoToolbox hands back nv12 for 8-bit 4:2:0 and p010le for 10-bit 4:2:0; hwdownload must ask
+# for exactly that format (a list like "nv12|p010le" does not negotiate).
+VT_DOWNLOAD_FORMAT = {
+    "yuv420p": "nv12",
+    "yuvj420p": "nv12",
+    "nv12": "nv12",
+    "yuv420p10le": "p010le",
+    "yuv420p10be": "p010le",
+    "p010le": "p010le",
+}
+
+
+def vt_download_format(pix_fmt: str) -> str:
+    try:
+        return VT_DOWNLOAD_FORMAT[pix_fmt]
+    except KeyError:
+        raise ValueError(
+            f"pix_fmt {pix_fmt!r} is not handled by the VideoToolbox path; extract this video "
+            "with --decoder software into a separate out_dir"
+        ) from None
+
+
 PER_WINDOW = round(WINDOW_S / CANDIDATE_STEP_S)
 
 
@@ -65,6 +87,7 @@ class VideoInfo:
     codec: str
     creation_time: str
     rotation: int
+    pix_fmt: str = ""
 
 
 def probe(path: Path) -> VideoInfo:
@@ -101,7 +124,9 @@ def probe(path: Path) -> VideoInfo:
     fps = float(num) / float(den) if float(den) else 0.0
     duration = float(s.get("duration") or fmt.get("duration") or 0.0)
     created = s.get("tags", {}).get("creation_time") or fmt.get("tags", {}).get("creation_time", "")
-    return VideoInfo(path, w, h, duration, fps, s.get("codec_name", ""), created, rotation)
+    return VideoInfo(
+        path, w, h, duration, fps, s.get("codec_name", ""), created, rotation, s.get("pix_fmt", "")
+    )
 
 
 def _is_hidden(p: Path, root: Path) -> bool:
@@ -125,7 +150,14 @@ def count_hidden_videos(video_dir: Path) -> int:
     )
 
 
-def frames(path: Path, width: int, height: int, scale: bool, decoder: str = DEFAULT_DECODER):
+def frames(
+    path: Path,
+    width: int,
+    height: int,
+    scale: bool,
+    decoder: str = DEFAULT_DECODER,
+    pix_fmt: str = "yuv420p",
+):
     """Yield BGR frames of the fps=2 stream, optionally scaled to width×height.
 
     "videotoolbox" keeps decoded frames on the GPU and downloads them explicitly, so if ffmpeg
@@ -136,7 +168,7 @@ def frames(path: Path, width: int, height: int, scale: bool, decoder: str = DEFA
     hw = []
     if decoder == "videotoolbox":
         hw = ["-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"]
-        vf += ",hwdownload,format=nv12|p010le"
+        vf += f",hwdownload,format={vt_download_format(pix_fmt)}"
     if scale:
         vf += f",scale={width}:{height}:flags=area"
     cmd = [
@@ -216,7 +248,7 @@ def extract_video(info: VideoInfo, out_dir: Path, decoder: str = DEFAULT_DECODER
     sw = max(2, round(info.width * k / 2) * 2)
     sh = max(2, round(info.height * k / 2) * 2)
     sharp, hashes = [], []
-    for frame in frames(info.path, sw, sh, scale=True, decoder=decoder):
+    for frame in frames(info.path, sw, sh, scale=True, decoder=decoder, pix_fmt=info.pix_fmt):
         grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         sharp.append(sharpness(grey))
         hashes.append(dhash(grey))
@@ -227,7 +259,9 @@ def extract_video(info: VideoInfo, out_dir: Path, decoder: str = DEFAULT_DECODER
     still_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
     for i, frame in enumerate(
-        frames(info.path, info.width, info.height, scale=False, decoder=decoder)
+        frames(
+            info.path, info.width, info.height, scale=False, decoder=decoder, pix_fmt=info.pix_fmt
+        )
     ):
         if i in keep:
             dest = still_dir / still_name(info.path, i)
