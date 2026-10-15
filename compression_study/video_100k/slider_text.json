@@ -1,0 +1,19 @@
+{
+ "title": "Video in 100 KB",
+ "eyebrow": "Nereus Vision · pool test 2026-10-14 · study 2026-10-15",
+ "lede": "A 5-second underwater clip (720p, 10 frames per second) squeezed into 100 KB, small enough for a satellite or cellular link, and encoded on the camera's own Raspberry Pi Zero 2 W. Drag the divider: left is the original video frame, right is the same frame after the 100 KB encode. Click a view for full screen and zoom to 1:1.",
+ "inline_max_width": 1400,
+ "facts": [
+  {"value": "5 s → 100 KB", "label": "720p, 10 fps, as sent (12× smaller than the camera's own 2 Mbit/s recording)"},
+  {"value": "VMAF 88–92", "label": "calm pool scenes (90 ≈ looks like the original)"},
+  {"value": "VMAF 77", "label": "worst clip: a diver crossing the card (70 = good)"},
+  {"value": "~7 min · 160 MiB", "label": "encode time and memory on a Pi Zero 2 W (emulated, calibrated)"}
+ ],
+ "notes": [
+  "AV1 (open, royalty-free) at full 720p beats every lower resolution or frame rate we tried at the same 100 KB.",
+  "Today's H.264 at the same size is visibly softer and blockier where things move (VMAF 67 on the hardest clip).",
+  "Limit: a busy scene (diver close, bubbles) drops to about VMAF 59, below 'watchable'. Sending a background image once a day lifts it to 64.",
+  "Pi time and memory were measured in a Pi-matched container and scaled to real Pi Zero 2 W runs; a check on the real camera comes next."
+ ],
+ "footer": "Six 5-second clips from the 2026-10-14 pool test (two cameras, three rounds, colour card at 2 m). Quality score: VMAF (0–100, Netflix's perceptual video metric), every frame against the original. Method and full numbers: rig repo compression_study/video_100k/RESULTS.md."
+}

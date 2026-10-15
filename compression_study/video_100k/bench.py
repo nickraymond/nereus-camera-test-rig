@@ -110,7 +110,9 @@ def rate_search(c: Cand, data: Path, clip: str, threads: int, runner=None) -> di
         )
         return size
 
-    if c.knob == "kbps":
+    if c.knob == "fixed":  # one encode, no search: lands under the cap or is over_cap
+        run(c.fixed)
+    elif c.knob == "kbps":
         t = KBPS0 * 0.97 * cap / 100_000 * NFR / c.nfr
         for _ in range(7):
             size = run(t)

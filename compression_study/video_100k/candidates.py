@@ -61,6 +61,7 @@ class Cand:
     cap: int = CAP_B  # bytes; a bundle (still + video) splits the 100 KB
     threads: int | None = None  # fixed thread count (Pi memory configs); None = the runner's
     nfr: int = NFR  # frames in the clip (50 = 5 s); kept for the bg/score helpers
+    fixed: float = 0.0  # knob == "fixed": one encode at this rate, no search (deployed unit)
 
 
 def src_ff(ctx: Ctx) -> str:
@@ -398,6 +399,22 @@ def pi_registry(add) -> None:
     for p in (4, 6, 8, 10):
         for lowmem in (False, True):
             stage3_variants(add, p, lowmem)
+    # POST-HOC (not in PREREG v2, excluded from the decision): what a deployed unit would do --
+    # one 2-pass encode at a fixed 150 kbps request (2-pass sizes ran 0.86-1.04x the request).
+    for p in (4, 6):
+        add(
+            Cand(
+                f"pi_svt_p{p}_lowmem_fixed150",
+                "av1",
+                f"SVT-AV1 2.3 p{p} low-mem, one encode at a fixed 150 kbps (post-hoc)",
+                svt_app(p, LOWMEM),
+                knob="fixed",
+                fixed=150.0,
+                needs_y4m=True,
+                threads=1,
+                tags=["pi", "posthoc"],
+            )
+        )
 
 
 def stage3_variants(add, preset: int, lowmem: bool) -> None:

@@ -11,6 +11,8 @@ Pi time (emulated, calibrated), per clip, from the final encode's container meas
 Ratios = real nereus002 / container, single-thread SVT-AV1 p12 jobs of PR #88, pooled over all
 calibration runs; rows where the container stalled (wall > 3 × CPU) are dropped and listed.
 
+Candidates tagged "posthoc" are tabled but never enter the decision.
+
 Rule (PREREG v2): eligible = ok and ≤ 100,000 B on all 6 main-window clips, Pi high ≤ 600 s and
 peak RSS ≤ 250 MiB on the worst clip. Rank by worst-clip VMAF; tie = within 3.0 of the top;
 inside the tie: standard bitstream first, then lowest Pi high time (within 20 % = equal), then
@@ -66,13 +68,16 @@ def latest(rows: list[dict]) -> dict:
     return out
 
 
-def summarize(recs: dict, cand: str, clips: list[str], cal: dict | None, std: bool) -> dict:
+def summarize(
+    recs: dict, cand: str, clips: list[str], cal: dict | None, std: bool, posthoc: bool = False
+) -> dict:
     rs = [recs.get((cand, c)) for c in clips]
     ok = [r for r in rs if r and r.get("status") == "ok" and r["size_B"] <= CAP_B]
     s = {
         "cand": cand,
         "label": next((r["label"] for r in rs if r and "label" in r), cand),
         "standard": std,
+        "posthoc": posthoc,
         "n_ok": len(ok),
         "n": len(clips),
         "complete": len(ok) == len(clips),
@@ -129,7 +134,7 @@ def summarize(recs: dict, cand: str, clips: list[str], cal: dict | None, std: bo
 
 
 def decide(rows: list[dict]) -> dict:
-    elig = [s for s in rows if s["complete"] and s.get("pi") == "feasible"]
+    elig = [s for s in rows if s["complete"] and s.get("pi") == "feasible" and not s["posthoc"]]
     if not elig:
         return {"winner": None, "why": "no eligible candidate"}
     elig.sort(key=lambda s: -s["vmaf_worst"])
@@ -173,7 +178,8 @@ def table(rows: list[dict], with_pi: bool) -> list[str]:
                 ["–"] * (6 + (3 if with_pi else 0))) + " |")
             continue
         line = (
-            f"| `{s['cand']}` | {s['n_ok']}/{s['n']} | {s['size_max_B']:,} | "
+            f"| `{s['cand']}`{' (post-hoc)' if s.get('posthoc') else ''} | "
+            f"{s['n_ok']}/{s['n']} | {s['size_max_B']:,} | "
             f"{fmt(s['vmaf_worst'])} ({s['worst_clip'].replace('bmcam00', 'c')}) | "
             f"{fmt(s['vmaf_mean'])} | {fmt(s['vmaf_p5_worst'])} | {fmt(s['s2_worst'])} | "
             f"{fmt(s['card_ssim_worst'], 4)} |"
@@ -198,6 +204,9 @@ def main(argv=None) -> int:
         cd = reg.get(c)
         return bool(cd) and cd.display_file is None and cd.display == "hold"
 
+    def ph(c):
+        return bool(reg.get(c)) and "posthoc" in reg[c].tags
+
     mac = latest(read_jsonl(a.run / "stage1" / "results.jsonl"))
     pi = latest(read_jsonl(a.run / "pi" / "results.jsonl"))
     cal = calibration(a.run / "pi") if (a.run / "pi").exists() else None
@@ -206,9 +215,13 @@ def main(argv=None) -> int:
         return sorted(rs, key=lambda s: (not s["complete"], -(s.get("vmaf_worst") or -1e9)))
 
     mac_rows = rank([summarize(mac, c, CLIPS, None, std(c)) for c in sorted({k[0] for k in mac})])
-    pi_rows = rank([summarize(pi, c, CLIPS, cal, std(c)) for c in sorted({k[0] for k in pi})])
+    pi_rows = rank(
+        [summarize(pi, c, CLIPS, cal, std(c), ph(c)) for c in sorted({k[0] for k in pi})]
+    )
     sens = [k[0] for k in pi if k[1] in SENS_CLIPS]
-    sens_rows = rank([summarize(pi, c, SENS_CLIPS, cal, std(c)) for c in sorted(set(sens))])
+    sens_rows = rank(
+        [summarize(pi, c, SENS_CLIPS, cal, std(c), ph(c)) for c in sorted(set(sens))]
+    )
     dec = decide(pi_rows) if cal else {"winner": None, "why": "no Pi runs yet"}
     ceiling = next((s for s in mac_rows if s["complete"]), None)
 
