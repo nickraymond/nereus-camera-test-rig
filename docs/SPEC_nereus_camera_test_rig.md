@@ -226,6 +226,12 @@ Not started until S2a is **Go**; a no-go changes what the rig should test. Each 
   - [~] Capture-only HIL rehearsal: `scripts/hil_soak.py run` — `nereus-rig experiment --raw --no-analysis` every N min, each cycle in a fresh process (hard timeout), one JSON health line per cycle (per-camera still + RAW status / duration / exposure / gain; Pi CPU temp, free RAM + disk, throttle flags, OpenMV USB presence); `summary` prints success rates and failure cycles. *(Trial 2026-09-29 on `nereus002`: 2/2 cycles, 45 s each, 29 MB per cycle. First overnight run started 2026-09-29 04:30 UTC: 5 min × 12 h, no card in frame — reliability incl. ~290 AE3 resets, and a dusk-to-dawn low-light sweep.)*
 - **S8 — Final analysis + report** (P6): A-vs-C per camera, RQ-1, gain-sweep answer, `bmcam001` quick wins.
 
+### Urchin detector on Reef Check video (E6, 2026-10-15) — `edge_ml/urchin/`
+First step under §18 (future inference). Reef Check sent unlabeled underwater video. Did turning it into stills work, and did the stills help a purple-urchin detector? Pre-registered in [`edge_ml/urchin/PREREG.md`](../edge_ml/urchin/PREREG.md) before any video was viewed: extraction rule, held-out split by site/day/video, precision/recall at IoU 0.5, and the "helped" bar. Study-only code: never imported from `src/`, deps in `edge_ml/urchin/requirements.txt`, no Ultralytics (AGPL). Data, stills, labels and runs live under `~/NereusData/nereus-camera-test-rig/`, never in git. No prior urchin labels or model exist (UrchinCam is a PCB repo).
+- [~] PREREG + video → stills (`python -m edge_ml.urchin.extract_stills inventory|extract <video_dir> <out_dir>`).
+- [ ] Labels, models A (zero-shot) and B (fine-tuned), test scores → status note to Reef Check (Nick sends; due Fri 10/23).
+- [ ] Edge-sized model for the rig sensors (mid-Nov): its own PREREG addendum.
+
 ### MVP acceptance (all phases)
 - [ ] Pi detects IMX708, N6, AE3; one command runs one capture set; all available cameras produce a still.
 - [ ] Images stored in one timestamped folder, each with metadata; reference card evaluated; AprilTags detected when resolvable; crop saved when required tags found.
@@ -282,6 +288,7 @@ nereus-camera-test-rig/
 ├── host_tools/color.py  host_tools/tg7/     # Phase 8: thin Mac CLI over color/stages.py; rawpy/exiftool live only here
 ├── host_tools/render_card.py                # Phase 8: card YAML → print SVG/PDF (card V3)
 ├── compression_study/                       # Raw compression study (2026-09-30): methods/, phase2/, REPORT.md; study-only
+├── edge_ml/urchin/                          # Urchin detector study (E6, 2026-10-15): PREREG.md, extract_stills.py; study-only
 ├── scripts/{install_pi.sh,configure_pi_camera.sh,start_web.sh,test_imx708.sh,test_openmv_n6.sh,test_openmv_ae3.sh,collect_diagnostics.sh}
 ├── tests/{unit/, integration/, hardware/, fixtures/{reference_card_images,expected_detections}/, conftest.py}
 ├── experiments/.gitkeep
