@@ -147,20 +147,28 @@ def block_bootstrap(
     n_resamples: int = 2000,
     seed: int = 0,
     alpha: float = 0.05,
+    strata: Sequence[object] | None = None,
 ) -> tuple[float, float, float]:
     """Percentile CI of stat over resampled blocks.
 
-    blocks[i] is the block id of still i (PREREG: video + 30 s window). stat gets an index
-    array of stills (with repeats) and returns a number. Returns (point, low, high)."""
+    blocks[i] is the block id of still i (PREREG: video + 30 s window); strata[i] its held-out
+    group. Blocks are resampled within each stratum, which keeps its block count. stat gets an
+    index array of stills (with repeats) and returns a number; for a paired A-vs-B difference,
+    compute both models on that same index array. Returns (point, low, high)."""
     ids = np.array([str(b) for b in blocks])
-    uniq = np.unique(ids)
-    members = [np.flatnonzero(ids == u) for u in uniq]
+    groups = np.full(len(ids), "") if strata is None else np.array([str(g) for g in strata])
+    by_group = []
+    for g in np.unique(groups):
+        uniq = np.unique(ids[groups == g])
+        by_group.append([np.flatnonzero((ids == u) & (groups == g)) for u in uniq])
     rng = np.random.default_rng(seed)
     point = stat(np.arange(len(ids)))
     vals = []
     for _ in range(n_resamples):
-        pick = rng.integers(0, len(uniq), len(uniq))
-        vals.append(stat(np.concatenate([members[p] for p in pick])))
+        pick = [
+            members[p] for members in by_group for p in rng.integers(0, len(members), len(members))
+        ]
+        vals.append(stat(np.concatenate(pick)))
     vals = np.array(vals, float)
     vals = vals[np.isfinite(vals)]
     lo, hi = np.quantile(vals, [alpha / 2, 1 - alpha / 2]) if len(vals) else (np.nan, np.nan)

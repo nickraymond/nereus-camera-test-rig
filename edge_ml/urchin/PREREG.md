@@ -37,7 +37,8 @@ labels, a label format or a model. Labels start from zero.
 - E1. Candidates: one full-resolution frame every 0.5 s of video.
 - E2. Sharpest per window: in each 2.0 s window, keep the candidate with the highest variance of
   the Laplacian (grey image scaled to 960 px on its long side). This gives one still per 2 s.
-- E3. Blur drop: drop a still whose sharpness is below 0.5 × the median sharpness of its video.
+- E3. Blur drop: drop a still whose sharpness is below 0.5 × the median sharpness of that
+  video's E2 window-best stills (not of all its candidates).
 - E4. Duplicate drop: drop a still whose 64-bit dHash is within Hamming distance 6 of the previous
   kept still from the same video (camera not moving).
 - E5. Output: JPEG quality 95, named `<video>_t<tenths of a second, 6 digits>.jpg`, plus
@@ -49,8 +50,8 @@ review sample: 100 stills (seed 0, drawn in proportion to each video's stills), 
 *usable* (seafloor in view, sharp enough to tell an urchin) and *purple urchin present*
 (yes / no / unsure). Proportions are reported with Wilson 95 % intervals and their n.
 
-**Q1 bar.** "Worked" if ≥ 60 % of the reviewed stills are usable **and** the labelled set meets
-the Q2 minimums (below). If the yield is fine but too few urchins are labelled, the answer is
+**Q1 bar.** "Worked" if the share of reviewed stills that are usable is ≥ 60 % (point estimate)
+with a Wilson 95 % lower bound ≥ 50 %, **and** the labelled set meets the Q2 minimums (below). If the yield is fine but too few urchins are labelled, the answer is
 "worked partly: too few urchins to test a detector".
 
 ## Labels
@@ -58,7 +59,7 @@ the Q2 minimums (below). If the yield is fine but too few urchins are labelled, 
 - Class: live purple sea urchin (*Strongylocentrotus purpuratus*). Red urchins, empty tests and
   everything else count as background.
 - Box: tight around the visible test plus spines.
-- **Ignore boxes** (a detection on one is neither a TP nor an FP, and it is not a miss): less than
+- **Ignore boxes** (never a miss; see Metric for how detections on them are handled): less than
   50 % visible, purple vs red unclear, urchin vs not unclear, or short side < 16 px at native
   resolution.
 - Pre-labels: the zero-shot detector (model A below) at score ≥ 0.05, then NMS at IoU 0.5. The
@@ -78,17 +79,20 @@ the Q2 minimums (below). If the yield is fine but too few urchins are labelled, 
 
 - Group = site, if sites can be identified (folder or file names, or Reef Check's notes);
   otherwise recording day (`creation_time`); otherwise the video file.
-- A group whose reviewed stills (Q1 sample) show no purple urchin is not eligible for the test set.
-  It may still be used in training as negatives.
+- Eligibility screen (recorded in `labels/group_screen.csv`): for each group, up to 40 of its
+  stills, evenly spaced in time (all of them if it has fewer), are checked for a purple urchin.
+  A group with none in its screen is not eligible for the test set; it may still be used in
+  training as negatives. The screen is fixed before the split is drawn.
 - **≥ 4 eligible groups:** test = ⌈⅓⌉ of the eligible groups, at least 2, taken in ascending
   SHA-256 order of the group name (chosen without looking at content). The rest are training.
   Validation = one training group (lowest hash) if ≥ 3 training groups remain; otherwise the last
-  20 % (by time) of each training video.
+  20 % (by time) of each training video, with the 30 s before it discarded.
 - **2–3 eligible groups:** leave-one-group-out. Each fold is reported, and the bar must hold in
-  every fold.
+  every fold. A fold's validation comes from its training groups only, by the rule above.
 - **1 group:** split within each video by time: the first 70 % is training, the last 30 % is test,
-  and 30 s between them is discarded. The result is labelled "same dive, weak", and "helped" may
-  only be called "promising".
+  and 30 s between them is discarded (validation as above, inside the first 70 %). The outcome
+  is "inconclusive (same dive)" whatever the numbers; if B beats A there, the note may describe
+  it as promising, but it is not a "helped" result.
 - Caps: ≤ 150 test stills and ≤ 300 training stills, seeded random samples drawn in proportion to
   each video's stills. The caps may change once, before labelling starts, via the amendment log.
 - The test still list is written (`labels/test_stills.txt`, SHA-256 in the MANIFEST) before any
@@ -97,7 +101,10 @@ the Q2 minimums (below). If the yield is fine but too few urchins are labelled, 
 ## Models
 
 - **A — without Reef Check stills:** OWLv2 zero-shot (`google/owlv2-base-patch16-ensemble`,
-  Apache-2.0), single text query `"purple sea urchin"`. This is the "no stills" baseline.
+  Apache-2.0), single text query `"purple sea urchin"`. This is the "no stills" baseline. OWLv2
+  sees a 960 × 960 input, so small urchins would vanish on a whole frame: A runs on square
+  tiles of side min(short side, 1080 px), spaced to cover the frame with ≥ 20 % overlap, and the
+  tile detections are merged by NMS at IoU 0.5. The same tiled A makes the pre-labels.
 - **B — with Reef Check stills:** torchvision `fasterrcnn_mobilenet_v3_large_fpn`, COCO weights
   (BSD-3), with a new 2-class head, fine-tuned on the training stills. Fixed recipe: SGD, learning
   rate 0.005, momentum 0.9, weight decay 1e-4, batch 4, 24 epochs with ×0.1 steps at epochs 16
@@ -115,12 +122,17 @@ the Q2 minimums (below). If the yield is fine but too few urchins are labelled, 
 ## Metric
 
 - Per test still: detections are sorted by score and matched greedily; a detection is a TP if its
-  IoU with an unmatched label box is ≥ 0.5. Detections that match an ignore box are dropped. All
-  other detections are FPs, and unmatched label boxes are FNs.
+  IoU with the best-overlapping *unmatched* label box is ≥ 0.5. A detection that is not a TP is
+  dropped (neither TP nor FP) if its IoU with any ignore box is ≥ 0.5; any number of detections
+  may be dropped on the same ignore box. All other detections are FPs, and unmatched label boxes
+  are FNs.
 - **Primary: precision and recall at IoU 0.5 at the frozen confidence threshold**, plus their F1.
   Secondary: AP50 (all-point interpolation), which does not depend on a threshold.
-- Uncertainty: 95 % bootstrap (2000 resamples) over contiguous 30 s blocks of the held-out videos,
-  because stills from one dive are correlated.
+- Uncertainty: 95 % percentile bootstrap (2000 resamples, seed 0) over contiguous 30 s blocks of
+  the held-out videos, because stills from one dive are correlated. Blocks are resampled
+  **within each held-out group** (stratified, each group keeping its block count), and a
+  difference such as F1(B) − F1(A) is computed on the **same** resampled stills for both models
+  (paired).
 - Every table states n: stills, label boxes, ignore boxes, videos and groups.
 
 ## Bar for "the stills helped" (Q2)
@@ -130,7 +142,8 @@ Minimums for any claim: ≥ 2 held-out groups (or folds) and ≥ 100 test label 
 "**Helped**" if **all** of:
 
 1. B's F1 ≥ A's F1 + 0.10 (absolute), for every one of the three seeds;
-2. the 95 % block-bootstrap interval of F1(B) − F1(A) excludes 0, for every seed;
+2. the paired, group-stratified 95 % block-bootstrap interval of F1(B) − F1(A) excludes 0, for
+   every seed;
 3. B's F1 ≥ A's F1 in every held-out group (or every fold) — never decided on one group.
 
 Outcomes: "**helped**" (minimums met and 1–3 hold); "**not shown**" (minimums met, but 1–3 do not
@@ -152,4 +165,4 @@ training stills, to show whether more video would still help.
 
 | Date | Change | Why | Made before which numbers? |
 |---|---|---|---|
-| — | — | — | — |
+| 2026-10-15 | QE review of #117 (before any video was downloaded or viewed): 1-group outcome is "inconclusive"; paired, group-stratified bootstrap; 30 s gap before validation, LOGO validation from training groups; E3 text matches the code (median of window-bests); test eligibility from a per-group screen; Q1 bar uses a Wilson lower bound; ignore-box rule spelled out. Also A runs tiled. | QE FAIL items 1–5 + nits | All — no data yet |

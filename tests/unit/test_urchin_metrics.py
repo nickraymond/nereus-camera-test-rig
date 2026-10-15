@@ -78,3 +78,18 @@ def test_block_bootstrap_is_paired_and_deterministic():
     assert pt == pytest.approx(2.2)
     assert 1.0 <= lo <= pt <= hi <= 4.0
     assert m.block_bootstrap(blocks, lambda idx: float(vals[idx].mean()), 500, seed=1)[1] == lo
+
+
+def test_block_bootstrap_stratified_keeps_each_group_and_paired_diff_is_exact():
+    # One block per group: stratified resampling must always draw one block from each group.
+    blocks = ["g1v#0", "g1v#0", "g2v#0"]
+    strata = np.array(["g1", "g1", "g2"])
+    vals = np.array([0.0, 0.0, 10.0])
+    pt, lo, hi = m.block_bootstrap(blocks, lambda idx: float(vals[idx].mean()), 200, strata=strata)
+    assert (pt, lo, hi) == pytest.approx((10 / 3, 10 / 3, 10 / 3))
+    # Paired: B = A + 1 on every still → the difference is exactly 1 in every resample.
+    a = np.array([0.2, 0.9, 0.4])
+    pt, lo, hi = m.block_bootstrap(
+        ["v#0", "v#1", "v#2"], lambda idx: float(((a + 1)[idx] - a[idx]).mean()), 200
+    )
+    assert (pt, lo, hi) == pytest.approx((1.0, 1.0, 1.0))
