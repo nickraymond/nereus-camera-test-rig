@@ -88,3 +88,53 @@ def test_inventory_and_extract_on_synthetic_video(tmp_path):
     for f in files:
         img = cv2.imread(str(f))
         assert img is not None and img.shape == (180, 320, 3)
+
+
+def test_find_videos_skips_hidden_appledouble_files(tmp_path):
+    (tmp_path / "site").mkdir()
+    (tmp_path / "site" / "clip.MP4").write_bytes(b"x")
+    (tmp_path / "site" / "._clip.MP4").write_bytes(b"x")  # exFAT AppleDouble sidecar
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "other.mp4").write_bytes(b"x")
+    assert [p.name for p in ex.find_videos(tmp_path)] == ["clip.MP4"]
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
+def test_extract_writes_run_record_and_hwaccel_matches_software(tmp_path):
+    import json
+    import sys
+
+    video_dir = tmp_path / "video"
+    video_dir.mkdir()
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "life=s=320x180:r=10:ratio=0.3:seed=7",
+            "-t",
+            "4",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "libx264",
+            str(video_dir / "c.mp4"),
+        ],
+        check=True,
+    )
+    assert ex.main(["extract", str(video_dir), str(tmp_path / "sw")]) == 0
+    run = json.loads((tmp_path / "sw" / "extract_run.json").read_text())
+    assert run["videos"] == 1 and run["hwaccel"] is None and run["rules"]["window_s"] == 2.0
+    if sys.platform == "darwin":
+        assert (
+            ex.main(["extract", str(video_dir), str(tmp_path / "vt"), "--hwaccel", "videotoolbox"])
+            == 0
+        )
+        sw = (tmp_path / "sw" / "stills.csv").read_text().splitlines()
+        vt = (tmp_path / "vt" / "stills.csv").read_text().splitlines()
+        # Same selection by both decoders (sharpness may differ in the last digits).
+        status = [ln.split(",")[5] for ln in sw[1:]], [ln.split(",")[5] for ln in vt[1:]]
+        assert status[0] == status[1]

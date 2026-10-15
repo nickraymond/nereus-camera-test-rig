@@ -1,7 +1,7 @@
 """Video → stills for the Reef Check urchin study (PREREG rules E0–E5).
 
     python -m edge_ml.urchin.extract_stills inventory <video_dir> <out_dir>
-    python -m edge_ml.urchin.extract_stills extract   <video_dir> <out_dir>
+    python -m edge_ml.urchin.extract_stills extract   <video_dir> <out_dir> [--hwaccel videotoolbox]
 
 `inventory` writes `inventory.csv` (ffprobe facts + SHA-256 per file). `extract` writes
 `stills/<video>/<video>_tNNNNNN.jpg` and `stills.csv` (one row per 0.5 s candidate, with the
@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import cv2
@@ -100,11 +101,20 @@ def probe(path: Path) -> VideoInfo:
 
 
 def find_videos(video_dir: Path) -> list[Path]:
-    return sorted(p for p in video_dir.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
+    """Video files under video_dir, skipping hidden ones (exFAT/macOS `._` AppleDouble files)."""
+    return sorted(
+        p
+        for p in video_dir.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() in VIDEO_EXTS
+        and not any(part.startswith(".") for part in p.relative_to(video_dir).parts)
+    )
 
 
-def frames(path: Path, width: int, height: int, scale: bool):
-    """Yield BGR frames of the fps=2 stream, optionally scaled to width×height."""
+def frames(path: Path, width: int, height: int, scale: bool, hwaccel: str | None = None):
+    """Yield BGR frames of the fps=2 stream, optionally scaled to width×height.
+
+    hwaccel (e.g. "videotoolbox") must be the same for both passes of a video."""
     vf = f"fps={1 / CANDIDATE_STEP_S:g}"
     if scale:
         vf += f",scale={width}:{height}:flags=area"
@@ -113,6 +123,7 @@ def frames(path: Path, width: int, height: int, scale: bool):
         "-v",
         "error",
         "-nostdin",
+        *(["-hwaccel", hwaccel] if hwaccel else []),
         "-i",
         str(path),
         "-vf",
@@ -177,14 +188,14 @@ def still_name(video: Path, index: int) -> str:
     return f"{video.stem}_t{tenths:06d}.jpg"
 
 
-def extract_video(info: VideoInfo, out_dir: Path) -> list[dict]:
+def extract_video(info: VideoInfo, out_dir: Path, hwaccel: str | None = None) -> list[dict]:
     t0 = time.monotonic()
     long_side = max(info.width, info.height)
     k = SHARP_LONG_SIDE / long_side
     sw = max(2, round(info.width * k / 2) * 2)
     sh = max(2, round(info.height * k / 2) * 2)
     sharp, hashes = [], []
-    for frame in frames(info.path, sw, sh, scale=True):
+    for frame in frames(info.path, sw, sh, scale=True, hwaccel=hwaccel):
         grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         sharp.append(sharpness(grey))
         hashes.append(dhash(grey))
@@ -194,7 +205,9 @@ def extract_video(info: VideoInfo, out_dir: Path) -> list[dict]:
     still_dir = out_dir / "stills" / info.path.stem
     still_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
-    for i, frame in enumerate(frames(info.path, info.width, info.height, scale=False)):
+    for i, frame in enumerate(
+        frames(info.path, info.width, info.height, scale=False, hwaccel=hwaccel)
+    ):
         if i in keep:
             dest = still_dir / still_name(info.path, i)
             if not cv2.imwrite(str(dest), frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]):
@@ -273,11 +286,18 @@ def cmd_inventory(video_dir: Path, out_dir: Path) -> int:
     return 0 if rows else 1
 
 
-def cmd_extract(video_dir: Path, out_dir: Path) -> int:
+def ffmpeg_version() -> str:
+    out = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, check=False)
+    return out.stdout.splitlines()[0] if out.stdout else "unknown"
+
+
+def cmd_extract(video_dir: Path, out_dir: Path, hwaccel: str | None = None) -> int:
     rows, failed = [], []
-    for path in find_videos(video_dir):
+    started = datetime.now(UTC).isoformat(timespec="seconds")
+    videos = find_videos(video_dir)
+    for path in videos:
         try:
-            rows += extract_video(probe(path), out_dir)
+            rows += extract_video(probe(path), out_dir, hwaccel)
         except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
             failed.append(path.name)
             log.error("extract failed for %s: %s", path, exc)
@@ -289,6 +309,26 @@ def cmd_extract(video_dir: Path, out_dir: Path) -> int:
         w.writeheader()
         w.writerows(rows)
     kept = sum(r["status"] == "kept" for r in rows)
+    run = {
+        "video_dir": str(video_dir),
+        "videos": len(videos),
+        "failed": failed,
+        "candidates": len(rows),
+        "kept": kept,
+        "hwaccel": hwaccel,
+        "ffmpeg": ffmpeg_version(),
+        "rules": {
+            "candidate_step_s": CANDIDATE_STEP_S,
+            "window_s": WINDOW_S,
+            "sharp_long_side": SHARP_LONG_SIDE,
+            "blur_fraction": BLUR_FRACTION,
+            "dup_hamming": DUP_HAMMING,
+            "jpeg_quality": JPEG_QUALITY,
+        },
+        "started_utc": started,
+        "finished_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    (out_dir / "extract_run.json").write_text(json.dumps(run, indent=1) + "\n")
     log.info(
         "extract: %d candidates, %d stills kept, %d videos failed %s",
         len(rows),
@@ -304,10 +344,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("command", choices=["inventory", "extract"])
     ap.add_argument("video_dir", type=Path)
     ap.add_argument("out_dir", type=Path)
+    ap.add_argument(
+        "--hwaccel",
+        choices=["videotoolbox"],
+        default=None,
+        help="hardware decode for both passes (Mac: much less CPU heat than software HEVC)",
+    )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    fn = cmd_inventory if args.command == "inventory" else cmd_extract
-    return fn(args.video_dir, args.out_dir)
+    if args.command == "inventory":
+        return cmd_inventory(args.video_dir, args.out_dir)
+    return cmd_extract(args.video_dir, args.out_dir, args.hwaccel)
 
 
 if __name__ == "__main__":
