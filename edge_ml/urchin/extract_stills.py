@@ -1,7 +1,7 @@
 """Video → stills for the Reef Check urchin study (PREREG rules E0–E5).
 
     python -m edge_ml.urchin.extract_stills inventory <video_dir> <out_dir>
-    python -m edge_ml.urchin.extract_stills extract   <video_dir> <out_dir>
+    python -m edge_ml.urchin.extract_stills extract   <video_dir> <out_dir> [--decoder software]
 
 `inventory` writes `inventory.csv` (ffprobe facts + SHA-256 per file). `extract` writes
 `stills/<video>/<video>_tNNNNNN.jpg` and `stills.csv` (one row per 0.5 s candidate, with the
@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import cv2
@@ -39,6 +40,32 @@ SHARP_LONG_SIDE = 960  # E2
 BLUR_FRACTION = 0.5  # E3
 DUP_HAMMING = 6  # E4
 JPEG_QUALITY = 95  # E5
+# The decoder is part of the method: for 8-bit sources VideoToolbox and software decoding give
+# different pixels, which can flip near-tie picks. PREREG: VideoToolbox, one decoder per out_dir.
+DECODERS = ("videotoolbox", "software")
+DEFAULT_DECODER = "videotoolbox"
+# VideoToolbox hands back nv12 for 8-bit 4:2:0 and p010le for 10-bit 4:2:0; hwdownload must ask
+# for exactly that format (a list like "nv12|p010le" does not negotiate).
+VT_DOWNLOAD_FORMAT = {
+    "yuv420p": "nv12",
+    "yuvj420p": "nv12",
+    "nv12": "nv12",
+    "yuv420p10le": "p010le",
+    "yuv420p10be": "p010le",
+    "p010le": "p010le",
+}
+
+
+def vt_download_format(pix_fmt: str) -> str:
+    try:
+        return VT_DOWNLOAD_FORMAT[pix_fmt]
+    except KeyError:
+        raise ValueError(
+            f"pix_fmt {pix_fmt!r} is not handled by the VideoToolbox path; extract this video "
+            "with --decoder software into a separate out_dir"
+        ) from None
+
+
 PER_WINDOW = round(WINDOW_S / CANDIDATE_STEP_S)
 
 
@@ -60,6 +87,7 @@ class VideoInfo:
     codec: str
     creation_time: str
     rotation: int
+    pix_fmt: str = ""
 
 
 def probe(path: Path) -> VideoInfo:
@@ -96,16 +124,51 @@ def probe(path: Path) -> VideoInfo:
     fps = float(num) / float(den) if float(den) else 0.0
     duration = float(s.get("duration") or fmt.get("duration") or 0.0)
     created = s.get("tags", {}).get("creation_time") or fmt.get("tags", {}).get("creation_time", "")
-    return VideoInfo(path, w, h, duration, fps, s.get("codec_name", ""), created, rotation)
+    return VideoInfo(
+        path, w, h, duration, fps, s.get("codec_name", ""), created, rotation, s.get("pix_fmt", "")
+    )
+
+
+def _is_hidden(p: Path, root: Path) -> bool:
+    return any(part.startswith(".") for part in p.relative_to(root).parts)
 
 
 def find_videos(video_dir: Path) -> list[Path]:
-    return sorted(p for p in video_dir.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
+    """Video files under video_dir, skipping hidden ones (exFAT/macOS `._` AppleDouble files)."""
+    return sorted(
+        p
+        for p in video_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTS and not _is_hidden(p, video_dir)
+    )
 
 
-def frames(path: Path, width: int, height: int, scale: bool):
-    """Yield BGR frames of the fps=2 stream, optionally scaled to width×height."""
+def count_hidden_videos(video_dir: Path) -> int:
+    return sum(
+        1
+        for p in video_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTS and _is_hidden(p, video_dir)
+    )
+
+
+def frames(
+    path: Path,
+    width: int,
+    height: int,
+    scale: bool,
+    decoder: str = DEFAULT_DECODER,
+    pix_fmt: str = "yuv420p",
+):
+    """Yield BGR frames of the fps=2 stream, optionally scaled to width×height.
+
+    "videotoolbox" keeps decoded frames on the GPU and downloads them explicitly, so if ffmpeg
+    cannot use VideoToolbox it fails instead of silently decoding in software."""
+    if decoder not in DECODERS:
+        raise ValueError(f"decoder {decoder!r} not in {DECODERS}")
     vf = f"fps={1 / CANDIDATE_STEP_S:g}"
+    hw = []
+    if decoder == "videotoolbox":
+        hw = ["-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"]
+        vf += f",hwdownload,format={vt_download_format(pix_fmt)}"
     if scale:
         vf += f",scale={width}:{height}:flags=area"
     cmd = [
@@ -113,6 +176,7 @@ def frames(path: Path, width: int, height: int, scale: bool):
         "-v",
         "error",
         "-nostdin",
+        *hw,
         "-i",
         str(path),
         "-vf",
@@ -177,14 +241,14 @@ def still_name(video: Path, index: int) -> str:
     return f"{video.stem}_t{tenths:06d}.jpg"
 
 
-def extract_video(info: VideoInfo, out_dir: Path) -> list[dict]:
+def extract_video(info: VideoInfo, out_dir: Path, decoder: str = DEFAULT_DECODER) -> list[dict]:
     t0 = time.monotonic()
     long_side = max(info.width, info.height)
     k = SHARP_LONG_SIDE / long_side
     sw = max(2, round(info.width * k / 2) * 2)
     sh = max(2, round(info.height * k / 2) * 2)
     sharp, hashes = [], []
-    for frame in frames(info.path, sw, sh, scale=True):
+    for frame in frames(info.path, sw, sh, scale=True, decoder=decoder, pix_fmt=info.pix_fmt):
         grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         sharp.append(sharpness(grey))
         hashes.append(dhash(grey))
@@ -194,7 +258,11 @@ def extract_video(info: VideoInfo, out_dir: Path) -> list[dict]:
     still_dir = out_dir / "stills" / info.path.stem
     still_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
-    for i, frame in enumerate(frames(info.path, info.width, info.height, scale=False)):
+    for i, frame in enumerate(
+        frames(
+            info.path, info.width, info.height, scale=False, decoder=decoder, pix_fmt=info.pix_fmt
+        )
+    ):
         if i in keep:
             dest = still_dir / still_name(info.path, i)
             if not cv2.imwrite(str(dest), frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]):
@@ -222,6 +290,7 @@ def extract_video(info: VideoInfo, out_dir: Path) -> list[dict]:
             "dhash": f"{hashes[i]:016x}",
             "status": status[i],
             "still": still_name(info.path, i) if status[i] == "kept" else "",
+            "decoder": decoder,
         }
         for i in range(len(status))
     ]
@@ -273,22 +342,69 @@ def cmd_inventory(video_dir: Path, out_dir: Path) -> int:
     return 0 if rows else 1
 
 
-def cmd_extract(video_dir: Path, out_dir: Path) -> int:
+def ffmpeg_version() -> str:
+    out = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, check=False)
+    return out.stdout.splitlines()[0] if out.stdout else "unknown"
+
+
+def cmd_extract(video_dir: Path, out_dir: Path, decoder: str = DEFAULT_DECODER) -> int:
+    prev = out_dir / "extract_run.json"
+    if prev.exists() and (old := json.loads(prev.read_text()).get("decoder")) != decoder:
+        raise ValueError(
+            f"{out_dir} was extracted with decoder {old!r}; refusing {decoder!r} (pixels differ, "
+            "so still names and picks could change). Use a new out_dir."
+        )
     rows, failed = [], []
-    for path in find_videos(video_dir):
+    started = datetime.now(UTC).isoformat(timespec="seconds")
+    videos = find_videos(video_dir)
+    hidden = count_hidden_videos(video_dir)
+    if hidden:
+        log.info("skipping %d hidden video-named files (e.g. exFAT ._ sidecars)", hidden)
+    for path in videos:
         try:
-            rows += extract_video(probe(path), out_dir)
+            rows += extract_video(probe(path), out_dir, decoder)
         except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
             failed.append(path.name)
             log.error("extract failed for %s: %s", path, exc)
     out_dir.mkdir(parents=True, exist_ok=True)
     with (out_dir / "stills.csv").open("w", newline="") as f:
         w = csv.DictWriter(
-            f, fieldnames=["video", "index", "t_s", "sharpness", "dhash", "status", "still"]
+            f,
+            fieldnames=[
+                "video",
+                "index",
+                "t_s",
+                "sharpness",
+                "dhash",
+                "status",
+                "still",
+                "decoder",
+            ],
         )
         w.writeheader()
         w.writerows(rows)
     kept = sum(r["status"] == "kept" for r in rows)
+    run = {
+        "video_dir": str(video_dir),
+        "videos": len(videos),
+        "hidden_skipped": hidden,
+        "failed": failed,
+        "candidates": len(rows),
+        "kept": kept,
+        "decoder": decoder,
+        "ffmpeg": ffmpeg_version(),
+        "rules": {
+            "candidate_step_s": CANDIDATE_STEP_S,
+            "window_s": WINDOW_S,
+            "sharp_long_side": SHARP_LONG_SIDE,
+            "blur_fraction": BLUR_FRACTION,
+            "dup_hamming": DUP_HAMMING,
+            "jpeg_quality": JPEG_QUALITY,
+        },
+        "started_utc": started,
+        "finished_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    (out_dir / "extract_run.json").write_text(json.dumps(run, indent=1) + "\n")
     log.info(
         "extract: %d candidates, %d stills kept, %d videos failed %s",
         len(rows),
@@ -304,10 +420,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("command", choices=["inventory", "extract"])
     ap.add_argument("video_dir", type=Path)
     ap.add_argument("out_dir", type=Path)
+    ap.add_argument(
+        "--decoder",
+        choices=DECODERS,
+        default=DEFAULT_DECODER,
+        help="PREREG: videotoolbox (Mac hardware, low heat). Pixels differ between decoders.",
+    )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    fn = cmd_inventory if args.command == "inventory" else cmd_extract
-    return fn(args.video_dir, args.out_dir)
+    if args.command == "inventory":
+        return cmd_inventory(args.video_dir, args.out_dir)
+    return cmd_extract(args.video_dir, args.out_dir, args.decoder)
 
 
 if __name__ == "__main__":
