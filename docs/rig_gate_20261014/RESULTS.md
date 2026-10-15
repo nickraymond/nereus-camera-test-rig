@@ -159,14 +159,14 @@ cycle log has the values.
 
 ### Still skew across both runs (Friday step-3 bar: synced stills ≤ 100 ms)
 
-From the per-shot `sync.json` frame timestamps, gate007 + gate008 cycles 1–28, n = 53 sets:
+From the per-set frame timestamps (`cycles.csv` / `sync.json`), gate007 + gate008, all 112 sets:
 
 | shot | median | p95 | max | over 100 ms |
 |---|---|---|---|---|
-| **still** (JPEG; boards' ISP) | 92 ms | 124 ms | 164 ms | **18/53 (34 %)** |
-| **RAW** (IMX708 DNG + JPEG, board Bayer) | 46 ms | 60 ms | 64 ms | **0/53** |
+| **still** (JPEG; boards' ISP) | 86 ms | 124 ms | 187 ms | **30/112 (27 %)** |
+| **RAW** (IMX708 DNG + JPEG, board Bayer) | 40 ms | 60 ms | 64 ms | **0/112** |
 
-**Cause, named from the data.** The AE3 is the last camera in 49/53 still shots. Two fixed
+**Cause, named from the data.** The AE3 is the last camera in 49 of the first 53 still shots (per-camera offsets, sync.json). Two fixed
 mechanisms add up:
 
 1. **The AE3 takes one frame after its fire.** Its fire-to-snapshot is 66–67 ms on every shot
@@ -185,11 +185,11 @@ three.
 - **The stills block (still + RAW per set):** the RAW shot meets it; the JPEG still shot misses it
   in ~1 in 3.
 - **Scoring (PjM 10/15, d42 pending Nick):** against the Friday plan's ≤ 100 ms bar, the JPEG
-  still shots over 100 ms are **FAIL**: 18/53, 34 %. The RAW shots pass: 0/53 over. This is the
+  still shots over 100 ms are **FAIL**: 30/112, 27 %. The RAW shots pass: 0/112 over. This is the
   Friday plan's bar, separate from the 25× gate's pre-registered checks (A4: still skew reported,
   not gated).
 - Proposal (for Nick's d42): **report-only for Friday**. No code change (freeze). `sync.json` records every shot's
-  skew, so analysis can keep the shots ≤ 100 ms (~2/3 of still shots and every RAW shot).
+  skew, so analysis can keep the shots ≤ 100 ms (~3/4 of still shots and every RAW shot).
 - For static scenes (the card and board held still) 0.16 s does not change the image. That is
   far inside Nick's original "±1 s" concern.
 - **Fix after Friday:**
@@ -199,10 +199,11 @@ three.
 
 ### N6 RAW byte loss (matters for Friday CAL B, which uses the N6 Bayer)
 
-- Unloaded: 1 N6 RAW lost in 67 cycles (1.5 %), gate008 c36 (`timed out reading 1024000 bytes`).
+- Unloaded: 2 N6 RAWs lost in 110 cycles (1.8 %), gate008 c36 and c52
+  (`timed out reading 1024000 bytes`).
 - Under harness pull load: 2 more (gate007 c5–6).
 - RAWs are not gated.
-- Friday CAL B (10 min, ~46 shots at ~13 s): expect ~1–2 N6 RAWs lost and ~44 good, against
+- Friday CAL B (10 min, ~46 shots at ~13 s): expect ~1 N6 RAW lost and ~45 good, against
   the calibration pre-reg's B1 (≥ 15 distinct usable poses). Not at risk from loss; coverage is
   the real risk.
 - The IMX708 and AE3 RAWs never failed.
@@ -228,26 +229,54 @@ A1–A3 and A5–A8. In `scripts/gate_cycle.py` `evaluate()`, every `fails.appen
 - **Still skew** (A4).
 - VIN/VBAT.
 
-**Every gate008 cycle that failed a gated check (as of cycle 55):**
+**Every gate008 cycle that failed a gated check (final, 87 cycles):**
 
 | cycle | gated failure | camera / cause |
 |---|---|---|
 | 22 | `video:camera_failed` | N6 video stream lost bytes 4.6 s in (47 frames) |
 | 31 | `video:camera_failed` | N6 video stream lost bytes 3.4 s in (34 frames) |
 | 44 | `video:camera_failed` | N6 video stream lost bytes ~1 s in (11 frames) |
+| 69 | `video:camera_failed` | N6 video stream lost bytes ~1 s in (11 frames), at streak 24 |
 
 No other gated check failed in gate008: stills, shutdown, power-cycle and start time were all
-clean. The N6 RAW losses (c36, c52) are not gated failures. The final list will be confirmed
-from the full CSV at the results commit.
+clean. The N6 RAW losses (c36, c52) are not gated failures. Confirmed from the full CSV.
 
-### Run 2 (repeat): gate008, from 9:59 AM
+### Run 2 (repeat): gate008, 9:59 AM–2:39 PM. **Strict 25 in a row NOT reached (best 24). Nick's start/stop + stills bar: 87/87 consecutive**
 
-Armed automatically when run 1 passed (A6). The STOP at cycle 1 was the planned pause for the
-audit and switch cycles (A9). Results: _filled when it completes_.
+87 cold-boot cycles on the UPS timer. The planned pauses were at c1 (A8 audit of run 1) and
+11:26–11:40 (waiting for the switch cycles). It stopped at 2:39 PM for the results commit.
 
-### Nick's real switch cycles (A9)
+| measure (n = 87) | result |
+|---|---|
+| live results | **83 PASS, 4 FAIL, 0 VOID** |
+| gated failures | c22, c31, c44, c69: all `video:camera_failed`, all the **N6 video stream** losing bytes (47 / 34 / 11 / 11 frames). No other gated check ever failed |
+| strict streak (A2, video gated) | best **24** (c45–c68, broken at c69); 18 at the stop |
+| Nick's original bar (all three cameras wake, every still verifies, clean start/stop; video excluded) | **87/87 consecutive** |
+| previous shutdown / boards power-cycled / quirk active | clean 87/87 / 87/87 / 87/87 |
+| AE3 / N6 first contact | ok 87/87 / ok 87/87. The recovery ladder was never needed |
+| last verified still (Pi uptime) | median 60.9 s, p90 63.9 s, max 89.4 s (bar 180 s) |
+| RAWs | 3/3 in 85/87. N6 RAW byte loss at c36 and c52, unloaded (not gated) |
+| video start skew (PASS clips) | median 15.3 ms, p90 26.2 ms, max 57.4 ms; 0 board frames lost |
+| **A8 audit** | **83/83 PASS clips decode fully**, decoded = metadata. 0 A8 failures |
 
-_Filled after the run (planned ~11:25 AM, on battery)._
+**The N6 video stream is the one weak link.**
+- Across both runs, 4 of 112 clips (3.6 %) lost the N6 stream partway. The cause is USB bytes
+  dropped by the N6, after which the host reader never resynced. The IMX708 and AE3 clips never
+  failed.
+- A reader fix exists on `fix/n6-video-resync` (aa06bc7): it decodes the header at the line's
+  tail and drops a short frame. With it, a byte loss costs one frame instead of the clip.
+- That fix is **not** in #115: it changes the gated build, and it would still fail A2's "0 lost
+  frames". It is follow-up work after Friday.
+
+**Per the PjM's 3 PM rule** (Nick, 10/15 ~1:02 PM: "still images are a must, video not required
+but is valuable"): #115 may merge on gate007's full pass plus gate008's clean start/stop record,
+"only if every gate008 failure is the N6 video loss". **Every gate008 failure is the N6 video
+loss** (table above).
+
+### Nick's real switch cycles (A9 → A10)
+
+Skipped. Nick, 10/15 ~1:02 PM: "skip". See PREREG A10 for what still covers the switch path.
+Battery boots after the fix remain untested; the whole gate ran on the charger.
 
 ## Simultaneous stills (Nick, 10/14 ~7:40 PM)
 
