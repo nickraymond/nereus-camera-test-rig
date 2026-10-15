@@ -13,12 +13,17 @@ Friday's pool pull).
 settings, 1280×720, 10 fps, one key frame, 2-pass, bitrate searched per clip into 95–100 % of
 100,000 B** (final requests 150–176 kbps, 1–3 encodes per clip).
 
-> **Read this with the rule's second outcome.** p4 low-mem wins only because the cached-background
-> candidate (79.1) sets the top of the tie window, which leaves p6 low-mem (74.8, 4.3 below) outside,
-> and is then removed by the "standard bitstream first" step. Without that candidate (and on stage 2
-> alone) the same rule picks **p6 low-mem: 74.8, 2.2–2.6 min on the Pi**. Both readings follow the
-> PREREG text; p4 stays the recommendation because the PREREG ranks the candidates that ran. The
-> real choice, **+2.0 VMAF on the worst clip vs ~3× the encode time (and energy)**, is Nick's call.
+> **Read this with the rule's other outcomes.** p4 low-mem wins only because the cached-background
+> candidate (79.1) sets the top of the tie window, which leaves the p6 recipes outside, and is then
+> removed by the "standard bitstream first" step. The same rule on other candidate sets:
+> - **on stage 2 alone:** p6 low-mem, 74.8, 2.2–2.6 min on the Pi;
+> - **on every candidate except the cached background:** p6 low-mem at 960×540, 73.8, 1.4–1.7 min,
+>   92 MiB. It sits exactly on the 3.0-point tie boundary (76.79 − 73.79 at the 2-decimal precision
+>   the scores are stored at) and then wins on encode time.
+>
+> All three follow the PREREG text; p4 stays the recommendation because the PREREG ranks the
+> candidates that ran. The real choice, **quality (p4: +2.0 VMAF over p6, +3.0 over p6 at 540p) vs
+> ~3–4× the encode time (and energy)**, is Nick's call.
 
 ```
 SvtAv1EncApp --preset 4 --rc 1 --tbr <kbps> --passes 2 --keyint 300 --scd 0 \
@@ -125,5 +130,5 @@ middle frame).
 | 1 Mac ceiling | libaom c3 77.5 | vvenc slower 76.3 | x264 66.3 |
 | 2 Pi recipes | SVT p4 low-mem 76.8 | SVT p6 low-mem 74.8 | only the low-memory SVT recipes fit 250 MiB; libaom c4 77.2 needs 384 MiB |
 | 3 one change on p6 low-mem | + cached background 79.1 | + card ROI 75.0 (tie) | denoise, film grain, tune VQ, 540p, 5 fps all lower |
-| decision (PREREG rule) | **p4 low-mem 76.8** | p6 low-mem 74.8 | p4: tie with the cached background (2.3 < 3), standard first; without that candidate the rule picks p6 |
+| decision (PREREG rule) | **p4 low-mem 76.8** | p6 low-mem 74.8 | p4: tie with the cached background (2.3 < 3), standard first. Without that candidate: p6 at 540p (73.8, on the 3.0 boundary); stage 2 alone: p6 (74.8) |
 | 4 stress window | + cached background 64.4 | p4 low-mem 58.9 | ranking unchanged |
