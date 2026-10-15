@@ -184,7 +184,11 @@ three.
 - **Calibration poses use RAW-only shots:** 0/53 over 100 ms, so the bar is met.
 - **The stills block (still + RAW per set):** the RAW shot meets it; the JPEG still shot misses it
   in ~1 in 3.
-- Proposal: **report-only for Friday**. No code change (freeze). `sync.json` records every shot's
+- **Scoring (PjM 10/15, d42 pending Nick):** against the Friday plan's ≤ 100 ms bar, the JPEG
+  still shots over 100 ms are **FAIL**: 18/53, 34 %. The RAW shots pass: 0/53 over. This is the
+  Friday plan's bar, separate from the 25× gate's pre-registered checks (A4: still skew reported,
+  not gated).
+- Proposal (for Nick's d42): **report-only for Friday**. No code change (freeze). `sync.json` records every shot's
   skew, so analysis can keep the shots ≤ 100 ms (~2/3 of still shots and every RAW shot).
 - For static scenes (the card and board held still) 0.16 s does not change the image. That is
   far inside Nick's original "±1 s" concern.
