@@ -1,7 +1,7 @@
 """Video → stills for the Reef Check urchin study (PREREG rules E0–E5).
 
     python -m edge_ml.urchin.extract_stills inventory <video_dir> <out_dir>
-    python -m edge_ml.urchin.extract_stills extract   <video_dir> <out_dir> [--hwaccel videotoolbox]
+    python -m edge_ml.urchin.extract_stills extract   <video_dir> <out_dir> [--decoder software]
 
 `inventory` writes `inventory.csv` (ffprobe facts + SHA-256 per file). `extract` writes
 `stills/<video>/<video>_tNNNNNN.jpg` and `stills.csv` (one row per 0.5 s candidate, with the
@@ -40,6 +40,10 @@ SHARP_LONG_SIDE = 960  # E2
 BLUR_FRACTION = 0.5  # E3
 DUP_HAMMING = 6  # E4
 JPEG_QUALITY = 95  # E5
+# The decoder is part of the method: for 8-bit sources VideoToolbox and software decoding give
+# different pixels, which can flip near-tie picks. PREREG: VideoToolbox, one decoder per out_dir.
+DECODERS = ("videotoolbox", "software")
+DEFAULT_DECODER = "videotoolbox"
 PER_WINDOW = round(WINDOW_S / CANDIDATE_STEP_S)
 
 
@@ -100,22 +104,39 @@ def probe(path: Path) -> VideoInfo:
     return VideoInfo(path, w, h, duration, fps, s.get("codec_name", ""), created, rotation)
 
 
+def _is_hidden(p: Path, root: Path) -> bool:
+    return any(part.startswith(".") for part in p.relative_to(root).parts)
+
+
 def find_videos(video_dir: Path) -> list[Path]:
     """Video files under video_dir, skipping hidden ones (exFAT/macOS `._` AppleDouble files)."""
     return sorted(
         p
         for p in video_dir.rglob("*")
-        if p.is_file()
-        and p.suffix.lower() in VIDEO_EXTS
-        and not any(part.startswith(".") for part in p.relative_to(video_dir).parts)
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTS and not _is_hidden(p, video_dir)
     )
 
 
-def frames(path: Path, width: int, height: int, scale: bool, hwaccel: str | None = None):
+def count_hidden_videos(video_dir: Path) -> int:
+    return sum(
+        1
+        for p in video_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTS and _is_hidden(p, video_dir)
+    )
+
+
+def frames(path: Path, width: int, height: int, scale: bool, decoder: str = DEFAULT_DECODER):
     """Yield BGR frames of the fps=2 stream, optionally scaled to width×height.
 
-    hwaccel (e.g. "videotoolbox") must be the same for both passes of a video."""
+    "videotoolbox" keeps decoded frames on the GPU and downloads them explicitly, so if ffmpeg
+    cannot use VideoToolbox it fails instead of silently decoding in software."""
+    if decoder not in DECODERS:
+        raise ValueError(f"decoder {decoder!r} not in {DECODERS}")
     vf = f"fps={1 / CANDIDATE_STEP_S:g}"
+    hw = []
+    if decoder == "videotoolbox":
+        hw = ["-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"]
+        vf += ",hwdownload,format=nv12|p010le"
     if scale:
         vf += f",scale={width}:{height}:flags=area"
     cmd = [
@@ -123,7 +144,7 @@ def frames(path: Path, width: int, height: int, scale: bool, hwaccel: str | None
         "-v",
         "error",
         "-nostdin",
-        *(["-hwaccel", hwaccel] if hwaccel else []),
+        *hw,
         "-i",
         str(path),
         "-vf",
@@ -188,14 +209,14 @@ def still_name(video: Path, index: int) -> str:
     return f"{video.stem}_t{tenths:06d}.jpg"
 
 
-def extract_video(info: VideoInfo, out_dir: Path, hwaccel: str | None = None) -> list[dict]:
+def extract_video(info: VideoInfo, out_dir: Path, decoder: str = DEFAULT_DECODER) -> list[dict]:
     t0 = time.monotonic()
     long_side = max(info.width, info.height)
     k = SHARP_LONG_SIDE / long_side
     sw = max(2, round(info.width * k / 2) * 2)
     sh = max(2, round(info.height * k / 2) * 2)
     sharp, hashes = [], []
-    for frame in frames(info.path, sw, sh, scale=True, hwaccel=hwaccel):
+    for frame in frames(info.path, sw, sh, scale=True, decoder=decoder):
         grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         sharp.append(sharpness(grey))
         hashes.append(dhash(grey))
@@ -206,7 +227,7 @@ def extract_video(info: VideoInfo, out_dir: Path, hwaccel: str | None = None) ->
     still_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
     for i, frame in enumerate(
-        frames(info.path, info.width, info.height, scale=False, hwaccel=hwaccel)
+        frames(info.path, info.width, info.height, scale=False, decoder=decoder)
     ):
         if i in keep:
             dest = still_dir / still_name(info.path, i)
@@ -235,6 +256,7 @@ def extract_video(info: VideoInfo, out_dir: Path, hwaccel: str | None = None) ->
             "dhash": f"{hashes[i]:016x}",
             "status": status[i],
             "still": still_name(info.path, i) if status[i] == "kept" else "",
+            "decoder": decoder,
         }
         for i in range(len(status))
     ]
@@ -291,20 +313,39 @@ def ffmpeg_version() -> str:
     return out.stdout.splitlines()[0] if out.stdout else "unknown"
 
 
-def cmd_extract(video_dir: Path, out_dir: Path, hwaccel: str | None = None) -> int:
+def cmd_extract(video_dir: Path, out_dir: Path, decoder: str = DEFAULT_DECODER) -> int:
+    prev = out_dir / "extract_run.json"
+    if prev.exists() and (old := json.loads(prev.read_text()).get("decoder")) != decoder:
+        raise ValueError(
+            f"{out_dir} was extracted with decoder {old!r}; refusing {decoder!r} (pixels differ, "
+            "so still names and picks could change). Use a new out_dir."
+        )
     rows, failed = [], []
     started = datetime.now(UTC).isoformat(timespec="seconds")
     videos = find_videos(video_dir)
+    hidden = count_hidden_videos(video_dir)
+    if hidden:
+        log.info("skipping %d hidden video-named files (e.g. exFAT ._ sidecars)", hidden)
     for path in videos:
         try:
-            rows += extract_video(probe(path), out_dir, hwaccel)
+            rows += extract_video(probe(path), out_dir, decoder)
         except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
             failed.append(path.name)
             log.error("extract failed for %s: %s", path, exc)
     out_dir.mkdir(parents=True, exist_ok=True)
     with (out_dir / "stills.csv").open("w", newline="") as f:
         w = csv.DictWriter(
-            f, fieldnames=["video", "index", "t_s", "sharpness", "dhash", "status", "still"]
+            f,
+            fieldnames=[
+                "video",
+                "index",
+                "t_s",
+                "sharpness",
+                "dhash",
+                "status",
+                "still",
+                "decoder",
+            ],
         )
         w.writeheader()
         w.writerows(rows)
@@ -312,10 +353,11 @@ def cmd_extract(video_dir: Path, out_dir: Path, hwaccel: str | None = None) -> i
     run = {
         "video_dir": str(video_dir),
         "videos": len(videos),
+        "hidden_skipped": hidden,
         "failed": failed,
         "candidates": len(rows),
         "kept": kept,
-        "hwaccel": hwaccel,
+        "decoder": decoder,
         "ffmpeg": ffmpeg_version(),
         "rules": {
             "candidate_step_s": CANDIDATE_STEP_S,
@@ -345,16 +387,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("video_dir", type=Path)
     ap.add_argument("out_dir", type=Path)
     ap.add_argument(
-        "--hwaccel",
-        choices=["videotoolbox"],
-        default=None,
-        help="hardware decode for both passes (Mac: much less CPU heat than software HEVC)",
+        "--decoder",
+        choices=DECODERS,
+        default=DEFAULT_DECODER,
+        help="PREREG: videotoolbox (Mac hardware, low heat). Pixels differ between decoders.",
     )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     if args.command == "inventory":
         return cmd_inventory(args.video_dir, args.out_dir)
-    return cmd_extract(args.video_dir, args.out_dir, args.hwaccel)
+    return cmd_extract(args.video_dir, args.out_dir, args.decoder)
 
 
 if __name__ == "__main__":

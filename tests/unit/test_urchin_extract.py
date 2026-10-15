@@ -1,8 +1,10 @@
 """Reef Check urchin study: video → stills rule (edge_ml/urchin/PREREG.md, E0–E5)."""
 
 import csv
+import json
 import shutil
 import subprocess
+import sys
 
 import cv2
 import pytest
@@ -78,7 +80,7 @@ def test_inventory_and_extract_on_synthetic_video(tmp_path):
     assert (inv[0]["width"], inv[0]["height"]) == ("320", "180")
     assert len(inv[0]["sha256"]) == 64
 
-    assert ex.main(["extract", str(video_dir), str(out)]) == 0
+    assert ex.main(["extract", str(video_dir), str(out), "--decoder", "software"]) == 0
     rows = list(csv.DictReader((out / "stills.csv").open()))
     assert len(rows) == 12  # 6 s at one candidate per 0.5 s
     kept = [r for r in rows if r["status"] == "kept"]
@@ -99,13 +101,7 @@ def test_find_videos_skips_hidden_appledouble_files(tmp_path):
     assert [p.name for p in ex.find_videos(tmp_path)] == ["clip.MP4"]
 
 
-@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
-def test_extract_writes_run_record_and_hwaccel_matches_software(tmp_path):
-    import json
-    import sys
-
-    video_dir = tmp_path / "video"
-    video_dir.mkdir()
+def _clip(path, codec="libx264"):
     subprocess.run(
         [
             "ffmpeg",
@@ -120,21 +116,37 @@ def test_extract_writes_run_record_and_hwaccel_matches_software(tmp_path):
             "-pix_fmt",
             "yuv420p",
             "-c:v",
-            "libx264",
-            str(video_dir / "c.mp4"),
+            codec,
+            str(path),
         ],
         check=True,
     )
-    assert ex.main(["extract", str(video_dir), str(tmp_path / "sw")]) == 0
-    run = json.loads((tmp_path / "sw" / "extract_run.json").read_text())
-    assert run["videos"] == 1 and run["hwaccel"] is None and run["rules"]["window_s"] == 2.0
-    if sys.platform == "darwin":
-        assert (
-            ex.main(["extract", str(video_dir), str(tmp_path / "vt"), "--hwaccel", "videotoolbox"])
-            == 0
-        )
-        sw = (tmp_path / "sw" / "stills.csv").read_text().splitlines()
-        vt = (tmp_path / "vt" / "stills.csv").read_text().splitlines()
-        # Same selection by both decoders (sharpness may differ in the last digits).
-        status = [ln.split(",")[5] for ln in sw[1:]], [ln.split(",")[5] for ln in vt[1:]]
-        assert status[0] == status[1]
+
+
+@pytest.mark.skipif(
+    not shutil.which("ffmpeg") or sys.platform != "darwin", reason="needs ffmpeg + VideoToolbox"
+)
+def test_videotoolbox_default_records_decoder_and_refuses_mixing(tmp_path):
+    video_dir = tmp_path / "video"
+    video_dir.mkdir()
+    _clip(video_dir / "c.mp4")
+    (video_dir / "._c.mp4").write_bytes(b"\x00" * 4096)  # exFAT sidecar
+    out = tmp_path / "out"
+    assert ex.main(["extract", str(video_dir), str(out)]) == 0
+    run = json.loads((out / "extract_run.json").read_text())
+    assert run["decoder"] == "videotoolbox" and run["hidden_skipped"] == 1
+    rows = list(csv.DictReader((out / "stills.csv").open()))
+    assert {r["decoder"] for r in rows} == {"videotoolbox"}
+    with pytest.raises(ValueError, match="refusing 'software'"):
+        ex.main(["extract", str(video_dir), str(out), "--decoder", "software"])
+
+
+@pytest.mark.skipif(
+    not shutil.which("ffmpeg") or sys.platform != "darwin", reason="needs ffmpeg + VideoToolbox"
+)
+def test_videotoolbox_fails_loudly_instead_of_falling_back(tmp_path):
+    video_dir = tmp_path / "video"
+    video_dir.mkdir()
+    _clip(video_dir / "c.mkv", codec="ffv1")  # no VideoToolbox decoder for FFV1
+    assert ex.main(["extract", str(video_dir), str(tmp_path / "vt")]) == 1
+    assert ex.main(["extract", str(video_dir), str(tmp_path / "sw"), "--decoder", "software"]) == 0
