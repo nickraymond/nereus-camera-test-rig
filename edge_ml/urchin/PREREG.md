@@ -166,3 +166,4 @@ training stills, to show whether more video would still help.
 | Date | Change | Why | Made before which numbers? |
 |---|---|---|---|
 | 2026-10-15 | QE review of #117 (before any video was downloaded or viewed): 1-group outcome is "inconclusive"; paired, group-stratified bootstrap; 30 s gap before validation, LOGO validation from training groups; E3 text matches the code (median of window-bests); test eligibility from a per-group screen; Q1 bar uses a Wilson lower bound; ignore-box rule spelled out. Also A runs tiled. | QE FAIL items 1–5 + nits | All — no data yet |
+| 2026-10-15 | Clarifications while writing the code (no video downloaded yet): ignore boxes are left out of model B's training targets (treated as background, which works against "helped"); bar condition 3 is checked for every seed, like 1 and 2; minimums are pooled over folds (held-out groups and test boxes). | Ambiguities in the original text | All — no data yet |
