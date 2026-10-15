@@ -248,3 +248,74 @@ def test_reset_before_capture_profile_flag(tmp_path):
                          when=WHEN, analysis=False)
     assert ResettableCamera.reset_calls == 2
     assert out.status == "completed"
+
+
+class FakeSyncCamera(FakeCamera):
+    """FakeCamera with the synchronized-capture interface (arm / fire / finish)."""
+
+    events: list = []
+
+    def __init__(self, *, name, driver_name="fake", arm_fails=False, **kw):
+        super().__init__(**kw)
+        self.name, self.driver, self.arm_fails = name, driver_name, arm_fails
+
+    def arm(self, kind, destination, request):
+        if self.arm_fails:
+            raise RuntimeError("simulated: board not reading its USB input")
+        self.events.append(("arm", self.name, kind))
+        self._pending = (destination, request)
+
+    def fire(self):
+        import time
+
+        t = time.monotonic()
+        self.events.append(("fire", self.name, t))
+        self._fire = t
+        return t
+
+    def finish(self):
+        result = self.capture_image(*self._pending)
+        result.sensor_metadata = {"sync": {"fire_host_mono": self._fire, "fire_to_snap_ms": 5}}
+        return result
+
+
+def _register_sync(jpeg, *, ae3_arm_fails=False):
+    registry.clear()
+    FakeSyncCamera.events = []
+    registry.register("imx708", lambda settings=None, **kw: FakeSyncCamera(
+        name="imx708", driver_name="imx708", source_bytes=jpeg))
+
+    def openmv_factory(*, serial_number=None, board=None, settings=None):
+        return FakeSyncCamera(name=board, source_bytes=jpeg,
+                              arm_fails=ae3_arm_fails and serial_number == AE3_SERIAL)
+
+    registry.register("openmv_usb", openmv_factory)
+
+
+def test_sync_fires_imx_first_then_boards_after_the_lead(tmp_path):
+    _register_sync(_blank_jpeg())
+    cfg = _config()
+    cfg["rig"]["sync"] = {"imx_lead_ms": 50}
+    out = run_experiment(cfg, "sync", results_root=tmp_path, when=WHEN, analysis=False,
+                         sync=True)
+    assert out.status == "completed"
+    fires = [e for e in FakeSyncCamera.events if e[0] == "fire"]
+    assert [f[1] for f in fires][0] == "imx708"
+    assert fires[1][2] - fires[0][2] >= 0.045  # boards wait for the IMX708's lead
+    sync = json.loads((out.paths.root / "sync.json").read_text())
+    shot = sync["shots"][0]
+    assert shot["shot"] == "still" and set(shot["frame_offset_ms"]) == {
+        "imx708", "openmv_n6", "openmv_ae3"}
+    assert shot["skew_ms"] is not None and shot["skew_ms"] >= 45
+
+
+def test_sync_board_that_cannot_arm_fails_alone(tmp_path):
+    _register_sync(_blank_jpeg(), ae3_arm_fails=True)
+    out = run_experiment(_config(), "sync", results_root=tmp_path, when=WHEN, analysis=False,
+                         sync=True)
+    assert out.status == "partial"
+    by = {c.camera_name: c for c in out.camera_outcomes}
+    assert by["imx708"].ok and by["openmv_n6"].ok
+    assert by["openmv_ae3"].result.error["code"] == "arm_failed"
+    assert json.loads((by["openmv_ae3"].metadata_path and
+                       Path(by["openmv_ae3"].metadata_path)).read_text())["status"] == "failed"
