@@ -193,3 +193,11 @@ Every counted gate cycle's `imx708.h264` must decode:
 A cycle that fails this audit is a **FAIL** and the streak is recomputed from the audited
 results. Run offline on the Mac by `host_tools/gate_audit.py` over the pulled `video/`
 folders, after each 25× run and before either is declared passed.
+
+**A9 (2026-10-15 10:22 AM, before any switch cycle). Nick's ≥ 3 real switch cycles are a
+separate short run.**
+- Nick is unavailable 10:20–11:20 AM, so the repeat 25× (gate008) continues on the UPS timer.
+- The ≥ 3 real switch cycles run afterwards (~11:25 AM) as their own run, `mode switch`, 3
+  cycles, with the same per-cycle checks (§4 + A1–A8).
+- They pass only if all 3 PASS, with the previous shutdown recorded as the switch/UPS button.
+- They are additional to the two 25× runs, not part of either streak.
