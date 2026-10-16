@@ -230,3 +230,83 @@ def from_coco(coco: dict) -> dict[str, tuple[np.ndarray, np.ndarray]]:
         n: (np.array(g, float).reshape(-1, 4), np.array(i, float).reshape(-1, 4))
         for n, (g, i) in out.items()
     }
+
+
+def still_sheets(
+    names: list[str],
+    stills_root: Path,
+    out_dir: Path,
+    per_sheet: int = 6,
+    cols: int = 2,
+    width: int = 960,
+) -> list[Path]:
+    """Whole stills, numbered in list order, for the Q1 review and the per-group screen.
+
+    Item k on sheet s is names[s * per_sheet + k]; its number is printed on the tile. Returns
+    the sheet paths (still_sheet_NNN.jpg), with a JSON index of the names next to each."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for s in range(math.ceil(len(names) / per_sheet)):
+        part = names[s * per_sheet : (s + 1) * per_sheet]
+        tiles = []
+        for j, name in enumerate(part):
+            img = cv2.imread(str(stills_root / name))
+            if img is None:
+                raise FileNotFoundError(stills_root / name)
+            h = round(img.shape[0] * width / img.shape[1])
+            tile = np.full((h + LABEL_H + 8, width, 3), 30, np.uint8)
+            tile[:h] = cv2.resize(img, (width, h), interpolation=cv2.INTER_AREA)
+            label = f"{s * per_sheet + j}  {Path(name).name}"
+            cv2.putText(
+                tile,
+                label,
+                (6, h + LABEL_H),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+            tiles.append(tile)
+        th = max(t.shape[0] for t in tiles)
+        rows = math.ceil(len(tiles) / cols)
+        sheet = np.full((rows * th, cols * width, 3), 30, np.uint8)
+        for j, t in enumerate(tiles):
+            r, c = divmod(j, cols)
+            sheet[r * th : r * th + t.shape[0], c * width : (c + 1) * width] = t
+        path = out_dir / f"still_sheet_{s:03d}.jpg"
+        cv2.imwrite(str(path), sheet, [cv2.IMWRITE_JPEG_QUALITY, 88])
+        (out_dir / f"still_sheet_{s:03d}.json").write_text(json.dumps(part))
+        paths.append(path)
+    return paths
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Urchin label review helpers (see module doc).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    st = sub.add_parser("still-sheets", help="numbered whole-still sheets from a list file")
+    st.add_argument("names", type=Path, help="text file of still paths relative to stills_root")
+    st.add_argument("stills_root", type=Path)
+    st.add_argument("out_dir", type=Path)
+    st.add_argument("--per-sheet", type=int, default=6)
+    cs = sub.add_parser("candidate-sheets", help="numbered candidate crops from owl.py output")
+    cs.add_argument("owl_json", type=Path)
+    cs.add_argument("stills_root", type=Path)
+    cs.add_argument("out_dir", type=Path)
+    args = ap.parse_args(argv)
+    if args.cmd == "still-sheets":
+        names = [ln.strip() for ln in args.names.read_text().splitlines() if ln.strip()]
+        for p in still_sheets(names, args.stills_root, args.out_dir, args.per_sheet):
+            print(p)
+        return 0
+    n = make_sheets(json.loads(args.owl_json.read_text()), args.stills_root, args.out_dir)
+    print(f"{n} candidate sheets → {args.out_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
