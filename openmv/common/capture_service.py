@@ -43,6 +43,11 @@ _RAW_CHUNK = 4096  # memoryview slices of the frame buffer: no copy, no allocati
 # never traverse out of STORAGE_DIR.
 _SAFE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
 
+# Stream JPEG chroma subsampling: wire name -> ``image`` module constant (OpenMV v5.0.1,
+# modules/py_image.c). "auto" passes nothing, i.e. the firmware default.
+_SUBSAMPLING = {"auto": None, "420": "JPEG_SUBSAMPLING_420", "422": "JPEG_SUBSAMPLING_422",
+                "444": "JPEG_SUBSAMPLING_444"}
+
 
 def _safe_basename(name):
     """Reduce ``name`` to a safe basename inside STORAGE_DIR, or raise ProtocolError."""
@@ -425,6 +430,20 @@ def stream_frames(usb, command_id, board_config, settings):
     # = less CPU/USB activity and current: Nick 2026-10-13, N6 at 10 fps like the AE3.
     fps = float(settings.get("fps", 0) or 0)
     period_ms = int(1000 / fps) if fps > 0 else 0
+    # JPEG chroma subsampling (pool 2 B0, 2026-10-17). Absent / "auto" = the firmware's own choice,
+    # unchanged: the AE3's software encoder picks 4:4:4 at quality >= 60 (lib/imlib/jpege.c), the
+    # N6's hardware encoder is 4:2:0. "420" | "422" | "444" force one.
+    sub = settings.get("subsampling") or "auto"
+    if sub not in _SUBSAMPLING:
+        raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "unsupported subsampling: " + repr(sub))
+    sub_const = None
+    if sub != "auto":
+        import image  # OpenMV firmware module; imported only when a subsampling is forced
+
+        sub_const = getattr(image, _SUBSAMPLING[sub])
+    # Per-frame timing (B0): each header carries this frame's snapshot and JPEG ms and the
+    # previous frame's USB write ms (a frame's own write ends after its header is sent).
+    timing = bool(settings.get("timing"))
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -441,6 +460,7 @@ def stream_frames(usb, command_id, board_config, settings):
         return
 
     seq = 0
+    write_ms = None
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
     while True:
         # Any inbound byte is the host's stop signal; drain it and exit.
@@ -455,14 +475,24 @@ def stream_frames(usb, command_id, board_config, settings):
         t_frame = time.ticks_ms()
         img = sensor.snapshot()
         t_snap = time.ticks_ms()
-        img.compress(quality=quality)
+        if sub_const is None:
+            img.compress(quality=quality)
+        else:
+            img.compress(quality=quality, subsampling=sub_const)
         data = img.bytearray()
         n = len(data)
+        extra = None
+        if timing:
+            extra = {"snap_ms": time.ticks_diff(t_snap, t_frame),
+                     "jpeg_ms": time.ticks_diff(time.ticks_ms(), t_snap),
+                     "prev_write_ms": write_ms}
+        t_write = time.ticks_ms()
         usb.write(cp.encode_message(
             cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
-                              ticks_ms=t_snap if trigger else None)
+                              ticks_ms=t_snap if trigger else None, extra=extra)
         ))
         usb.write(data)
+        write_ms = time.ticks_diff(time.ticks_ms(), t_write)
         seq += 1
         if period_ms:
             # Sleep the rest of the period in <= 50 ms slices so a host stop byte is still seen

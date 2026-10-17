@@ -56,6 +56,8 @@ from openmv.common import command_protocol as cp  # noqa: E402
 from nereus_camera_test_rig.cameras.openmv_usb import OpenMvError, OpenMvUsbCamera  # noqa: E402
 
 BOARDS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c14000000000"}
+# Per-frame stream timing from the board (start_stream "timing", pool 2 B0, 2026-10-17).
+TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
 
 
 def sha256(path: Path) -> str:
@@ -72,7 +74,7 @@ class BoardVideo:
     def __init__(self, name: str, serial: str, out: Path, settings: dict):
         self.name, self.serial, self.out, self.settings = name, serial, out, settings
         self.cam = OpenMvUsbCamera(serial)
-        self.rec: dict = {"camera": name, "ok": False}
+        self.rec: dict = {"camera": name, "ok": False, "settings": dict(settings)}
         self.thread: threading.Thread | None = None
 
     def arm(self) -> None:
@@ -136,7 +138,8 @@ class BoardVideo:
                     rows.append({"seq": fr["seq"], "ticks_ms": fr.get("ticks_ms"),
                                  "host_rx_mono": round(time.monotonic(), 4),
                                  "bytes": len(data), "width": fr["width"],
-                                 "height": fr["height"]})
+                                 "height": fr["height"],
+                                 **{k: fr.get(k) for k in TIMING_KEYS}})
                     q.put(data)
                 elif msg.get("status") == "completed":
                     self.rec["board_done"] = msg.get("output") or {}
@@ -150,7 +153,7 @@ class BoardVideo:
         self.rows = rows
         with (self.out / f"{self.name}_frames.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["seq", "ticks_ms", "host_rx_mono", "bytes",
-                                              "width", "height"])
+                                              "width", "height", *TIMING_KEYS])
             w.writeheader()
             w.writerows(rows)
 
@@ -337,6 +340,24 @@ def host_sampler(path: Path, stop: threading.Event) -> None:
             stop.wait(1.0)
 
 
+def board_settings(a: argparse.Namespace, name: str) -> dict:
+    """One board's stream settings: --n6-* / --ae3-* override the shared --board-* values, so the
+    N6 and AE3 can record at different settings (pool 2, 2026-10-17: best per camera)."""
+    key = name.split("_", 1)[1]  # openmv_n6 -> n6
+
+    def pick(opt):
+        v = getattr(a, f"{key}_{opt}", None)
+        return getattr(a, f"board_{opt}") if v is None else v
+
+    s = {"framesize": pick("framesize"), "jpeg_quality": pick("quality"), "fps": pick("fps"),
+         "max_seconds": int(a.seconds + 60), "warmup_ms": 2000}
+    if pick("subsampling") not in (None, "auto"):  # absent = the firmware's own choice
+        s["subsampling"] = pick("subsampling")
+    if a.timing:
+        s["timing"] = True
+    return s
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seconds", type=float, default=10.0)
@@ -353,20 +374,27 @@ def main() -> int:
                     help="board frame cap, both boards (0 = as fast as each can). 10: the AE3's "
                          "VGA ceiling, and the N6 (full-speed USB) dropped bytes at 30-63 fps "
                          "over minutes (soak 2026-10-14)")
+    ap.add_argument("--board-subsampling", default="auto",
+                    help="JPEG chroma subsampling: auto (firmware choice: AE3 4:4:4 at q>=60, "
+                         "N6 hardware 4:2:0) | 420 | 422 | 444")
+    for key in ("n6", "ae3"):
+        ap.add_argument(f"--{key}-framesize", default=None, help=f"{key} only; default --board-*")
+        ap.add_argument(f"--{key}-quality", type=int, default=None)
+        ap.add_argument(f"--{key}-fps", type=float, default=None)
+        ap.add_argument(f"--{key}-subsampling", default=None)
+    ap.add_argument("--timing", action="store_true",
+                    help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
     a = ap.parse_args()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(a.out) if a.out else ROOT / "results" / "video" / ts
     out.mkdir(parents=True, exist_ok=True)
     cams = a.cameras.split(",")
     w, h = (int(v) for v in a.imx_size.split("x"))
-    board_settings = {"framesize": a.board_framesize, "jpeg_quality": a.board_quality,
-                      "fps": a.board_fps, "max_seconds": int(a.seconds + 60),
-                      "warmup_ms": 2000}
     devs = []
     if "imx708" in cams:
         devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
                              buffers=a.imx_buffers, seconds=a.seconds))
-    devs += [BoardVideo(n, s, out, board_settings) for n, s in BOARDS.items() if n in cams]
+    devs += [BoardVideo(n, s, out, board_settings(a, n)) for n, s in BOARDS.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
 
     stop = threading.Event()
@@ -431,6 +459,11 @@ def main() -> int:
                                                     for n, t in firsts.items()} if t0 else {},
         "start_skew_ms": round((max(firsts.values()) - t0) * 1000, 1) if len(firsts) > 1
         else None,
+        # Each camera's own fire -> first frame (the IMX708 waits for its next frame: 0-33 ms),
+        # so a start-skew miss can be traced to one camera (pool 2 spec L6, 2026-10-17).
+        "first_frame_delay_ms": {n: round((t - results[n]["fire_host_mono"]) * 1000, 1)
+                                 for n, t in firsts.items()
+                                 if results[n].get("fire_host_mono")},
         "cameras": results,
         "ok": all(r.get("ok") for r in results.values()) and len(results) == len(cams),
     }
