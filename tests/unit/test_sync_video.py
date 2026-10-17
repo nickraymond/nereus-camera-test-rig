@@ -65,3 +65,60 @@ def test_board_settings_per_board_overrides():
     n6, ae3 = sv.board_settings(a, "openmv_n6"), sv.board_settings(a, "openmv_ae3")
     assert (n6["framesize"], n6.get("subsampling"), n6["timing"]) == ("HD", None, True)
     assert (ae3["framesize"], ae3["subsampling"], ae3["jpeg_quality"]) == ("VGA", "420", 70)
+
+
+from openmv.common import command_protocol as cp  # noqa: E402
+
+from nereus_camera_test_rig.cameras.openmv_usb import _SerialIO  # noqa: E402
+
+
+def _jpeg(i, n=300):
+    body = bytes((j * 7 + i) % 251 for j in range(n)).replace(b"\xff", b"\xfe")
+    return b"\xff\xd8" + body + b"\n" + body[:50] + b"\xff\xd9"
+
+
+def _frame(i, data):
+    return cp.encode_message(cp.frame_response("cid", i, len(data), len(data), 640, 400,
+                                               ticks_ms=1000 + 100 * i)) + data
+
+
+class _Bytes:
+    """read(n)/write() transport over a fixed byte string (then silence)."""
+
+    def __init__(self, data):
+        self.data = bytearray(data)
+
+    def read(self, n):
+        out = bytes(self.data[:n])
+        del self.data[:n]
+        return out
+
+    def write(self, data):
+        return len(data)
+
+
+def test_decode_tail_finds_a_header_behind_jpeg_bytes():
+    hdr = cp.encode_message(cp.frame_response("cid", 7, 10, 10, 640, 400, ticks_ms=5)).rstrip()
+    assert sv.decode_tail(b"\x12\x34{garbage\xff" + hdr)["frame"]["seq"] == 7
+    assert sv.decode_tail(b"\xff\xd8 no header here") is None
+
+
+def test_split_short_jpeg():
+    j = _jpeg(1)
+    assert sv.split_short_jpeg(j) == (j, b"")
+    assert sv.split_short_jpeg(j[:100] + j[-2:] + b"NEXT") == (j[:100] + j[-2:], b"NEXT")
+
+
+def test_reader_recovers_after_bytes_lost_mid_frame(tmp_path):
+    # gate008 c22 (2026-10-15): bytes lost inside an N6 frame; the old reader never found a
+    # header again. Now one damaged frame is dropped and the stream continues.
+    frames = [_jpeg(i) for i in range(6)]
+    stream = b"".join(_frame(i, f) for i, f in enumerate(frames))
+    cut = stream.index(frames[2]) + 120          # lose 40 bytes inside frame 2
+    stream = stream[:cut] + stream[cut + 40:]
+    stream += cp.encode_message(cp.completed_response("cid", {"frames": 6}))
+    bv = sv.BoardVideo("openmv_n6", "SERIAL", tmp_path, {})
+    bv.io = _SerialIO(_Bytes(stream), default_timeout=1)
+    bv._read()
+    assert [r["seq"] for r in bv.rows] == [0, 1, 3, 4, 5]
+    assert bv.rec.get("short_frames") == 1 and "error" not in bv.rec
