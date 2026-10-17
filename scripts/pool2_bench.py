@@ -109,7 +109,9 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
         ignored, misses = misses, []
     misses += wedges
     return {"misses": misses, "ignored": ignored, "void": throttled, "cross_effect": cross,
-            "board_skew_ms": board_skew, "imx_start_ok": imx_start_ok, "n6_usable": usable,
+            "board_skew_ms": board_skew, "imx_start_ok": imx_start_ok,
+            "imx_first_frame_ms": imx_d, "imx_period_ms": round(1000 / imx["fps"], 1)
+            if imx.get("fps") else None, "n6_usable": usable,
             "n6_frames": n6.get("frames"), "n6_expected": expected,
             "n6_lost": n6.get("frames_lost")}
 

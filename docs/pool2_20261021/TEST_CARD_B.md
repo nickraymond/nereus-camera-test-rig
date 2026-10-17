@@ -4,7 +4,7 @@ Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before
 
 | | |
 |---|---|
-| **Spec** | [SPEC.md](SPEC.md) rev 8 (sha256 `e5203f3fa492…`, QE 005 PASS Sat 3:32 PM). Rev 9 (`aacf8d28116a…`: d55, d56) is in QE's re-gate; it is committed byte-identical once it passes |
+| **Spec** | [SPEC.md](SPEC.md) rev 9 (sha256 `aacf8d28116a…`, QE 005 PASS Sat 3:37 PM: d55, d56, lens) |
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6) |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
@@ -170,7 +170,7 @@ the clip, the §5 bars, fail fast and the throttled-void rule. It writes `result
 | fps (the board under test) | delivered ≥ 9.5 fps over 30 s. AE3, if B0 fails: ≥ its own control 640×400 rate − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
 | frames | AE3: 0 lost; an errored stream or a missing board frame count counts as lost. N6: the usable share above (rev 7, d57) | spec; rev 7–8 |
 | wedges | 0 wedges and 0 ladder USB resets on either board during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2; rev 8 |
-| sync (d55, rev 9) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`). The IMX708's first frame ≤ 34 ms after the trigger is its **own verdict line**, reported per setting and not part of "holds". `start_skew_ms` over all three is still recorded. Applies once rev 9 passes QE (before any data); until then rev 8's 25 ms over all three applies | spec; d55 |
+| sync (d55, rev 9) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`). The IMX708's first frame ≤ 34 ms after the trigger is its **own verdict line**, reported per setting next to its real frame period (1000 / delivered fps, ~38 ms at 26.4 fps) and not part of "holds"; some misses are expected and decide nothing. `start_skew_ms` over all three is still recorded. Applies once rev 9 passes QE (before any data); until then rev 8's 25 ms over all three applies | spec; d55 |
 | IMX708 | ≥ 26.0 fps and max gap ≤ 100 ms | spec (F8) |
 | host | `throttled` = 0x0 over the clip (host_stats.csv); a throttled clip is void (§4) | spec |
 
