@@ -38,3 +38,115 @@ def test_missing_or_garbage_metadata_is_empty(tmp_path):
     assert sv.read_frame_metadata(tmp_path / "none.json") == []
     (tmp_path / "g.json").write_text("not json")
     assert sv.read_frame_metadata(tmp_path / "g.json") == []
+
+
+def _args(**kw):
+    import argparse
+    base = dict(seconds=30.0, board_framesize="VGA", board_quality=70, board_fps=10.0,
+                board_subsampling="auto", timing=False,
+                n6_framesize=None, n6_quality=None, n6_fps=None, n6_subsampling=None,
+                ae3_framesize=None, ae3_quality=None, ae3_fps=None, ae3_subsampling=None)
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+def test_board_settings_default_is_fridays_shared_setting():
+    # No per-board flag: both boards get the shared --board-* values, no subsampling key
+    # (the firmware's own choice), no timing: the wire request is unchanged from Friday.
+    for name in ("openmv_n6", "openmv_ae3"):
+        assert sv.board_settings(_args(), name) == {
+            "framesize": "VGA", "jpeg_quality": 70, "fps": 10.0, "max_seconds": 90,
+            "warmup_ms": 2000}
+
+
+def test_board_settings_per_board_overrides():
+    # pool 2 (2026-10-17): best per camera, so the N6 and AE3 can differ
+    a = _args(n6_framesize="HD", ae3_subsampling="420", timing=True)
+    n6, ae3 = sv.board_settings(a, "openmv_n6"), sv.board_settings(a, "openmv_ae3")
+    assert (n6["framesize"], n6.get("subsampling"), n6["timing"]) == ("HD", None, True)
+    assert (ae3["framesize"], ae3["subsampling"], ae3["jpeg_quality"]) == ("VGA", "420", 70)
+
+
+from openmv.common import command_protocol as cp  # noqa: E402
+
+from nereus_camera_test_rig.cameras.openmv_usb import _SerialIO  # noqa: E402
+
+
+def _jpeg(i, n=300):
+    body = bytes((j * 7 + i) % 251 for j in range(n)).replace(b"\xff", b"\xfe")
+    return b"\xff\xd8" + body + b"\n" + body[:50] + b"\xff\xd9"
+
+
+def _frame(i, data):
+    return cp.encode_message(cp.frame_response("cid", i, len(data), len(data), 640, 400,
+                                               ticks_ms=1000 + 100 * i)) + data
+
+
+class _Bytes:
+    """read(n)/write() transport over a fixed byte string (then silence)."""
+
+    def __init__(self, data):
+        self.data = bytearray(data)
+
+    def read(self, n):
+        out = bytes(self.data[:n])
+        del self.data[:n]
+        return out
+
+    def write(self, data):
+        return len(data)
+
+
+def test_decode_tail_finds_a_header_behind_jpeg_bytes():
+    hdr = cp.encode_message(cp.frame_response("cid", 7, 10, 10, 640, 400, ticks_ms=5)).rstrip()
+    assert sv.decode_tail(b"\x12\x34{garbage\xff" + hdr)["frame"]["seq"] == 7
+    assert sv.decode_tail(b"\xff\xd8 no header here") is None
+
+
+def test_split_short_jpeg():
+    j = _jpeg(1)
+    assert sv.split_short_jpeg(j) == (j, b"")
+    assert sv.split_short_jpeg(j[:100] + j[-2:] + b"NEXT") == (j[:100] + j[-2:], b"NEXT")
+
+
+def test_reader_recovers_after_bytes_lost_mid_frame(tmp_path):
+    # gate008 c22 (2026-10-15): bytes lost inside an N6 frame; the old reader never found a
+    # header again. Now one damaged frame is dropped and the stream continues.
+    frames = [_jpeg(i) for i in range(6)]
+    stream = b"".join(_frame(i, f) for i, f in enumerate(frames))
+    cut = stream.index(frames[2]) + 120          # lose 40 bytes inside frame 2
+    stream = stream[:cut] + stream[cut + 40:]
+    stream += cp.encode_message(cp.completed_response("cid", {"frames": 6}))
+    bv = sv.BoardVideo("openmv_n6", "SERIAL", tmp_path, {})
+    bv.io = _SerialIO(_Bytes(stream), default_timeout=1)
+    bv._read()
+    assert [r["seq"] for r in bv.rows] == [0, 1, 3, 4, 5]
+    assert bv.rec.get("short_frames") == 1 and "error" not in bv.rec
+
+
+def test_combined_decode_byte_loss_costs_one_frame_and_keeps_timing_columns(tmp_path):
+    # pool 2 (QE 005 R2): the resync fix (aa06bc7) and the B0 per-frame timing (f672126)
+    # together. Each frame header carries snap/jpeg/prev-write ms; 40 bytes are lost inside
+    # frame 3; the reader drops that one frame, resyncs, and keeps every other frame's timing.
+    frames = [_jpeg(i) for i in range(7)]
+    stream = b""
+    for i, f in enumerate(frames):
+        timing = {"snap_ms": 16, "jpeg_ms": 60 + i, "prev_write_ms": None if i == 0 else 23}
+        stream += cp.encode_message(cp.frame_response("cid", i, len(f), len(f), 640, 400,
+                                                      ticks_ms=1000 + 107 * i,
+                                                      extra=timing)) + f
+    cut = stream.index(frames[3]) + 150
+    stream = stream[:cut] + stream[cut + 40:]
+    stream += cp.encode_message(cp.completed_response("cid", {"frames": 7}))
+    bv = sv.BoardVideo("openmv_ae3", "SERIAL", tmp_path, {"timing": True})
+    bv.io = _SerialIO(_Bytes(stream), default_timeout=1)
+    bv._read()
+    assert [r["seq"] for r in bv.rows] == [0, 1, 2, 4, 5, 6]
+    assert bv.rec.get("short_frames") == 1 and "error" not in bv.rec
+    assert [r["jpeg_ms"] for r in bv.rows] == [60, 61, 62, 64, 65, 66]
+    assert bv.rows[0]["prev_write_ms"] is None and bv.rows[-1]["snap_ms"] == 16
+    import csv
+    rows = list(csv.DictReader((tmp_path / "openmv_ae3_frames.csv").open()))
+    assert list(rows[0])[-3:] == ["snap_ms", "jpeg_ms", "prev_write_ms"] and rows[3]["seq"] == "4"
+    assert (tmp_path / "openmv_ae3.mjpeg").stat().st_size == sum(len(frames[i])
+                                                                 for i in (0, 1, 2, 4, 5, 6))

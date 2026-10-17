@@ -56,6 +56,8 @@ from openmv.common import command_protocol as cp  # noqa: E402
 from nereus_camera_test_rig.cameras.openmv_usb import OpenMvError, OpenMvUsbCamera  # noqa: E402
 
 BOARDS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c14000000000"}
+# Per-frame stream timing from the board (start_stream "timing", pool 2 B0, 2026-10-17).
+TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
 
 
 def sha256(path: Path) -> str:
@@ -72,7 +74,7 @@ class BoardVideo:
     def __init__(self, name: str, serial: str, out: Path, settings: dict):
         self.name, self.serial, self.out, self.settings = name, serial, out, settings
         self.cam = OpenMvUsbCamera(serial)
-        self.rec: dict = {"camera": name, "ok": False}
+        self.rec: dict = {"camera": name, "ok": False, "settings": dict(settings)}
         self.thread: threading.Thread | None = None
 
     def arm(self) -> None:
@@ -97,16 +99,18 @@ class BoardVideo:
 
     def _next_message(self) -> dict:
         """The next protocol line. Resyncs after lost bytes: the N6 drops USB TX bytes when the
-        Pi reads too slowly (2026-10-14: 63 fps VGA + 1080p H.264 desynced after 124 frames), so
-        a JPEG body can land where a header was expected. Skip lines until one decodes."""
+        Pi reads too slowly (2026-10-14: 63 fps VGA desynced; gate008 c22 2026-10-15: 10 fps VGA
+        desynced and never recovered, because a header that follows JPEG bytes on the same
+        "line" was never tried). The header always ends its line, so decode the line's tail."""
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             line = self.io.read_line(timeout=max(0.1, deadline - time.monotonic()))
-            if not line.strip().startswith(b"{"):
-                continue
-            try:
-                return cp.decode_message(line)
-            except (ValueError, UnicodeDecodeError, cp.ProtocolError):
+            msg = decode_tail(line)
+            if msg is not None:
+                if not line.lstrip().startswith(b"{"):
+                    self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
+                return msg
+            if line.strip():
                 self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
         raise OpenMvError("timeout", f"{self.name}: no frame header for 10 s")
 
@@ -133,10 +137,16 @@ class BoardVideo:
                 if msg.get("status") == "frame":
                     fr = msg["frame"]
                     data = self.io.read_exact(fr["size_bytes"], timeout=10)
+                    data, rest = split_short_jpeg(data)
+                    if rest:  # bytes were lost: this frame ended early, the next one began
+                        self.io._buf[0:0] = rest
+                        self.rec["short_frames"] = self.rec.get("short_frames", 0) + 1
+                        continue  # a damaged frame is dropped (counted below via seq gaps)
                     rows.append({"seq": fr["seq"], "ticks_ms": fr.get("ticks_ms"),
                                  "host_rx_mono": round(time.monotonic(), 4),
                                  "bytes": len(data), "width": fr["width"],
-                                 "height": fr["height"]})
+                                 "height": fr["height"],
+                                 **{k: fr.get(k) for k in TIMING_KEYS}})
                     q.put(data)
                 elif msg.get("status") == "completed":
                     self.rec["board_done"] = msg.get("output") or {}
@@ -150,7 +160,7 @@ class BoardVideo:
         self.rows = rows
         with (self.out / f"{self.name}_frames.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["seq", "ticks_ms", "host_rx_mono", "bytes",
-                                              "width", "height"])
+                                              "width", "height", *TIMING_KEYS])
             w.writeheader()
             w.writerows(rows)
 
@@ -184,6 +194,8 @@ class BoardVideo:
                  if r["ticks_ms"] is not None and fire_rx is not None and fire_host]
         mjpeg = self.out / f"{self.name}.mjpeg"
         sent = (self.rec.get("board_done") or {}).get("frames")
+        if not isinstance(sent, int) and rows:  # stream ended badly: count the seq gaps
+            sent = rows[-1]["seq"] + 1
         self.rec["frames_lost"] = (sent - len(rows)) if isinstance(sent, int) else None
         self.rec.update(frames=len(rows), first_frame_host_mono=times[0] if times else None,
                         last_frame_host_mono=times[-1] if times else None,
@@ -296,6 +308,33 @@ class ImxVideo:
         return self.rec
 
 
+def decode_tail(line: bytes) -> dict | None:
+    """The protocol message at the END of ``line`` (bytes lost from a frame can leave JPEG bytes
+    in front of the next header). Tries each '{' from the right; None if nothing decodes."""
+    end = len(line)
+    start = max(0, end - 512)  # a header line is ~170 B; never scan a whole JPEG
+    i = line.rfind(b"{", start, end)
+    while i >= 0:
+        try:
+            msg = cp.decode_message(line[i:])
+            if isinstance(msg, dict) and "status" in msg:
+                return msg
+        except (ValueError, UnicodeDecodeError, cp.ProtocolError):
+            pass
+        i = line.rfind(b"{", start, i)
+    return None
+
+
+def split_short_jpeg(data: bytes) -> tuple[bytes, bytes]:
+    """A frame payload that ends (JPEG EOI) before its declared size lost bytes in transit:
+    return (that frame, the bytes after it, which belong to the next frame). EOI (FF D9) cannot
+    occur inside JPEG entropy data (FF is byte-stuffed), so an early EOI is a sure sign."""
+    eoi = data.find(b"\xff\xd9")
+    if 0 <= eoi < len(data) - 2:
+        return data[:eoi + 2], data[eoi + 2:]
+    return data, b""
+
+
 def read_frame_metadata(path: Path) -> list[dict]:
     """rpicam-vid --metadata: a JSON list, one object per frame, closed at exit. A process that
     died at teardown leaves it cut off mid-object: keep every complete record."""
@@ -337,6 +376,24 @@ def host_sampler(path: Path, stop: threading.Event) -> None:
             stop.wait(1.0)
 
 
+def board_settings(a: argparse.Namespace, name: str) -> dict:
+    """One board's stream settings: --n6-* / --ae3-* override the shared --board-* values, so the
+    N6 and AE3 can record at different settings (pool 2, 2026-10-17: best per camera)."""
+    key = name.split("_", 1)[1]  # openmv_n6 -> n6
+
+    def pick(opt):
+        v = getattr(a, f"{key}_{opt}", None)
+        return getattr(a, f"board_{opt}") if v is None else v
+
+    s = {"framesize": pick("framesize"), "jpeg_quality": pick("quality"), "fps": pick("fps"),
+         "max_seconds": int(a.seconds + 60), "warmup_ms": 2000}
+    if pick("subsampling") not in (None, "auto"):  # absent = the firmware's own choice
+        s["subsampling"] = pick("subsampling")
+    if a.timing:
+        s["timing"] = True
+    return s
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seconds", type=float, default=10.0)
@@ -353,20 +410,27 @@ def main() -> int:
                     help="board frame cap, both boards (0 = as fast as each can). 10: the AE3's "
                          "VGA ceiling, and the N6 (full-speed USB) dropped bytes at 30-63 fps "
                          "over minutes (soak 2026-10-14)")
+    ap.add_argument("--board-subsampling", default="auto",
+                    help="JPEG chroma subsampling: auto (firmware choice: AE3 4:4:4 at q>=60, "
+                         "N6 hardware 4:2:0) | 420 | 422 | 444")
+    for key in ("n6", "ae3"):
+        ap.add_argument(f"--{key}-framesize", default=None, help=f"{key} only; default --board-*")
+        ap.add_argument(f"--{key}-quality", type=int, default=None)
+        ap.add_argument(f"--{key}-fps", type=float, default=None)
+        ap.add_argument(f"--{key}-subsampling", default=None)
+    ap.add_argument("--timing", action="store_true",
+                    help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
     a = ap.parse_args()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(a.out) if a.out else ROOT / "results" / "video" / ts
     out.mkdir(parents=True, exist_ok=True)
     cams = a.cameras.split(",")
     w, h = (int(v) for v in a.imx_size.split("x"))
-    board_settings = {"framesize": a.board_framesize, "jpeg_quality": a.board_quality,
-                      "fps": a.board_fps, "max_seconds": int(a.seconds + 60),
-                      "warmup_ms": 2000}
     devs = []
     if "imx708" in cams:
         devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
                              buffers=a.imx_buffers, seconds=a.seconds))
-    devs += [BoardVideo(n, s, out, board_settings) for n, s in BOARDS.items() if n in cams]
+    devs += [BoardVideo(n, s, out, board_settings(a, n)) for n, s in BOARDS.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
 
     stop = threading.Event()
@@ -431,6 +495,11 @@ def main() -> int:
                                                     for n, t in firsts.items()} if t0 else {},
         "start_skew_ms": round((max(firsts.values()) - t0) * 1000, 1) if len(firsts) > 1
         else None,
+        # Each camera's own fire -> first frame (the IMX708 waits for its next frame: 0-33 ms),
+        # so a start-skew miss can be traced to one camera (pool 2 spec L6, 2026-10-17).
+        "first_frame_delay_ms": {n: round((t - results[n]["fire_host_mono"]) * 1000, 1)
+                                 for n, t in firsts.items()
+                                 if results[n].get("fire_host_mono")},
         "cameras": results,
         "ok": all(r.get("ok") for r in results.values()) and len(results) == len(cams),
     }
@@ -446,6 +515,7 @@ def main() -> int:
         print(f"  {n}: {'ok' if r.get('ok') else 'FAIL'} frames {r.get('frames')} fps "
               f"{r.get('fps')} max_gap {r.get('max_gap_ms')} ms bytes {r.get('bytes')} "
               f"lost {r.get('frames_lost')} resyncs {r.get('resyncs', 0)} "
+              f"short {r.get('short_frames', 0)} "
               f"{str(r.get('error', ''))[:120]}", flush=True)
     print(f"sync_video: start skew {summary['start_skew_ms']} ms offsets "
           f"{summary['start_offsets_ms']} host {summary.get('host')} -> "
