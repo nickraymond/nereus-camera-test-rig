@@ -8,6 +8,7 @@ Sources are only read (never moved or deleted). Records go to <dest_zip_dir>/zip
 """
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -28,7 +29,21 @@ def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+MARGIN = 2 * 2**30  # keep 2 GiB free on the destination
+
+
+def require_mounted(path: Path) -> None:
+    """A /Volumes/<name>/... path must be on a mounted volume: writing there while the volume is
+    unmounted silently creates the folder on the Mac's own disk."""
+    parts = path.absolute().parts
+    if len(parts) >= 3 and parts[1] == "Volumes":
+        vol = Path(*parts[:3])
+        if not os.path.ismount(vol):
+            raise SystemExit(f"{vol} is not mounted; refusing to write {path}")
+
+
 def cmd_copy(dest: Path, zips: list[Path]) -> int:
+    require_mounted(dest)
     dest.mkdir(parents=True, exist_ok=True)
     rec = dest / "zips.tsv"
     if not rec.exists():
@@ -43,6 +58,9 @@ def cmd_copy(dest: Path, zips: list[Path]) -> int:
             print(f"UNZIP -t FAILED {z.name}: {t.stdout[-300:]} {t.stderr[-300:]}", flush=True)
             return 1
         out = dest / z.name
+        if shutil.disk_usage(dest).free < z.stat().st_size + MARGIN:
+            print(f"NO SPACE for {z.name} on {dest}", flush=True)
+            return 1
         shutil.copyfile(z, out)
         h1, h2 = sha256(z), sha256(out)
         if h1 != h2 or out.stat().st_size != z.stat().st_size:
@@ -55,6 +73,7 @@ def cmd_copy(dest: Path, zips: list[Path]) -> int:
 
 
 def cmd_verify(dest: Path) -> int:
+    require_mounted(dest)
     rows = [ln.split("\t") for ln in (dest / "zips.tsv").read_text().splitlines()[1:]]
     bad = 0
     for name, size, h_src, _h_dest, *_ in rows:
@@ -68,6 +87,8 @@ def cmd_verify(dest: Path) -> int:
 
 
 def cmd_unpack(dest: Path, video_dir: Path) -> int:
+    require_mounted(dest)
+    require_mounted(video_dir)
     out_rows = []
     for z in sorted(dest.glob("[!.]*.zip")):
         with zipfile.ZipFile(z) as zf:
