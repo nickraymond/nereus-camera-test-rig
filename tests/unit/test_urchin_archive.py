@@ -26,7 +26,8 @@ def test_copy_verify_unpack_roundtrip(tmp_path, capsys):
     assert {p: p.read_bytes() for p in (a, b)} == before  # sources untouched
     rows = (dest / "zips.tsv").read_text().splitlines()
     assert len(rows) == 3 and all(r.split("\t")[2] == r.split("\t")[3] for r in rows[1:])
-    assert az.cmd_verify(dest) == 0
+    assert az.cmd_verify(dest, [a.name, b.name]) == 0
+    assert not list(dest.glob("*.part"))
 
     video = tmp_path / "ssd" / "video"
     assert az.cmd_unpack(dest, video) == 0
@@ -40,7 +41,39 @@ def test_copy_verify_unpack_roundtrip(tmp_path, capsys):
     data = bytearray((dest / a.name).read_bytes())
     data[10] ^= 0xFF
     (dest / a.name).write_bytes(bytes(data))
-    assert az.cmd_verify(dest) == 1
+    assert az.cmd_verify(dest, [a.name, b.name]) == 1
+
+
+def test_verify_checks_every_expected_zip_not_just_the_records(tmp_path, capsys):
+    zips = []
+    for i in range(3):
+        z = tmp_path / f"z{i}.zip"
+        _zip(z, {f"F/c{i}.MP4": bytes([i]) * 100})
+        zips.append(z)
+    dest = tmp_path / "dest"
+    assert az.cmd_copy(dest, zips[:2]) == 0  # a partial copy: 2 of 3
+    names = [z.name for z in zips]
+    assert az.cmd_verify(dest, names[:2]) == 0
+    assert az.cmd_verify(dest, names) == 1
+    assert "MISSING z2.zip (not recorded)" in capsys.readouterr().out
+    (dest / "z1.zip").unlink()  # recorded but gone: reported, no crash
+    assert az.cmd_verify(dest, names[:2]) == 1
+    assert "MISSING z1.zip (recorded, file not found)" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="expected zips"):
+        az.cmd_verify(dest, [])
+
+
+def test_unpack_keeps_subfolders_and_reads_only_recorded_zips(tmp_path):
+    z = tmp_path / "s.zip"
+    _zip(z, {"South Wreck/day1/c.MP4": b"a" * 10, "South Wreck/day2/c.MP4": b"b" * 10})
+    dest = tmp_path / "dest"
+    assert az.cmd_copy(dest, [z]) == 0
+    _zip(dest / "stray.zip", {"X/stray.MP4": b"s"})  # not in zips.tsv: never unpacked
+    video = tmp_path / "video"
+    assert az.cmd_unpack(dest, video) == 0
+    assert (video / "South Wreck" / "day1" / "c.MP4").read_bytes() == b"a" * 10
+    assert (video / "South Wreck" / "day2" / "c.MP4").read_bytes() == b"b" * 10
+    assert not (video / "X").exists()
 
 
 def test_copy_refuses_a_broken_zip(tmp_path):
