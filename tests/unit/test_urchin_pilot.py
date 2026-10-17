@@ -114,6 +114,8 @@ def test_thermal_parse():
     assert pl.thermal_limited("CPU_Scheduler_Limit \t= 100\nCPU_Speed_Limit \t= 70")
     assert not pl.thermal_limited("CPU_Speed_Limit \t= 100")
     assert pl.thermal_limited("Thermal Warning Level set to 2.")
+    assert pl.thermal_limited("Note: No thermal warning level\nPerformance Warning Level set to 1")
+    assert not pl.thermal_limited("Note: No performance warning level has been recorded")
 
 
 def test_wait_cool_pauses_until_clear(monkeypatch):
@@ -164,6 +166,45 @@ def _run_dir(tmp_path, specs):
     return run
 
 
+def _fake_owl(run, names):
+    dets = {n: [{"box": [10, 10, 60, 60], "score": 0.4 if i % 2 else 0.1}] for i, n in
+            enumerate(names)}  # fmt: skip
+    pl.write_json(run / "owl_prelabels.json", {"model": "m", "query": "q", "min_score": 0.05,
+                                               "detections": dets})  # fmt: skip
+
+
+def _fill_calls(run):
+    for name in ("pilot_sample", "scale_sample"):
+        rows = pl.read_csv(run / f"{name}_calls.csv")
+        for r in rows:
+            r |= {"usable": "yes", "urchin": "unsure", "scale_ref": "none"}
+        pl.write_csv(run / f"{name}_calls.csv", rows, list(rows[0]))
+
+
+@needs_vt
+def test_replacement_picked_during_extract_is_scored(tmp_path):
+    """QE 005 R1: the real layout, all 8 yes; #3 fails E0, so #5 replaces it and is scored."""
+    specs = [(f, f"v{i}.mp4", "libx264") for i, f in enumerate(FOLDERS, start=1)]
+    run = _run_dir(tmp_path, specs)
+    (tmp_path / "src" / "v3.mp4").write_bytes(b"\x00not a video" * 100)  # unreadable: E0 fails
+    assert pl.cmd_select(run) == 0
+    assert [c["num"] for c in pl.read_json(run / "pilot_set.json")["videos"]] == [1, 2, 3, 4, 6, 7]
+    assert pl.cmd_extract(run, sys.executable, Path("/")) == 0
+    state = pl.read_json(run / "run.json")
+    assert state["extract"]["3"]["failed"] == "E0 ffprobe"
+    assert pl.read_json(run / "pilot_set.json")["extracted"] == [1, 2, 4, 5, 6, 7]
+    names = pl.kept_names(run)
+    _fake_owl(run, names)
+    assert pl.cmd_samples(run) == 0
+    _fill_calls(run)
+    assert pl.cmd_score(run) == 0
+    q = list(csv.DictReader((run / "quality.csv").open()))
+    assert [int(r["num"]) for r in q] == [1, 2, 4, 5, 6, 7]
+    v = pl.read_json(run / "verdict.json")
+    assert v["n_videos"] == 6 and v["folders"]["Oct 2025"]["videos"] == 2
+    assert "6 videos" in v["line"]
+
+
 @needs_vt
 def test_extract_stops_when_first_two_videos_fail(tmp_path):
     run = _run_dir(
@@ -198,30 +239,14 @@ def test_pilot_end_to_end_on_synthetic_clips(tmp_path):
     inv = pl.read_csv(run / "inventory.csv")
     assert sorted(r["file"] for r in inv) == ["a1.mp4", "a3.mp4", "b1.mp4"]
 
-    dets = {n: [{"box": [10, 10, 60, 60], "score": 0.4 if i % 2 else 0.1}] for i, n in
-            enumerate(names)}  # fmt: skip
-    pl.write_json(run / "owl_prelabels.json", {"model": "m", "query": "q", "min_score": 0.05,
-                                               "detections": dets})  # fmt: skip
-    pl.write_json(
-        run / "pilot_set.json",
-        {
-            "videos": pl.select(
-                pl.read_json(run / "candidates.json"),
-                pl.read_json(run / "marks.json")["marks"],
-                {2},
-            )
-        },
-    )
+    assert pl.read_json(run / "pilot_set.json")["extracted"] == [1, 3, 4]
+    _fake_owl(run, names)
     assert pl.cmd_samples(run) == 0
     assert len((run / "pilot_sample.txt").read_text().split()) == len(names)  # < 100: all
     assert list((run / "sheets" / "pilot_sample").glob("still_sheet_*.jpg"))
     with pytest.raises(ValueError, match="not filled"):
         pl.load_calls(run)
-    for name in ("pilot_sample", "scale_sample"):
-        rows = pl.read_csv(run / f"{name}_calls.csv")
-        for r in rows:
-            r |= {"usable": "yes", "urchin": "unsure", "scale_ref": "none"}
-        pl.write_csv(run / f"{name}_calls.csv", rows, list(rows[0]))
+    _fill_calls(run)
     assert pl.cmd_score(run) == 0
     v = pl.read_json(run / "verdict.json")
     assert v["n_videos"] == 3 and v["outcome"] == "good enough to work"

@@ -106,12 +106,15 @@ def free_gib(path: Path) -> float:
 
 
 def thermal_limited(pmset_text: str) -> bool:
-    """True if `pmset -g therm` reports a CPU speed limit < 100 or a thermal warning level > 0."""
+    """True if `pmset -g therm` reports a thermal or performance warning level > 0 (what arm64
+    Macs print) or a CPU speed limit < 100 (Intel Macs)."""
     for line in pmset_text.splitlines():
         if m := re.search(r"CPU_Speed_Limit\s*=\s*(\d+)", line):
             if int(m.group(1)) < 100:
                 return True
-        if m := re.search(r"[Tt]hermal [Ww]arning [Ll]evel (?:set to|=)\s*(\d+)", line):
+        if m := re.search(
+            r"(?:thermal|performance) warning level (?:set to|=)\s*(\d+)", line, re.I
+        ):
             if int(m.group(1)) > 0:
                 return True
     return False
@@ -410,7 +413,21 @@ def cmd_extract(run: Path, python: str, mount: Path) -> int:
             return 2
     merge_stills(run, state)
     write_json(run / "run.json", state)
+    ps = read_json(run / "pilot_set.json", {})
+    ps |= {"extracted": [c["num"] for c in extracted_set(run)], "extracted_utc": _now()}
+    write_json(run / "pilot_set.json", ps)
     return 0
+
+
+def extracted_set(run: Path) -> list[dict]:
+    """The videos actually extracted (done, not failed), in processing order, as candidates.
+
+    This, not select()'s first pick, is the pilot set that gets scored: a P4 replacement chosen
+    during `extract` is in it, a failed video is not."""
+    cands = {c["num"]: c for c in read_json(run / "candidates.json")}
+    entries = read_json(run / "run.json", {"extract": {}})["extract"].values()
+    ok = [e for e in entries if e.get("done") and not e.get("failed")]
+    return [cands[e["num"]] for e in sorted(ok, key=lambda e: e["start_utc"])]
 
 
 def merge_stills(run: Path, state: dict) -> None:
@@ -515,7 +532,7 @@ def load_calls(run: Path) -> tuple[list[dict], list[dict]]:
 
 
 def cmd_score(run: Path) -> int:
-    pilot = read_json(run / "pilot_set.json")["videos"]
+    pilot = extracted_set(run)
     state = read_json(run / "run.json")
     calls, scale = load_calls(run)
     dets = read_json(run / "owl_prelabels.json")["detections"]
