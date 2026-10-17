@@ -44,7 +44,11 @@
     - both at 480M on the hub;
     - SD 33.1 GB free;
     - idle CmaFree 42 MB.
-  - The N6 was reset once at 3:28 PM after the mpremote hash read; it came back fine.
+  - The N6 was reset once at 3:28 PM after the mpremote hash read. `scripts/board_probe.py probe
+    10003500025043364d343000` at 3:38 PM: ok, stage "replied", firmware 1.28.0, so main.py is serving.
+  - **Owner's condition (rig session, 3:38 PM):** before touching the unit, the successor messages the rig session
+    "I hold nereus002 under the 10/17 hand-over". Until then nobody runs anything on it. Without that ack by Sun
+    11:03 AM, the rig session takes the unit back as is and tells PjM 003.
 - **Open decisions / NEEDED from Nick:**
   - d58 (lens block on Wed) is open.
   - Already decided Sat: d52, d55, d56, d57. Each was forwarded by PjM 003 and read in its own thread by this session.
@@ -57,7 +61,8 @@
     only git files + caches + REVISION, so deploy with `git archive <sha> | ssh pi@nereus002 'tar -x -C ~/nereus-rig-poolcam'`
     and update REVISION. Never `--delete`.
   - mpremote 1.29 `fs sha256sum` prints `sha256sum :file` then the hash; it leaves the board at its REPL unless you chain
-    `+ reset` (board_hashes.py does).
+    `+ reset` (board_hashes.py does). After any `fs cp` or hash read, run `board_probe.py probe <serial>` to confirm
+    main.py serves.
   - "Virtual Comm Port in FS Mode" is only the N6's product string; `lsusb -t` says 480M.
   - The AE3 is work-bound at ~107 ms/frame underwater (software JPEG 4:4:4 at q70); 4:2:0 is the B0 lever.
   - zsh doesn't word-split `$var`, and an `rm -rf $VAR` is refused by the safety check: use literal paths, or bash
