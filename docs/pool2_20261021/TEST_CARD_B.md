@@ -49,10 +49,10 @@ Restore:
 ```bash
 git -C <rig checkout> archive 56d49b5 | ssh pi@nereus002 'mkdir -p /tmp/r56 && tar -x -C /tmp/r56'
 ssh pi@nereus002 'rsync -a --delete --exclude results/ --exclude data/ --exclude .claude/ --exclude compression_study/ --exclude .venv/ --exclude REVISION /tmp/r56/ ~/nereus-rig-poolcam/ && echo "56d49b5 main (restored)" > ~/nereus-rig-poolcam/REVISION'
-ssh pi@nereus002 'cd ~/nereus-rig-poolcam && $PY -m host_tools.deploy_openmv --board n6 --serial 10003500025043364d343000 && $PY -m host_tools.deploy_openmv --board ae3 --serial 0829c14000000000'
+ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/.venv/bin/python && $PY -m host_tools.deploy_openmv --board n6 --serial 10003500025043364d343000 && $PY -m host_tools.deploy_openmv --board ae3 --serial 0829c14000000000'
 ```
 
-`$PY` is the Pi's venv python, recorded in `BUILD.md` at step 0. Verify the restore: the 14 board hashes equal
+`$PY` = `/home/pi/nereus-camera-test-rig/.venv/bin/python`, the venv `pool_mode.sh` uses; recorded in `BUILD.md`. Verify the restore: the 14 board hashes equal
 `board_firmware_sha256_56d49b5.txt`, and `scripts/board_probe.py probe <serial>` is ok on both boards.
 
 ## 3. Conditions
@@ -86,6 +86,9 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && $PY -m host_tools.deploy_openmv --b
      If ci-record is running, stop and ask the rig session; I don't stop Nick's services.
    - Record: `lsusb -t` and each board's link speed (rev 6: before any HD clip), `df -B1`, `vcgencmd get_throttled`,
      UPS VIN/VBAT, uptime, boot id, the quirk in `/proc/cmdline`.
+   - Done Sat 3:25 PM: flag created; no recorder running; both boards on cdc_acm at 480M; SD 33.1 GB free; throttled
+     0x0; quirk present; REVISION main@56d49b5. CmaFree was 42 MB at idle: page cache borrows CMA, so the report-only
+     RAM flag needs this baseline.
    - Save the scene stills.
 1. **Deploy the study build** (§2) and record it.
 2. **B0, AE3 chroma** (by Sun night; rev 6), with `--timing` on both boards:
@@ -106,11 +109,14 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && $PY -m host_tools.deploy_openmv --b
    (AE3 in the format d56 or the rule chose, plus its 4:4:4 control if that differs).
    - The AE3's own 640×400 rate for the relative bar comes from `ctl_final`.
 4. **Resolution steps** (Mon → Tue noon, final build). Each setting changes one board; the other stays at its control.
-   - **N6, prediction pre-registered here (rev 6):**
+   - **N6, prediction pre-registered here (rev 6), corrected by step 0 before any HD clip:**
      - HD 1280×800 MJPEG q70 needs ~0.97 MB/s (97 kB/frame, 10/2 bench).
-     - The N6 is a full-speed device (its by-id name says "in_FS_Mode"; RESULTS 10/14), and ~0.97 MB/s is at or above
-       what full-speed USB carries in practice.
-     - **Expect HD to lose fps or frames.**
+     - Rev 6 assumed a full-speed (12 Mbit/s) N6 link, from the board's USB product name "Virtual Comm Port in FS
+       Mode" (RESULTS 10/14). `lsusb -t` on Sat 10/17 3:25 PM shows **both boards, the N6 included, at 480M
+       (high-speed)** on the hub. The "FS Mode" text is a descriptor string, not the link speed.
+     - Prediction as registered now: ~0.97 MB/s fits the link, so **HD holds 10 fps.** The risk is byte loss when the
+       Pi's reader stalls (the 10/14 mechanism: MicroPython's CDC send timeout, seen at 0.4–0.8 MB/s), more likely at
+       ~3.4× Friday's data rate. The "0 frames lost" bar and the d53 pause bar decide it.
    - `n6_hd`: N6 1280×800 q70, n = 3.
    - **Only if `n6_hd` fails:**
      - `n6_960_probe`: one clip at 960×600 q70. It passes if its frames decode at 960×600 and the stream runs 30 s.
