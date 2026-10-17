@@ -249,4 +249,24 @@ timeline e_pool1021, card prop_pool2_prep. Author: Principal Engineer, Fri 10/16
 - **CMA flag (report-only, rev 4):** idle CmaFree is 42 MB on nereus002 (the page cache borrows CMA), so "< 50 MB" means
   nothing on its own. The flag becomes "CmaFree more than 20 MB below that boot's idle reading". RESULTS shows the idle
   baseline next to each reading.
-- d55 (start-skew bar) is still with Nick (Mon 8 AM). Its answer goes in the next rev.
+- d55 (start-skew bar) is still with Nick (Mon 8 AM). Its answer goes in rev 8.
+
+## Amendment rev 8 (PE 002, Sat 10/17 3:30 PM; QE 005 R2 + R3 on rev 7, required before B0). Overrides earlier revs where they conflict.
+- **R2, the N6 resync fix has to be reviewed before it deploys.** aa06bc7 exists only on a local branch
+  (fix/n6-video-resync, committed 10/15) and has no PR or QE review. It changes the board-stream decode in
+  `scripts/sync_video.py`, which rig #121 also changes (f672126). Before it deploys to nereus002:
+  1. bring it onto the pool2 branch (rig #121; it's d57's work, so it belongs to this ticket), rebased on f672126;
+  2. add a unit test of the combined decode: a synthetic byte loss costs one frame, the stream resyncs, and the
+     timing columns stay right;
+  3. QE PASS on that push;
+  4. then deploy, re-run both 640×400 controls, and record the rig sha on the B card.
+  It still goes in before B0 (rev 7, d57 item 1). If QE can't pass it by Sun night, B0 and the ladder run without it, and
+  the N6's usable share shows the cost. Tell the PE and PjM.
+- **R3, which bars an unusable N6 clip still has to meet (implements d57 as approved):**
+  - **Expected frames** = board_fps × clip seconds (10 × 30 = 300). A truncated stream can't shrink it.
+  - A clip is **usable** when frames received ≥ 95 % of expected (≥ 285 at 10 fps / 30 s).
+  - An N6 setting holds when ≥ 2 of its 3 clips are usable, and the usable clips meet every other bar (fps ≥ 9.5,
+    start skew, IMX708, host). An unusable clip counts only in the usable share and the lost-frame count.
+  - Any clip with a wedge or a ladder USB reset (F2) still fails the setting.
+  - A throttled clip is still void (cool down, re-run).
+- The rev 7 block says d55 goes in rev 8. It now goes in **rev 9**.
