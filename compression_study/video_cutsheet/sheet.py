@@ -99,7 +99,11 @@ def main() -> None:
             return None
         p = enc_still(r, img / f"{enc}_{size}.png")
         w = [R.get((c, enc, size)) for c in ("rc_c3", "rc_c1", "rc_lead2")]
-        worst = (f" / {min(x['vmaf_mean'] for x in w):.0f} worst of 3 clips" if all(x and x.get("ok") for x in w) else "")
+        if size == 0:  # MJPEG floor: each clip's floor is a different size, so no worst-of-3 at one size
+            worst = (f" / worst of 3 n/a (floors {min(x['bytes'] for x in w) / 1e6:.2f}–"
+                     f"{max(x['bytes'] for x in w) / 1e6:.2f} MB)" if all(x and x.get("ok") for x in w) else "")
+        else:
+            worst = (f" / {min(x['vmaf_mean'] for x in w):.0f} worst of 3 clips" if all(x and x.get("ok") for x in w) else "")
         return {"label": f"{label} · {kb(r['bytes'])} · VMAF {r['vmaf_mean']:.0f} this clip{worst}",
                 "image": str(p.relative_to(SHEET))}
 
@@ -156,7 +160,7 @@ def main() -> None:
          "table": {"columns": ["Encode on the Pi", "Time", "Energy", "Basis"], "rows": CAP["cost_rows"]}},
     ]
     spec = {
-        "title": "720p video screen",
+        "title": "E7 720p video screen",
         "eyebrow": f"Nereus Vision · E7 first look · desk emulation · {CAP['date']}",
         "lede": CAP["lede"],
         "inline_max_width": 800,

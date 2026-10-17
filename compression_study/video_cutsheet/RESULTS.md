@@ -37,22 +37,22 @@ Capability from docs, firmware source and earlier rig measurements only (sources
 
 | encoder | 100 KB worst / mean VMAF | 500 KB | 1 MB | knee (bracketed) | MJPEG floor (smallest setting) |
 |---|---|---|---|---|---|
-| IMX708 · H.264 Pi hardware (desk proxy) · 30 fps | 3.7 / 11.8 | 42.2 / 52.3 | 64.8 / 70.9 | 500 KB–1 MB (bracket; not found below 1 MB) | — |
-| IMX708 · same, no B-frames like the Pi hardware (sensitivity, post-hoc) · 30 fps | 1.8 / 11.6 | 43.0 / 53.1 | 66.4 / 72.0 | 500 KB–1 MB (bracket; not found below 1 MB) | — |
-| IMX708 · AV1 on the Pi (software) · 30 fps | 34.9 / 41.8 | 70.6 / 76.2 | 81.4 / 85.0 | 500 KB–1 MB (bracket; not found below 1 MB) | — |
+| IMX708 · H.264 Pi hardware (desk proxy) · 30 fps | 3.7 / 11.8 | 42.2 / 52.3 | 64.8 / 70.9 | 500 KB–1 MB or above (bracket; still rising at 1 MB) | — |
+| IMX708 · same, no B-frames like the Pi hardware (sensitivity, post-hoc) · 30 fps | 1.8 / 11.6 | 43.0 / 53.1 | 66.4 / 72.0 | 500 KB–1 MB or above (bracket; still rising at 1 MB) | — |
+| IMX708 · AV1 on the Pi (software) · 30 fps | 34.9 / 41.8 | 70.6 / 76.2 | 81.4 / 85.0 | 500 KB–1 MB or above (bracket; still rising at 1 MB) | — |
 | N6 · MJPEG on-board hardware JPEG · 15 fps | can't reach (floor 1275 KB) | can't reach (floor 1275 KB) | can't reach (floor 1275 KB) | n/a (missing sizes) | 1275–1868 KB, worst VMAF 64.9 |
-| N6 · H.264 on-board (needs custom firmware; desk proxy) · 15 fps | 2.0 / 11.7 | 51.4 / 61.5 | 73.2 / 78.4 | 500 KB–1 MB (bracket; not found below 1 MB) | — |
-| N6 → Pi · AV1 on the Pi (software) · 15 fps | 39.0 / 47.1 | 74.6 / 81.1 | 85.2 / 89.4 | 500 KB–1 MB (bracket; not found below 1 MB) | — |
+| N6 · H.264 on-board (needs custom firmware; desk proxy) · 15 fps | 2.0 / 11.7 | 51.4 / 61.5 | 73.2 / 78.4 | 500 KB–1 MB or above (bracket; still rising at 1 MB) | — |
+| N6 → Pi · AV1 on the Pi (software) · 15 fps | 39.0 / 47.1 | 74.6 / 81.1 | 85.2 / 89.4 | 500 KB–1 MB or above (bracket; still rising at 1 MB) | — |
 | AE3 · MJPEG on-board software JPEG · 10 fps | can't reach (floor 769 KB) | can't reach (floor 769 KB) | 48.1 / 61.0 | n/a (missing sizes) | 769–801 KB, worst VMAF 20.6 |
-| AE3 → Pi · AV1 on the Pi (software) · 10 fps | 41.9 / 50.9 | 76.7 / 84.0 | 86.8 / 91.6 | 500 KB–1 MB (bracket; not found below 1 MB) | — |
+| AE3 → Pi · AV1 on the Pi (software) · 10 fps | 41.9 / 50.9 | 76.7 / 84.0 | 86.8 / 91.6 | 500 KB–1 MB or above (bracket; still rising at 1 MB) | — |
 
 Diver (pool round 3) and pool (6 clips, our camera, 10 fps only): see [results_table.md](results_table.md). AV1 on the Pi at 10 fps scores 74.1 / 91.3 / 95.1 (worst clip at 100 KB / 500 KB / 1 MB) there; rig #116 got 74.8 at 100 KB for the same recipe on the same clips.
 
 - VMAF 0–100 (70 ≈ good, 60 ≈ watchable), each board against the source at **its own** frame rate; across boards it is
   not like-for-like (frame rate changes VMAF's motion term, and VMAF ignores 10 fps choppiness).
 - **Knee** (spec must do 5 as amended by rev 3): only bracketed with three sizes. On moving-camera footage every encoder that reaches 500 KB still gains 10–23 VMAF points
-  from 500 KB to 1 MB on the worst clip, so every knee is the bracket 500 KB–1 MB: the smallest size with the most
-  quality is not found below 1 MB. On the static pool clips (AV1, 10 fps) 500 KB → 1 MB adds 3.8 points (91.3 → 95.1),
+  from 500 KB to 1 MB on the worst clip, so every knee is the bracket 500 KB–1 MB or above: the smallest size with the
+  most quality is not found below 1 MB. On the static pool clips (AV1, 10 fps) 500 KB → 1 MB adds 3.8 points (91.3 → 95.1),
   just over the 3-point bar. Where the worst-clip curves cross the bars: AV1 on the Pi passes 70 between 100 and 500 KB
   at 15 and 10 fps, and just at 500 KB at 30 fps (70.6); the N6 H.264 proxy passes 60 and 70 between 500 KB and 1 MB;
   the IMX708 H.264 proxy passes 60 between 500 KB and 1 MB and doesn't reach 70 by 1 MB (64.8); AE3 MJPEG reaches
@@ -72,8 +72,8 @@ Diver (pool round 3) and pool (6 clips, our camera, 10 fps only): see [results_t
   at 100 KB, so a moving background needs ~5× the bytes for the same quality.
 - **MJPEG has a size cliff, not a smooth curve** (checked after PjM 003's question, `checks/ae3_mjpeg_q_sweep_rc_c3.json`):
   on the primary clip the AE3 emulation gives 769 / 770 / 789 / 822 / 879 / 996 KB at quality 1 / 3 / 5 / 8 / 12 / 19
-  with VMAF 34 / 37 / 48 / 60 / 70 / 81. At quality ≤ 5 every quantizer is capped at 255, so the file stops shrinking
-  while the picture keeps falling apart. The jump from 34 at 769 KB to 81 at 996 KB is real.
+  with VMAF 34 / 37 / 48 / 60 / 70 / 81. At quality 1 all 64 luma quantizers are capped at 255 (56 at quality 3, 45 at
+  5), so the file barely shrinks while the picture keeps falling apart. The jump from 34 at 769 KB to 81 at 996 KB is real.
 - **F2 smearing VMAF under-weights:** at 1:1 the H.264 proxies at 500 KB smear moving kelp; the AE3's 1 MB MJPEG scores
   VMAF 81 on the primary window but shows colour blotches (VMAF reads luma only; SSIMULACRA2 11.5 flags it). The page
   shows one fixed moment per board (source frame 72); worst-frame indices are in `results.csv`.

@@ -54,9 +54,9 @@ def knee(worst: dict[int, float | None]) -> str:
             if i == 0:
                 return "≤ 100 KB"
             if i == len(SIZES) - 1:  # only the ceiling itself qualifies: no flattening seen up to 1 MB
-                return "500 KB–1 MB (bracket; not found below 1 MB)"
+                return "500 KB–1 MB or above (bracket; still rising at 1 MB)"
             return f"{SIZES[i - 1]}–{s} KB (bracket)"
-    return "500 KB–1 MB (bracket; not found below 1 MB)"
+    return "500 KB–1 MB or above (bracket; still rising at 1 MB)"
 
 
 def manifest() -> None:
