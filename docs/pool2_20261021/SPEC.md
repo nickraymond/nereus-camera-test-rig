@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 3, tier (a); rev 2 + rev 3 amendments at the end)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 5, tier (a); rev 2–5 amendments at the end)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -152,3 +152,45 @@ timeline e_pool1021, card prop_pool2_prep. Author: Principal Engineer, Fri 10/16
   - The lessons list is first written Sat and updated through Tue (lens results included).
   - Disk for the gate: 25 cycles × 3 cameras × 30 s ≈ 50–100 MB per cycle, ≈ ≤ 2.5 GB on the Pi SD, so clear the gate
     clips after each cycle's check or keep the SD stop (< 2 GB free) in force.
+
+## Amendment rev 4 (PE 002, Sat 10/17 2:58 PM; Nick's answer on "memory clean"). Overrides rev 3's "Memory clean" block.
+- **Nick, PE chat ("Principal Engineer", local_8693e8ed), Sat 10/17 ~2:55 PM, verbatim:** "memory meant SD card space in
+  that context". It answers the question rev 3 left open ("read as RAM + processes … the PjM confirms with Nick"), so
+  rev 3's RAM reading is replaced, not loosened by the PE. No gate data exists yet (the gate runs Tue PM).
+- **The ready-for-pool gate has two verdict lines; both must pass.** Kept separate, as in d52 ("do not couple"):
+  - **G-a, 25 in a row (unchanged from rev 3):** boot + recording on all 3 cameras + clean shutdown, 25 passing cycles in a
+    row; a failed cycle resets the count. Added to the cycle pass: 30 s after the clip ends, 0 recorder processes still
+    running (ci-record, rpicam-*, sync_video.py / capture scripts). Why it stays a gate: it's the "stop" half of Nick's
+    start/stop bar, a recorder left running at poweroff is the warm-start USB-hang pattern cold boots fixed, it catches
+    dive autostart grabbing the cameras (F7), and it can't false-fail.
+  - **G-b, SD clean (new):** measured with `df -B1` on the SD filesystem that holds `results/`. "Outside use" = SD used
+    minus `du -sb results/gate/<run>/` (the gate's own clips and logs are evidence, so they don't count as leaks).
+    1. Readings: gate start (before cycle 1), then each cycle after boot (before recording) and 30 s after its clip ends.
+    2. No cycle grows outside use by more than 100 MB.
+    3. Outside use at the last reading is ≤ 250 MB above the gate-start reading (nothing accumulates across 25 cycles).
+    4. SD free ≥ 2 GB at every reading. Before arming, SD free ≥ 2 GB + 25 × the per-cycle run-folder size measured at
+       Wed's settings in part B; if not, pull and clear first.
+    5. **Clean before the pool:** after the gate, the run folder is pulled to
+       `~/NereusData/nereus-camera-test-rig/2026-10-20_gate25/`, its SHA256SUMS verify on the Mac, and only then is it
+       cleared from the Pi. SD free is then within 250 MB of the gate-start reading, ≥ 2 GB, and ≥ 2× the SD use Wed's
+       card (part C) plans.
+    - G-b fails → find the cause. A stray file only: remove it and re-check 5. A code or config fix: the gate re-runs
+      (rev 3 order rule 4).
+- **RAM is report-only:** mem_avail and CMA free per cycle, 30 s after the clip. RESULTS flags any CMA free < 50 MB or
+  mem_avail < 150 MB (Friday in water: 59 MB, 193 MB). Why not a gate: every cycle is a cold boot, so RAM can't carry
+  from one cycle to the next, and a camera starved of RAM fails its recording, which already fails G-a.
+- **New failure-mode row F9:** the SD fills before or during Wed (clips not cleared, autostart clips, log growth). Caught by
+  G-b readings 1–5 and the existing < 2 GB stop. Then: stop, pull and clear, and re-check G-b 5 before the freeze.
+- **Harness:** `scripts/gate_cycle.py` today records no SD or process readings and clears nothing. Adding them (plus the
+  CSV columns) is a rig change on the session's draft PR, with QE, before the gate; it's part of Wed's build, so it lands
+  before rev 3 order step 3.
+
+## Amendment rev 5 (PE 002, Sat 10/17 3:02 PM; the pool2 session's clock finding). Overrides must dos 2 and 12's clock.
+- **Finding (pool2 session, PR #121 scripts/matched_frames.py; PE spot check on clip098):** `host_rx_mono` is when the Pi
+  finished reading a board frame (capture + JPEG + USB), not when it was captured. It lags capture by ~101–135 ms on the N6
+  and ~207–218 ms on the AE3 (clip098: medians 123 ms and 207 ms). Matching on it pairs frames 1–2 frames apart at 10 fps.
+- **Must dos 2 and 12 now match on capture time, within ±50 ms (the bar is unchanged, now on the right clock):**
+  - boards: `ticks_ms` mapped to the Pi clock by the fire receipt (`first_frame_host_mono` + (ticks − first ticks));
+  - IMX708: its SensorTimestamp, on the same clock as `first_frame_host_mono` in video_sync.json.
+  - A triplet whose capture times span more than 50 ms is dropped and counted in the report, never used.
+  - The report keeps the `host_rx_mono` offsets as a reference column.
