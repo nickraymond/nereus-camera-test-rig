@@ -96,8 +96,8 @@ def test_imx_bars_and_d55_sync_bars():
                                 n6={"start_offset_ms": 0.0}, ae3={"start_offset_ms": 10.0}),
                           "openmv_n6")
     assert late["misses"] == [] and late["board_skew_ms"] == 10.0
-    assert pb.clip_misses(_rows(imx={"first_frame_delay_ms": 34.5}), "openmv_n6")["misses"] == [
-        "imx708_start"]
+    late_imx = pb.clip_misses(_rows(imx={"first_frame_delay_ms": 34.5}), "openmv_n6")
+    assert late_imx["misses"] == [] and late_imx["imx_start_ok"] is False  # rev 9: own line
     boards = pb.clip_misses(_rows(ae3={"start_offset_ms": 33.5}), "openmv_n6")
     assert boards["misses"] == ["board_skew"] and boards["board_skew_ms"] == 25.3
 

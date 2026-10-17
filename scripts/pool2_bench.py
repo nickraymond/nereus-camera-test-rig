@@ -11,7 +11,8 @@ Purpose: pool test 2 prep part B (docs/pool2_20261021/TEST_CARD_B.md §4–§5).
   - one clip = scripts/sync_video.py with the setting's per-board args;
   - the clip's rows come from scripts/video_clip_table.py, scored against the card's bars;
   - a throttled clip is VOID: cool down 5 min and re-run it; 2 throttled in a row -> stop;
-  - sync (d55): N6 <-> AE3 start skew <= 25 ms; IMX708 first frame <= 34 ms after the trigger;
+  - sync (d55, rev 9): N6 <-> AE3 start skew <= 25 ms is a bar; the IMX708's first frame <= 34 ms
+    after the trigger is reported as its own verdict line, not part of "the setting holds";
   - the setting stops at its first clip that misses a bar (one miss fails the setting).
 
 Usage (on the Pi, repo root):
@@ -44,7 +45,7 @@ COOL_DOWN_S = 300
 # The card's bars (TEST_CARD_B.md §5 = spec pass/fail).
 FPS_MIN = 9.5
 SKEW_MAX_MS = 25.0      # d55 (a), Nick 10/17 3:32 PM: N6 <-> AE3 start skew per clip
-IMX_START_MAX_MS = 34.0  # d55 (b): IMX708 first frame <= one frame period after the trigger
+IMX_START_MAX_MS = 34.0  # d55 (b) / rev 9: IMX708 first frame - fire <= 34 ms, its own verdict line
 IMX_FPS_MIN = 26.0
 IMX_GAP_MAX_MS = 100.0
 AE3_REL_BELOW = 0.2
@@ -101,16 +102,16 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
     if board_skew is None or board_skew > SKEW_MAX_MS:
         misses.append("board_skew")
     imx_d = imx.get("first_frame_delay_ms")
-    if imx_d is None or imx_d > IMX_START_MAX_MS:
-        misses.append("imx708_start")
+    imx_start_ok = imx_d is not None and imx_d <= IMX_START_MAX_MS  # reported, not a setting bar
     throttled = any((r.get("host_throttled") or "0x0") != "0x0" for r in rows)
     ignored = []
     if under == "openmv_n6" and not usable:
         ignored, misses = misses, []
     misses += wedges
     return {"misses": misses, "ignored": ignored, "void": throttled, "cross_effect": cross,
-            "board_skew_ms": board_skew, "n6_usable": usable, "n6_frames": n6.get("frames"),
-            "n6_expected": expected, "n6_lost": n6.get("frames_lost")}
+            "board_skew_ms": board_skew, "imx_start_ok": imx_start_ok, "n6_usable": usable,
+            "n6_frames": n6.get("frames"), "n6_expected": expected,
+            "n6_lost": n6.get("frames_lost")}
 
 
 def setting_holds(clips: list[dict], under: str, n: int = 3) -> bool:
@@ -211,10 +212,12 @@ def main() -> int:
     rec["holds"] = setting_holds(rec["clips"], a.under, a.n) and "stopped" not in rec
     rec["n6_usable_share"] = (f"{sum(bool(c.get('n6_usable')) for c in scored[:a.n])}"
                               f"/{len(scored[:a.n])}")
+    # rev 9: the IMX708 start check is its own verdict line, not part of "the setting holds"
+    rec["imx_start_ok"] = f"{sum(bool(c.get('imx_start_ok')) for c in scored)}/{len(scored)}"
     (out / "setting.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
     print(f"pool2_bench {a.label}: {'HOLDS' if rec['holds'] else 'FAILS'}"
           f" · {len(scored)} scored clip(s) · "
-          f"N6 usable {rec['n6_usable_share']} · "
+          f"N6 usable {rec['n6_usable_share']} · IMX708 start <= 34 ms {rec['imx_start_ok']} · "
           f"{rec.get('stopped', '')}", flush=True)
     if "stopped" in rec and rec["stopped"].startswith("precheck"):
         return 2

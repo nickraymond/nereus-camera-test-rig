@@ -4,7 +4,7 @@ Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before
 
 | | |
 |---|---|
-| **Spec** | [SPEC.md](SPEC.md) rev 8 (sha256 `e5203f3fa492…`, in QE 005's re-gate; rev 7 `4c289cc95525…` PASS-with-nits Sat 3:31 PM with R2, R3) |
+| **Spec** | [SPEC.md](SPEC.md) rev 8 (sha256 `e5203f3fa492…`, QE 005 PASS Sat 3:32 PM). Rev 9 (`aacf8d28116a…`: d55, d56) is in QE's re-gate; it is committed byte-identical once it passes |
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6) |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
@@ -111,9 +111,12 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      the impact … if this can be done in air thats also ok"):
      - B0's two arms already record the same fixed bench scene in 4:4:4 and 4:2:0, back to back. The scene is static
        and the light constant; each clip's IMX708 Lux is checked to confirm it.
-     - From them: a before/after slider page, same frame region, full frame and 1:1 crops, plus the 3× card-area crop
-       pair. The page link goes in d56's `evidence`.
-     - Underwater on Wed only if Nick asks (part C).
+     - Rev 9 deliverable, in air:
+       - B0's pair as QuickTime-playable viewing copies, plus 100 % crops of the same region;
+       - under `~/NereusData/nereus-camera-test-rig/<date>_ae3_chroma/` with a MANIFEST;
+       - its path goes in d56's `evidence`;
+       - the re-encode runs only under PjM 003's compute all-clear.
+     - A slider page of the crops is optional. An underwater pair is optional on the Wed card (part C).
    - **E1, exploratory, not scored:** one N6 HD clip, to see the link limit early for the Mon plan. Labelled `explore`
      and never counted toward any n.
 3. **Controls at the chosen AE3 format** (Mon AM, after d56 or the rule):
@@ -139,6 +142,8 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
        S3 bench, so this is expected to fail. It is still run, because must-do 8 asks for every supported step and
        rev 3 rules out "HD at 7 fps".
      - QVGA is below the control and isn't run.
+     - **Rev 9 (d56):** if the ladder runs 4:4:4 and its first rung above 640×400 fails, that rung re-runs in 4:2:0
+       (n = 3). The ladder continues in 4:2:0 if it holds.
 5. **The 25× ready gate** (Tue afternoon, last, on Wed's exact build and settings; §6).
 
 **Fail fast (§9):** a setting stops at its first clip that misses a bar, because one miss fails the setting. A
@@ -165,7 +170,7 @@ the clip, the §5 bars, fail fast and the throttled-void rule. It writes `result
 | fps (the board under test) | delivered ≥ 9.5 fps over 30 s. AE3, if B0 fails: ≥ its own control 640×400 rate − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
 | frames | AE3: 0 lost; an errored stream or a missing board frame count counts as lost. N6: the usable share above (rev 7, d57) | spec; rev 7–8 |
 | wedges | 0 wedges and 0 ladder USB resets on either board during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2; rev 8 |
-| sync (d55) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`), and the IMX708's first frame ≤ 34 ms after the trigger (one frame period). `start_skew_ms` over all three is still recorded. Applies once the spec rev carrying d55 passes QE (before any data); until then the spec's 25 ms over all three applies | spec; d55 |
+| sync (d55, rev 9) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`). The IMX708's first frame ≤ 34 ms after the trigger is its **own verdict line**, reported per setting and not part of "holds". `start_skew_ms` over all three is still recorded. Applies once rev 9 passes QE (before any data); until then rev 8's 25 ms over all three applies | spec; d55 |
 | IMX708 | ≥ 26.0 fps and max gap ≤ 100 ms | spec (F8) |
 | host | `throttled` = 0x0 over the clip (host_stats.csv); a throttled clip is void (§4) | spec |
 
