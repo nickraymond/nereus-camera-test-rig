@@ -1,4 +1,4 @@
-# Handoff 1: pool-2 prep session → successor (Sat 10/17 ~3:40 PM PT, rotating at ~50 % context)
+# Handoff 1: pool-2 prep session → successor (Sat 10/17 3:36 PM PT, rotating at ~50 % context)
 
 - **Ticket / goal:**
   - Pool test 2 prep for Wed 10/21: the best video per camera at 10 fps, and a reliable rig.
