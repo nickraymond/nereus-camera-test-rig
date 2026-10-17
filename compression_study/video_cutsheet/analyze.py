@@ -23,9 +23,10 @@ HERE = Path(__file__).parent
 GROUPS = {"moving camera (Reef Check, 3 windows)": ["rc_c3", "rc_c1", "rc_lead2"],
           "diver (pool round 3, 2 clips)": DIVER,
           "pool, our camera (6 clips)": POOL}
-ORDER = ["imx708_h264", "pi_av1_30", "n6_mjpeg", "n6_h264", "pi_av1_15", "ae3_mjpeg", "pi_av1_10"]
+ORDER = ["imx708_h264", "imx708_h264nob", "pi_av1_30", "n6_mjpeg", "n6_h264", "pi_av1_15", "ae3_mjpeg", "pi_av1_10"]
 NAME = {
     "imx708_h264": "IMX708 · H.264 Pi hardware (desk proxy) · 30 fps",
+    "imx708_h264nob": "IMX708 · same, no B-frames like the Pi hardware (sensitivity, post-hoc) · 30 fps",
     "pi_av1_30": "IMX708 · AV1 on the Pi (software) · 30 fps",
     "n6_mjpeg": "N6 · MJPEG on-board hardware JPEG · 15 fps",
     "n6_h264": "N6 · H.264 on-board (needs custom firmware; desk proxy) · 15 fps",
@@ -53,9 +54,9 @@ def knee(worst: dict[int, float | None]) -> str:
             if i == 0:
                 return "≤ 100 KB"
             if i == len(SIZES) - 1:  # only the ceiling itself qualifies: no flattening seen up to 1 MB
-                return f"between {SIZES[-2]} KB and 1 MB (still rising toward 1 MB)"
-            return f"between {SIZES[i - 1]} and {s} KB"
-    return f"between {SIZES[-2]} KB and 1 MB (still rising toward 1 MB)"
+                return "500 KB–1 MB (bracket; not found below 1 MB)"
+            return f"{SIZES[i - 1]}–{s} KB (bracket)"
+    return "500 KB–1 MB (bracket; not found below 1 MB)"
 
 
 def manifest() -> None:

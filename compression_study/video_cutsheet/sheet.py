@@ -57,13 +57,23 @@ def clip_mp4(r: dict | None, out: Path, ref: Path | None = None, fps: int | None
     if r is not None and r["file"].endswith(".h264"):
         sh(f"ffmpeg -v error -y -f h264 -framerate {r['fps']} -i {q(RUN / r['file'])} -c copy "
            f"-movflags +faststart {q(out)}")
-        return out
+        if frames(out) == r["frames"]:
+            return out  # same bytes, every frame kept
+        # B-frames in a raw stream lose frames in the MP4 remux: make a playback copy instead
     src = f"-i {q(ref)}" if ref is not None else _input(RUN / r["file"], r["fps"])
     rate = fps or r["fps"]
-    sh(f"ffmpeg -v error -y {src} -vf scale=out_range=tv,format=yuv420p,{TAG} -c:v libx264 -preset medium "
+    # Re-time by frame index: a raw AV1 OBU stream carries no frame rate (ffmpeg would assume 25 fps
+    # and then drop or repeat frames to reach -r).
+    sh(f"ffmpeg -v error -y {src} -vf scale=out_range=tv,format=yuv420p,{TAG},settb=1/{rate},setpts=N "
+       f"-c:v libx264 -preset medium "
        f"-crf 14 -pix_fmt yuv420p -r {rate} -colorspace bt709 -color_primaries bt709 -color_trc bt709 "
        f"-movflags +faststart {q(out)}")
     return out
+
+
+def frames(p: Path) -> int:
+    return int(sh(f"ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames "
+                  f"-of csv=p=0 {q(p)}").stdout.strip())
 
 
 def kb(n: int) -> str:
@@ -88,7 +98,10 @@ def main() -> None:
         if not r or not r.get("ok"):
             return None
         p = enc_still(r, img / f"{enc}_{size}.png")
-        return {"label": f"{label} · {kb(r['bytes'])} · VMAF {r['vmaf_mean']:.0f}", "image": str(p.relative_to(SHEET))}
+        w = [R.get((c, enc, size)) for c in ("rc_c3", "rc_c1", "rc_lead2")]
+        worst = (f" / {min(x['vmaf_mean'] for x in w):.0f} worst of 3 clips" if all(x and x.get("ok") for x in w) else "")
+        return {"label": f"{label} · {kb(r['bytes'])} · VMAF {r['vmaf_mean']:.0f} this clip{worst}",
+                "image": str(p.relative_to(SHEET))}
 
     sec = []
     boards = [
@@ -114,7 +127,7 @@ def main() -> None:
                     "before_label": "Source (Reef Check, 720p)", "afters": afters})
 
     # Tables
-    cap_rows = [[c["board"], c["encoder"], c["where"], c["fps_720p"], c["status"], c["note"]] for c in CAP["rows"]]
+    cap_rows = [[c["board"], c["encoder"], c["status"], c["fps_720p"], c["where"], c["note"]] for c in CAP["rows"]]
     summ = json.loads((RUN / "summary.json").read_text())
     g = "moving camera (Reef Check, 3 windows)"
     names = {"imx708_h264": "IMX708 · H.264 Pi hw (proxy) · 30 fps", "pi_av1_30": "IMX708 · AV1 on the Pi · 30 fps",
@@ -130,10 +143,12 @@ def main() -> None:
         {"title": "Which board can encode what at 720p",
          "note": "From board docs, firmware source and our earlier rig measurements; no builds. 'Custom work' = "
                  "a firmware build or new encoder code.", "table": {
-             "columns": ["Board", "Encoder", "Where it runs", "720p at rated fps?", "Today", "Note"], "rows": cap_rows}},
+             "columns": ["Board", "Encoder", "Today", "720p at rated fps?", "Where it runs", "Note"], "rows": cap_rows}},
         {"title": "Quality per 5 s clip, worst of 3 moving-camera clips",
-         "note": "VMAF (0–100; 70 ≈ good, 60 ≈ watchable), each board against the source at its own frame rate. "
-                 "Desk emulation on the Mac. The knee is only bracketed with three sizes.",
+         "note": "Desk emulation on the Mac: x264 'veryfast' stands in for hardware H.264 (likely flattering it), "
+                 "libjpeg for MJPEG, the Pi's own SVT-AV1 recipe for AV1. VMAF (0–100; 70 ≈ good, 60 ≈ watchable) "
+                 "on the WORST of the 3 moving-camera clips, each board against the source at its own frame rate. "
+                 "The pictures below show the primary clip, so their VMAF is labelled 'this clip'.",
          "table": {"columns": ["Board · encoder · fps", "100 KB", "500 KB", "1 MB", "Knee"], "rows": qrows}},
         {"title": "Pi cost per 5 s clip (estimate, no Pi runs in this screen)",
          "note": "From the calibrated 10/15 study (rig #116) and the 10/02 real-Pi bench (PR #88). Real-Pi runs come "
@@ -174,7 +189,9 @@ def main() -> None:
             if not r or not r.get("ok"):
                 continue
             out = clip_mp4(r, clips / f"{key[0]}_{key[1]}.mp4")
-            sent = ("as-sent H.264 bytes in an MP4 wrapper" if r["file"].endswith(".h264")
+            exact = r["file"].endswith(".h264") and frames(out) == r["frames"] and \
+                out.stat().st_size < r["bytes"] * 1.05
+            sent = ("as-sent H.264 bytes in an MP4 wrapper" if exact
                     else f"playback copy; the as-sent file is {kb(r['bytes'])}")
         rel = f"clips/{out.name}"
         files[rel] = str(out)

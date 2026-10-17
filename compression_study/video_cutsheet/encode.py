@@ -83,8 +83,10 @@ def mjpeg_floor(ref: Path, out: Path, board: str) -> dict:
 def _x264(ref: Path, out: Path, kbps: float, fps: int, nfr: int, profile: str) -> int:
     if profile == "baseline":  # N6 hardware proxy: one key frame per clip
         prof = f"-profile:v baseline -g {nfr} -keyint_min {nfr}"
-    else:  # IMX708 Pi hardware proxy: rpicam-vid defaults on Friday (high, level 4.2, intra 60)
+    elif profile == "high":  # IMX708 Pi hardware proxy: rpicam-vid defaults on Friday (high, level 4.2, intra 60)
         prof = "-profile:v high -level:v 4.2 -g 60 -keyint_min 60"
+    else:  # "high_nob" sensitivity: as above without B-frames, like the Pi's hardware encoder (PR #88)
+        prof = "-profile:v high -level:v 4.2 -g 60 -keyint_min 60 -bf 0"
     r = f"{kbps:.1f}k"
     sh(f"ffmpeg -v error -y -i {q(ref)} -c:v libx264 -threads 4 -preset veryfast {prof} -sc_threshold 0 "
        f"-b:v {r} -maxrate {r} -bufsize {kbps:.1f}k -pix_fmt yuv420p -r {fps} -f h264 {q(out)}")

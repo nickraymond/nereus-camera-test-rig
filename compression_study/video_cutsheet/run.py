@@ -5,6 +5,7 @@
     python -m compression_study.video_cutsheet.run pool      # 6 pool clips (10 fps) x AE3 + via-Pi rows
     python -m compression_study.video_cutsheet.run pi        # via-Pi AV1 rows on the Reef Check windows
     python -m compression_study.video_cutsheet.run floor     # MJPEG at its smallest quality (target_kb 0)
+    python -m compression_study.video_cutsheet.run nob       # IMX708 proxy without B-frames (sensitivity)
 
 Each job appends one line to <run>/results.jsonl; a job already there is skipped. Two jobs in
 parallel (PjM 003 all-clear: nice 10, <= 2 workers, stop below 8 GiB free).
@@ -27,6 +28,7 @@ ENC = {  # key: (board, fps, codec label, function)
     "n6_mjpeg": ("n6", 15, "MJPEG (VC8000 path: 4:2:0, Q steps of 10)"),
     "n6_h264": ("n6", 15, "H.264 baseline (x264 veryfast, proxy for the N6 hardware encoder)"),
     "imx708_h264": ("imx708", 30, "H.264 high 4.2 (x264 veryfast, proxy for the Pi hardware encoder)"),
+    "imx708_h264nob": ("imx708", 30, "H.264 high 4.2, no B-frames like the Pi hardware (sensitivity, post-hoc)"),
     "pi_av1_10": ("via Pi", 10, "AV1 SVT p6 low-mem on the Pi (rig #116 recipe)"),
     "pi_av1_15": ("via Pi", 15, "AV1 SVT p6 low-mem on the Pi (rig #116 recipe)"),
     "pi_av1_30": ("via Pi", 30, "AV1 SVT p6 low-mem on the Pi (rig #116 recipe)"),
@@ -47,7 +49,7 @@ def job(clip: str, enc: str, kb: int) -> dict:
     target = kb * 1000
     d = RUN / "enc" / clip
     d.mkdir(parents=True, exist_ok=True)
-    codec = enc.split("_")[1]
+    codec = enc.split("_")[1].replace("h264nob", "h264")
     out = d / f"{enc}_{kb}k{EXT[codec]}"
     rec = {"clip": clip, "enc": enc, "board": board, "fps": fps, "label": label, "target_kb": kb,
            "frames": nfr, "ref": ref.name, "file": str(out.relative_to(RUN))}
@@ -58,7 +60,8 @@ def job(clip: str, enc: str, kb: int) -> dict:
         elif codec == "mjpeg":
             r = encode.mjpeg(ref, out, target, board)
         elif codec == "h264":
-            r = encode.h264(ref, out, target, fps, nfr, "baseline" if board == "n6" else "high")
+            prof = "baseline" if board == "n6" else ("high_nob" if enc.endswith("nob") else "high")
+            r = encode.h264(ref, out, target, fps, nfr, prof)
         else:
             r = encode.av1_pi(ref, out, target, fps, nfr)
         rec.update(r)
@@ -79,6 +82,8 @@ def plan(stage: str) -> list[tuple[str, str, int]]:
         return [(c, e, kb) for kb in SIZES_KB for c in POOL for e in ("ae3_mjpeg", "pi_av1_10")]
     if stage == "floor":  # MJPEG at its smallest setting, every Reef Check window
         return [(c, e, 0) for c in RC for e in ("ae3_mjpeg", "n6_mjpeg")]
+    if stage == "nob":  # post-hoc sensitivity: IMX708 proxy without B-frames (Pi hardware has none)
+        return [(c, "imx708_h264nob", kb) for kb in SIZES_KB for c in RC]
     if stage == "pi":
         return [(c, f"pi_av1_{fps}", kb) for kb in SIZES_KB for c in RC for fps in (10, 15, 30)]
     raise SystemExit(f"unknown stage {stage}")

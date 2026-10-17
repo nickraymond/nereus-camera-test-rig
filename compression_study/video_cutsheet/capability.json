@@ -1,55 +1,155 @@
 {
  "date": "Sat 10/17/2026",
- "lede": "FILLED_AFTER_RESULTS",
- "facts": [],
- "notes": [],
- "footer": "FILLED_AFTER_RESULTS",
+ "lede": "Your decision (feeds d41, at your Mon 10/19 review): which board and encoder the 5 s cut sheet should lock, and whether to map the full size curve (and real-Pi runs after pool test 2). Below: a 5 s moving-camera clip (Reef Check diver over kelp, Caspar, Oct 2025), scaled to 720p and encoded the way each board could do it, each at its rated frame rate: IMX708 30 fps, N6 15 fps, AE3 10 fps. Off-the-shelf encoders only, run on the Mac to imitate each board (desk emulation); no Pi or board runs. Drag a picture: left is the source, right is the encode; the chips switch encoders. Tap a picture for full screen and 1:1 zoom.",
+ "facts": [
+  {
+   "value": "IMX708 + Pi",
+   "label": "the only board that encodes video by itself today (hardware H.264, real time)"
+  },
+  {
+   "value": "N6: JPEG only",
+   "label": "its chip has H.264, but stock firmware doesn't use it: custom firmware needed"
+  },
+  {
+   "value": "AE3: ~2 fps",
+   "label": "at 720p, software JPEG, no encoder hardware: 720p at 10 fps needs custom work"
+  },
+  {
+   "value": "≥ 0.8 MB",
+   "label": "smallest 5 s 720p clip with MJPEG (AE3; N6 ≥ 1.3 MB), so 100 / 500 KB need a video codec"
+  },
+  {
+   "value": "71 vs 42",
+   "label": "VMAF at 500 KB, 30 fps, worst clip: AV1 on the Pi vs H.264 (70 = good)"
+  }
+ ],
+ "notes": [
+  "Under 1 MB at 720p, every board needs a real video codec, and today that runs on the Pi: the IMX708 directly, the N6 by streaming its frames over USB. The AE3 can't deliver 720p at 10 fps to anything today.",
+  "At 500 KB per 5 s, AV1 on the Pi is 'good' (VMAF 71–77 on the worst clip at 30 / 15 / 10 fps) but costs ~2–8 min of Pi time per clip; H.264 is real time but scores 42 (IMX708, 30 fps) to 51 (N6 H.264, 15 fps, custom firmware) and smears moving kelp.",
+  "100 KB per 5 s (the Spotter size): nothing is watchable on moving-camera footage. AV1 on the Pi reaches 35–42 on the worst clip, H.264 under 5.",
+  "Smallest size with the most quality (the knee): bracketed at 500 KB–1 MB, not found below 1 MB. Every encoder that reaches 500 KB still gains 10–23 VMAF points (worst of 3 clips) from 500 KB to 1 MB. Locating it needs the full size curve (your call).",
+  "The AE3's MJPEG jumps from VMAF 34 at 769 KB to 81 at 996 KB (this clip). That is real: JPEG's size has a floor. At quality 5 or lower every quantizer is capped, so the file stops shrinking (769 / 770 / 789 KB at quality 1 / 3 / 5) while the picture keeps falling apart (VMAF 34 / 37 / 48). The last ~230 KB buys a lot (60 at 822 KB, 70 at 879 KB, 81 at 996 KB).",
+  "VMAF reads brightness only: the AE3's 1 MB MJPEG scores 81 on the primary clip but shows colour blotches at 1:1. Judge by eye.",
+  "Desk emulation: x264 'veryfast' stands in for hardware H.264. On the real Pi (10/02 bench), hardware H.264 scored ~10 VMAF below a good software H.264 at the same size, so the IMX708 H.264 here is probably flattering. The N6's real JPEG tables differ from libjpeg's.",
+  "Scores are relative to the Reef Check source, which is itself compressed (4K HEVC), and each board is scored at its own frame rate; VMAF ignores 10 fps choppiness. The AE3 720p / 10 fps pictures are hypothetical."
+ ],
+ "footer": "Desk emulation on the Mac, Sat 10/17, per spec SPEC_e7_video_cutsheet rev 3 (rig PR #122, RESULTS.md). Windows picked by a rule committed before any encode: 3 Reef Check clips with camera motion (primary shown here), plus pool clips as a control. Pi time and energy are estimates from the 10/15 study (rig #116) and the 10/02 real-Pi bench (PR #88).",
  "rows": [
-  {"board": "IMX708 (Pi Zero 2 W)", "encoder": "H.264", "where": "Pi hardware encoder (rpicam-vid)",
-   "fps_720p": "Yes, 30 fps (docs: up to 1080p30)", "status": "Feasible now",
-   "note": "Real time while recording, ~4.7 W (PR #88). Ignores size targets below ~65 KB per 5 s at 720p30 with motion. Friday's dive ran 1080p30.",
-   "source": "raspberrypi.com Zero 2 W specs + camera software docs; PR #88 real nereus002 runs (10/02)"},
-  {"board": "IMX708 (Pi Zero 2 W)", "encoder": "AV1", "where": "Pi CPU, SVT-AV1 2.3 (Debian package, BSD)",
-   "fps_720p": "Yes, slowly: ~7–8 min per 5 s clip (estimate)", "status": "Feasible now",
+  {
+   "board": "IMX708 (Pi Zero 2 W)",
+   "encoder": "H.264",
+   "where": "Pi hardware encoder (rpicam-vid)",
+   "fps_720p": "Yes, 30 fps (docs: up to 1080p30)",
+   "status": "Feasible now",
+   "note": "Real time while recording, ~4.7 W (PR #88). Ignores size targets below ~65 KB per 5 s at 720p30 with motion (scaled from PR #88's 195 KB per 15 s). Friday's dive ran 1080p30.",
+   "source": "raspberrypi.com Zero 2 W specs + camera software docs; PR #88 real nereus002 runs (10/02)"
+  },
+  {
+   "board": "IMX708 (Pi Zero 2 W)",
+   "encoder": "AV1",
+   "where": "Pi CPU, SVT-AV1 2.3 (Debian package, BSD)",
+   "fps_720p": "Yes, slowly: 6.6–7.8 min per 5 s clip (estimate)",
+   "status": "Feasible now",
    "note": "Low-memory settings, 141 MiB (rig #116, emulated + calibrated). Estimate = 3× the measured 10 fps time.",
-   "source": "rig #116 RESULTS (calibrated Pi emulation)"},
-  {"board": "IMX708 (Pi Zero 2 W)", "encoder": "MJPEG", "where": "Pi CPU (rpicam-vid uses libjpeg)",
-   "fps_720p": "Yes", "status": "Feasible now",
-   "note": "Not useful at these sizes: MJPEG's smallest 5 s clip is far above 1 MB at 30 fps (see N6/AE3 floors).",
-   "source": "rpicam-apps encoder/mjpeg_encoder.cpp"},
-  {"board": "IMX708 (Pi Zero 2 W)", "encoder": "H.265", "where": "—",
-   "fps_720p": "No hardware encoder", "status": "Not an option",
+   "source": "rig #116 RESULTS (calibrated Pi emulation)"
+  },
+  {
+   "board": "IMX708 (Pi Zero 2 W)",
+   "encoder": "MJPEG",
+   "where": "Pi CPU (rpicam-vid uses libjpeg)",
+   "fps_720p": "Yes",
+   "status": "Feasible now",
+   "note": "Not useful at these sizes: its smallest 5 s clip at 30 fps would be ~2.4 MB (estimate: 3× the 10 fps MJPEG floor; not run).",
+   "source": "rpicam-apps encoder/mjpeg_encoder.cpp"
+  },
+  {
+   "board": "IMX708 (Pi Zero 2 W)",
+   "encoder": "H.265",
+   "where": "—",
+   "fps_720p": "No hardware encoder",
+   "status": "Not an option",
    "note": "Software x265 is GPL, which the licence policy excludes from shipped code (SPEC §20).",
-   "source": "Zero 2 W specs (H.264 encode only); PR #88"},
-  {"board": "OpenMV N6", "encoder": "MJPEG", "where": "N6 hardware JPEG",
-   "fps_720p": "Yes, 15 fps (31 fps measured at 1280×800)", "status": "Feasible now",
+   "source": "Zero 2 W specs (H.264 encode only); PR #88"
+  },
+  {
+   "board": "OpenMV N6",
+   "encoder": "MJPEG",
+   "where": "N6 hardware JPEG",
+   "fps_720p": "Yes, 15 fps (31 fps measured at 1280×800)",
+   "status": "Feasible now",
    "note": "Smallest 5 s clip ~1.3–1.9 MB at 720p / 15 fps (desk emulation): can't reach 1 MB. No SD card; RAM holds ~5 s.",
-   "source": "OpenMV v5.0.1 docs + ports/stm32/stm_jpeg.c; PR #88 N6 probe (10/02)"},
-  {"board": "OpenMV N6", "encoder": "H.264", "where": "N6 hardware block (VENC, in the chip)",
-   "fps_720p": "Chip: up to 1080p30 (ST datasheet)", "status": "Needs custom work",
+   "source": "OpenMV v5.0.1 docs + ports/stm32/stm_jpeg.c; PR #88 N6 probe (10/02)"
+  },
+  {
+   "board": "OpenMV N6",
+   "encoder": "H.264",
+   "where": "N6 hardware block (VENC, in the chip)",
+   "fps_720p": "Chip: up to 1080p30 (ST datasheet)",
+   "status": "Needs custom work",
    "note": "Not in stock OpenMV firmware (v5.0.1; dev build 10/16). An unmerged draft, openmv/openmv #3247, adds it: a custom firmware build. OpenMV IDE 5.1.0's 'H.264' (10/12) records on the PC, not the board.",
-   "source": "github.com/openmv/openmv releases + PR #3247; ST DS14791"},
-  {"board": "OpenMV N6 → Pi", "encoder": "H.264 (Pi hardware) or AV1 (Pi CPU)", "where": "N6 streams JPEG over USB, the Pi encodes",
-   "fps_720p": "Yes: N6 streamed 1280×800 at 29.6 fps (q70) to the Pi", "status": "Feasible now",
+   "source": "github.com/openmv/openmv releases + PR #3247; ST DS14791"
+  },
+  {
+   "board": "OpenMV N6 → Pi",
+   "encoder": "H.264 (Pi hardware) or AV1 (Pi CPU)",
+   "where": "N6 streams JPEG over USB, the Pi encodes",
+   "fps_720p": "Yes: N6 streamed 1280×800 at 29.6 fps (q70) to the Pi",
+   "status": "Feasible now",
    "note": "Pi time per clip: H.264 real time; AV1 ~3.3–3.9 min (estimate).",
-   "source": "PR #88 N6 stream measurement; rig #116"},
-  {"board": "OpenMV AE3", "encoder": "MJPEG", "where": "AE3 CPU (software JPEG)",
-   "fps_720p": "No: ~2.3 fps at 1280×800 (rig bench note); 9.3 fps at 640×400 (Friday)", "status": "Needs custom work (or lower res / fps)",
+   "source": "PR #88 N6 stream measurement; rig #116"
+  },
+  {
+   "board": "OpenMV AE3",
+   "encoder": "MJPEG",
+   "where": "AE3 CPU (software JPEG)",
+   "fps_720p": "No: ~2.3 fps at 1280×800 (rig bench note); 9.3 fps at 640×400 (Friday)",
+   "status": "Needs custom work (or lower res / fps)",
    "note": "Smallest 5 s clip ~0.8 MB at 720p / 10 fps even if the rate were reached. The pool-2 prep bench is re-measuring the AE3's best resolution.",
-   "source": "OpenMV boards/OPENMV_AE3/board_config.h (no JPEG codec); scripts/sync_video.py note; pool2 spec (Friday rates)"},
-  {"board": "OpenMV AE3", "encoder": "H.264 / H.265", "where": "—",
-   "fps_720p": "No hardware encoder in the Alif E3", "status": "Needs custom work",
+   "source": "OpenMV boards/OPENMV_AE3/board_config.h (no JPEG codec); scripts/sync_video.py note; pool2 spec (Friday rates)"
+  },
+  {
+   "board": "OpenMV AE3",
+   "encoder": "H.264 / H.265",
+   "where": "—",
+   "fps_720p": "No hardware encoder in the Alif E3",
+   "status": "Needs custom work",
    "note": "No OpenMV video encoder; software H.264 on the MCU would be new code.",
-   "source": "alifsemi.com Ensemble E3"},
-  {"board": "OpenMV AE3 → Pi", "encoder": "H.264 / AV1 on the Pi", "where": "AE3 streams JPEG, the Pi encodes",
-   "fps_720p": "No at 720p / 10 fps: limited by the AE3's JPEG rate", "status": "Feasible now only at lower res / fps",
+   "source": "alifsemi.com Ensemble E3"
+  },
+  {
+   "board": "OpenMV AE3 → Pi",
+   "encoder": "H.264 / AV1 on the Pi",
+   "where": "AE3 streams JPEG, the Pi encodes",
+   "fps_720p": "No at 720p / 10 fps: limited by the AE3's JPEG rate",
+   "status": "Feasible now only at lower res / fps",
    "note": "For example 640×400 at ~9.3 fps (Friday).",
-   "source": "as above"}
+   "source": "as above"
+  }
  ],
  "cost_rows": [
-  ["Pi hardware H.264 (IMX708, or re-encoding the N6 stream)", "real time", "~10 J above idle per clip (4.7 W while recording vs 2.9 W idle)", "measured (PR #88), scaled to 5 s"],
-  ["AV1 on the Pi, 10 fps (AE3 rate)", "2.2–2.6 min", "~80–110 J", "rig #116 calibrated time; power from PR #88 (~0.6–0.7 W above idle)"],
-  ["AV1 on the Pi, 15 fps (N6 rate)", "3.3–3.9 min", "~120–160 J", "estimate: 1.5× the 10 fps time"],
-  ["AV1 on the Pi, 30 fps (IMX708 rate)", "6.6–7.8 min", "~240–330 J", "estimate: 3× the 10 fps time"]
+  [
+   "Pi hardware H.264 (IMX708, or re-encoding the N6 stream)",
+   "real time",
+   "~10 J above idle per clip (4.7 W while recording vs 2.9 W idle)",
+   "measured (PR #88), scaled to 5 s"
+  ],
+  [
+   "AV1 on the Pi, 10 fps (AE3 rate)",
+   "2.2–2.6 min",
+   "~80–110 J",
+   "rig #116 calibrated time; power from PR #88 (~0.6–0.7 W above idle)"
+  ],
+  [
+   "AV1 on the Pi, 15 fps (N6 rate)",
+   "3.3–3.9 min",
+   "~120–160 J",
+   "estimate: 1.5× the 10 fps time"
+  ],
+  [
+   "AV1 on the Pi, 30 fps (IMX708 rate)",
+   "6.6–7.8 min",
+   "~240–330 J",
+   "estimate: 3× the 10 fps time"
+  ]
  ]
 }
