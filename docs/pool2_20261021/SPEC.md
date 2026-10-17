@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 5, tier (a); rev 2–5 amendments at the end)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 6, tier (a); rev 2–6 amendments at the end)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -194,3 +194,27 @@ timeline e_pool1021, card prop_pool2_prep. Author: Principal Engineer, Fri 10/16
   - IMX708: its SensorTimestamp, on the same clock as `first_frame_host_mono` in video_sync.json.
   - A triplet whose capture times span more than 50 ms is dropped and counted in the report, never used.
   - The report keeps the `host_rx_mono` offsets as a reference column.
+
+## Amendment rev 6 (PE 002, Sat 10/17 3:13 PM; the pool2 session's firmware + JPEG findings). Overrides rev 2 item 2 and rev 3's N6 mode where they conflict.
+- **No N6 H.264 this round.** H.264 is in no OpenMV build: not v5.0.1 (our boards run 1.28.0 = v5.0.1), not the 10/16
+  Development Release, and master has no codec module. It exists only as draft PR openmv/openmv#3247 (open since 8/22,
+  last updated 9/14). PE checked with the GitHub API at 3:13 PM. Rev 2's condition ("if last week's firmware supports it")
+  is false, so the HD H.264 candidate is empty and there's no N6 firmware update. Rev 3's firmware rules stay in case one
+  is needed later. The B results say it in one line for Nick.
+- **N6 candidates:** HD 1280×800 MJPEG q70 + the 640×400 control.
+  - Pre-registered prediction (B card, before any HD clip): HD MJPEG q70 needs ~0.97 MB/s (97 kB/frame, 10/2 bench). That is
+    at or above what the N6's full-speed USB link carries in practice, so expect fps or frame loss. `lsusb -t` is recorded
+    first.
+  - **Fallback, only if HD fails:** 960×600 MJPEG q70 (a custom size the N6 ISP scales to; untested on our boards).
+    First a 1-shot probe: frames decode at 960×600 and the stream runs 30 s. If the probe passes, n = 3 under the same bars.
+    If the probe fails, the N6 answer is 640×400, with the limit stated.
+- **AE3 chroma (B0):** Friday's AE3 frames were JPEG 4:4:4 (OpenMV's software encoder picks 4:4:4 at q ≥ 60), and the
+  N6's are 4:2:0 (hardware encoder, 4:2:0 only).
+  - B0 runs the AE3 at 640×400 q70 in both 4:4:4 and 4:2:0 (`subsampling=image.JPEG_SUBSAMPLING_420`), n = 3 each, on the
+    fixed busy scene, with per-frame timing (snapshot / JPEG / USB ms) added to the stream (a board-script change on the
+    rig PR; after it deploys, the 640×400 control re-runs).
+  - Format for the AE3 ladder: 4:4:4 if it reaches ≥ 9.5 fps (with any other pacing fix); else 4:2:0 if that reaches
+    ≥ 9.5 fps; else 4:4:4 under the relative fps bar.
+  - Every row and the Wed card name each camera's chroma format. The B results include a matched-frame crop pair of the
+    AE3 in 4:4:4 vs 4:2:0. Nick rules on the trade (half the colour resolution for speed, and a like-for-like 4:2:0
+    comparison with the N6) when he approves the Wed card (part C).
