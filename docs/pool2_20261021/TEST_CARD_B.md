@@ -4,9 +4,9 @@ Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before
 
 | | |
 |---|---|
-| **Spec** | [SPEC.md](SPEC.md) rev 6 (sha256 `b4cb0d74b215…`, QE 005 PASS-with-nits Sat 3:19 PM) |
+| **Spec** | [SPEC.md](SPEC.md) rev 8 (sha256 `e5203f3fa492…`, in QE 005's re-gate; rev 7 `4c289cc95525…` PASS-with-nits Sat 3:31 PM with R2, R3) |
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6) |
-| **Decisions** | d52 (decided), d53 (open, Sun AM), d55 start-skew bar (open, Mon 8 AM), d56 AE3 chroma (open, Mon 8 AM) |
+| **Decisions** | d52 (decided), d57 (decided Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53), d55 start-skew bar (open, Mon 8 AM), d56 AE3 chroma (open, Mon 8 AM) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
 | **Ownership** | Held by the pool-2 prep session under the nereus002 rig session's written hand-over (Sat ~3:12 PM PT, slot ends Sun 10/18 12:00 PM). Later slots (Mon–Tue) only by PjM 003's sequencing and a new written hand-over |
 | **Session** | pool-2 prep, rig PR #121, branch `study/pool2-prep` |
@@ -28,32 +28,37 @@ Spec items checked: must-dos 4–10, F1–F9, the pass/fail block, the rev 3 ord
 - Firmware on both boards: 1.28.0 (MicroPython v1.28.0-64, 2026-09-05) = OpenMV v5.0.1. **No firmware update this round:** no
   OpenMV build has N6 H.264 (rev 6).
 
-**Study build** (deployed before the first clip):
-- Host: `study/pool2-prep @ <sha>`, rsync'd over `~/nereus-rig-poolcam`, excluding `results/`, `data/`, `.claude/` and
-  `compression_study/`.
+**Bench build** (deployed before the first clip; d57: the N6 resync fix is in from the start):
+- Host: `study/pool2-prep @ <sha>`, merged with the resync fix's branch (aa06bc7, the rig session's own PR). It is unpacked
+  over `~/nereus-rig-poolcam` from `git archive <sha>`: files are overwritten or added, nothing is deleted. Beyond git,
+  the Pi tree holds only caches and REVISION.
 - Boards: `host_tools/deploy_openmv.py` to both boards. This is a shared board-script change: `capture_service.py` and
   `command_protocol.py` gain the optional `subsampling` and `timing` stream settings. With neither set, the wire request
   is the same as Friday's.
 - **Recorded at deploy, into the run folder's `BUILD.md`:**
   - the Pi REVISION;
   - the Pi-tree sha256 list vs `git ls-tree <sha>`;
-  - sha256 of the 7 files on each board, read back from the board;
+  - sha256 of the 7 files on each board, read back with `scripts/board_hashes.py` (one mpremote connection, then
+    reset);
   - `get_device_info` firmware for both boards.
-- **Final build** (Mon, before the resolution steps): the study build, plus aa06bc7 via main **if d53 = yes**. Same
-  records. **N10:** after each board-script deploy, both boards' 640×400 controls re-run (§4 step 3) before any
-  comparison. The rows name which control they are compared against (`ctl_study`, `ctl_final`).
+- **Any later code deploy** (e.g. a fix found in B0): same records, and **N10:** both boards' 640×400 controls re-run
+  before any comparison. Rows name the control they are compared against (`ctl_1`, `ctl_2`, …). Wed's build = the last
+  one deployed before the gate.
 
-**Backup and restore (§9).** The deployed state is fully defined by main@56d49b5, so no Pi-side backup is needed.
-Restore:
+**Backup and restore (§9).** The deployed state is fully defined by main@56d49b5 (308 files match `git ls-tree
+56d49b5`; the Pi holds only caches and REVISION beyond git), so no Pi-side backup is needed. To restore, overwrite with
+56d49b5 and remove the files the bench build added (`git diff --name-status 56d49b5 <bench sha>`, status `A`; the list
+goes in `BUILD.md`):
 
 ```bash
-git -C <rig checkout> archive 56d49b5 | ssh pi@nereus002 'mkdir -p /tmp/r56 && tar -x -C /tmp/r56'
-ssh pi@nereus002 'rsync -a --delete --exclude results/ --exclude data/ --exclude .claude/ --exclude compression_study/ --exclude .venv/ --exclude REVISION /tmp/r56/ ~/nereus-rig-poolcam/ && echo "56d49b5 main (restored)" > ~/nereus-rig-poolcam/REVISION'
+git -C <rig checkout> archive 56d49b5 | ssh pi@nereus002 'tar -x -C ~/nereus-rig-poolcam'
+ssh pi@nereus002 'cd ~/nereus-rig-poolcam && rm -f <the A files from BUILD.md> && echo "56d49b5 main (restored after pool2 bench)" > REVISION'
 ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/.venv/bin/python && $PY -m host_tools.deploy_openmv --board n6 --serial 10003500025043364d343000 && $PY -m host_tools.deploy_openmv --board ae3 --serial 0829c14000000000'
 ```
 
-`$PY` = `/home/pi/nereus-camera-test-rig/.venv/bin/python`, the venv `pool_mode.sh` uses; recorded in `BUILD.md`. Verify the restore: the 14 board hashes equal
-`board_firmware_sha256_56d49b5.txt`, and `scripts/board_probe.py probe <serial>` is ok on both boards.
+`/home/pi/nereus-camera-test-rig/.venv/bin/python` is the venv `pool_mode.sh` uses. Verify the restore:
+- `scripts/board_hashes.py` reports all 14 board files equal to `board_firmware_sha256_56d49b5.txt`;
+- `scripts/board_probe.py probe <serial>` is ok on both boards.
 
 ## 3. Conditions
 
@@ -90,10 +95,10 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      0x0; quirk present; REVISION main@56d49b5. CmaFree was 42 MB at idle: page cache borrows CMA, so the report-only
      RAM flag needs this baseline.
    - Save the scene stills.
-1. **Deploy the study build** (§2) and record it.
+1. **Deploy the bench build** (§2: study branch + the resync fix merged, QE PASS on that push first) and record it.
 2. **B0, AE3 chroma** (by Sun night; rev 6), with `--timing` on both boards:
-   - `ctl_study`: both boards at 640×400 q70 in the firmware's own chroma (N6 4:2:0, AE3 4:4:4), n = 3. This is also
-     the AE3 444 arm.
+   - `ctl_1`: both boards at 640×400 q70 in the firmware's own chroma (N6 4:2:0, AE3 4:4:4), n = 3. These are N10's
+     controls on the bench build, and also the AE3 444 arm.
    - `ae3_420`: AE3 640×400 q70 `--ae3-subsampling 420`, N6 at control, n = 3.
    - **Output:**
      - fps, frames lost and median snapshot / JPEG / USB-write ms per arm;
@@ -105,9 +110,10 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      ran.
    - **E1, exploratory, not scored:** one N6 HD clip, to see the link limit early for the Mon plan. Labelled `explore`
      and never counted toward any n.
-3. **Final build** (Mon AM; §2): deploy, record, then the N10 controls `ctl_final`, n = 3, both boards at 640×400 q70
-   (AE3 in the format d56 or the rule chose, plus its 4:4:4 control if that differs).
-   - The AE3's own 640×400 rate for the relative bar comes from `ctl_final`.
+3. **Controls at the chosen AE3 format** (Mon AM, after d56 or the rule):
+   - If the format is 4:2:0, `ae3_420` is its control.
+   - The AE3's own 640×400 rate for the relative bar comes from its format's control.
+   - Any code deploy after step 1 re-runs both controls (`ctl_2`, …; N10).
 4. **Resolution steps** (Mon → Tue noon, final build). Each setting changes one board; the other stays at its control.
    - **N6, prediction pre-registered here (rev 6), corrected by step 0 before any HD clip:**
      - HD 1280×800 MJPEG q70 needs ~0.97 MB/s (97 kB/frame, 10/2 bench).
@@ -116,7 +122,7 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
        (high-speed)** on the hub. The "FS Mode" text is a descriptor string, not the link speed.
      - Prediction as registered now: ~0.97 MB/s fits the link, so **HD holds 10 fps.** The risk is byte loss when the
        Pi's reader stalls (the 10/14 mechanism: MicroPython's CDC send timeout, seen at 0.4–0.8 MB/s), more likely at
-       ~3.4× Friday's data rate. The "0 frames lost" bar and the d53 pause bar decide it.
+       ~3.4× Friday's data rate. With the resync fix a loss costs one frame; the usable-share bar decides it (rev 7).
    - `n6_hd`: N6 1280×800 q70, n = 3.
    - **Only if `n6_hd` fails:**
      - `n6_960_probe`: one clip at 960×600 q70. It passes if its frames decode at 960×600 and the stream runs 30 s.
@@ -141,13 +147,18 @@ the clip, the §5 bars, fail fast and the throttled-void rule. It writes `result
 
 ## 5. Bars per setting (set now; the spec's, unchanged)
 
-A setting **holds** when all 3 clips meet every bar:
+**AE3 settings** hold when all 3 clips meet every bar below. **N6 settings** (spec rev 7 d57 + rev 8 R3) hold when:
+- ≥ 2 of 3 clips are **usable**: ≥ 285 frames, i.e. 95 % of the expected 300. Expected = asked fps × clip seconds =
+  10 × 30, fixed now. It is not the seq span, which a dying stream would shorten.
+- the usable clips meet the fps, skew, IMX708 and host bars;
+- an unusable clip counts only in the usable share. Each N6 setting reports the share and the lost frames per clip.
+- A wedge or ladder reset on either board fails any setting. A throttled clip is void.
 
 | Bar | Value | Source |
 |---|---|---|
-| fps (each board in the setting) | delivered ≥ 9.5 fps over 30 s. AE3, if B0 fails: ≥ its own `ctl_final` 640×400 rate − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
-| frames lost | 0. A stream that ends in an error, or has no board frame count, counts as lost | spec |
-| wedges | 0 wedges and 0 ladder USB resets during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2 |
+| fps (the board under test) | delivered ≥ 9.5 fps over 30 s. AE3, if B0 fails: ≥ its own control 640×400 rate − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
+| frames | AE3: 0 lost; an errored stream or a missing board frame count counts as lost. N6: the usable share above (rev 7, d57) | spec; rev 7–8 |
+| wedges | 0 wedges and 0 ladder USB resets on either board during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2; rev 8 |
 | start skew | ≤ 25 ms per clip (video_sync.json). Each camera's fire → first frame is recorded; a setting that fails only on IMX708-involved skew is marked **skew-only** for d55 | spec; PE 002 |
 | IMX708 | ≥ 26.0 fps and max gap ≤ 100 ms | spec (F8) |
 | host | `throttled` = 0x0 over the clip (host_stats.csv); a throttled clip is void (§4) | spec |
@@ -157,10 +168,11 @@ Also recorded per clip, not bars:
 - min mem_avail, min CMA free, max CPU °C, VBAT/VIN;
 - the IMX708's Lux, and each board's chroma format.
 
-**d53 pause bar** (if d53 = yes; PgM's bar, set before data): if more than 1 in 20 N6 clips at a setting still lose
-frames with the fix, that setting stops and the loss is investigated before any higher setting.
+**No pause bar and no USB root-cause work** (d57 replaces d53). The N6 resync fix (aa06bc7, rig #124) is in the build
+from step 1: a byte loss costs one frame, not the rest of the clip. Its `short_frames` count is recorded per clip.
 
-**Answer per camera (must-do 10):** the highest setting that holds, where every lower step also holds.
+**Answer per camera (must-do 10):** the highest setting that holds, where every lower step also holds. Wed runs the
+N6's highest setting that holds (d57).
 - N6 "best": HD MJPEG if it holds, else 960×600 if it holds, else 640×400 (rev 6).
 - AE3 "best": the highest resolution that holds in the B0 format (rev 3, rev 6).
 
@@ -212,7 +224,11 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
   - **N1 before arming:** the part-B cold boots (the gate's dry runs) measure outside-use growth per boot. If it averages
     more than 6 MB per boot, it is mitigated first (e.g. a journald size cap) as a reversible rig change under the
     owner's hand-over, before order step 3. **The 100/250 MB bars are never loosened;** that would go to Nick.
-- **RAM:** report only. mem_avail and CMA free 30 s after each clip; RESULTS flags any CMA < 50 MB or mem_avail < 150 MB.
+- **RAM:** report only.
+  - Each cycle reads mem_avail and CMA free after boot (the idle baseline) and 30 s after its clip.
+  - Flagged: CMA free more than 20 MB below that boot's idle reading (rev 7: idle CMA is ~42 MB because the page cache
+    borrows CMA), or mem_avail < 150 MB.
+  - RESULTS shows the idle baseline next to each reading.
 - **After the gate (N4, N6), in order:**
   1. `gate_cycle.py disarm`.
   2. `gate_cycle.py seal <run>`: one SHA256SUMS over the whole run folder, including `video/cycleNNN`,
@@ -262,7 +278,7 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
 | Gate | ~1.5–3.5 h |
 | Disk | ≤ 5 GB on the Mac data root under `~/NereusData/nereus-camera-test-rig/2026-10-17_pool2_prep/bench/` (each setting pulled with SHA256SUMS); Pi SD stop at < 2 GB |
 | Displaces | nothing else on nereus002 in the slot (d41 is after Sun noon) |
-| Nick | ~15 min Tue (Wed card + envelope); d53, d55, d56 on the board |
+| Nick | ~15 min Tue (Wed card + envelope); d55, d56 on the board |
 
 ## 10. Worth it?
 
