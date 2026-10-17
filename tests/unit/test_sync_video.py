@@ -122,3 +122,31 @@ def test_reader_recovers_after_bytes_lost_mid_frame(tmp_path):
     bv._read()
     assert [r["seq"] for r in bv.rows] == [0, 1, 3, 4, 5]
     assert bv.rec.get("short_frames") == 1 and "error" not in bv.rec
+
+
+def test_combined_decode_byte_loss_costs_one_frame_and_keeps_timing_columns(tmp_path):
+    # pool 2 (QE 005 R2): the resync fix (aa06bc7) and the B0 per-frame timing (f672126)
+    # together. Each frame header carries snap/jpeg/prev-write ms; 40 bytes are lost inside
+    # frame 3; the reader drops that one frame, resyncs, and keeps every other frame's timing.
+    frames = [_jpeg(i) for i in range(7)]
+    stream = b""
+    for i, f in enumerate(frames):
+        timing = {"snap_ms": 16, "jpeg_ms": 60 + i, "prev_write_ms": None if i == 0 else 23}
+        stream += cp.encode_message(cp.frame_response("cid", i, len(f), len(f), 640, 400,
+                                                      ticks_ms=1000 + 107 * i,
+                                                      extra=timing)) + f
+    cut = stream.index(frames[3]) + 150
+    stream = stream[:cut] + stream[cut + 40:]
+    stream += cp.encode_message(cp.completed_response("cid", {"frames": 7}))
+    bv = sv.BoardVideo("openmv_ae3", "SERIAL", tmp_path, {"timing": True})
+    bv.io = _SerialIO(_Bytes(stream), default_timeout=1)
+    bv._read()
+    assert [r["seq"] for r in bv.rows] == [0, 1, 2, 4, 5, 6]
+    assert bv.rec.get("short_frames") == 1 and "error" not in bv.rec
+    assert [r["jpeg_ms"] for r in bv.rows] == [60, 61, 62, 64, 65, 66]
+    assert bv.rows[0]["prev_write_ms"] is None and bv.rows[-1]["snap_ms"] == 16
+    import csv
+    rows = list(csv.DictReader((tmp_path / "openmv_ae3_frames.csv").open()))
+    assert list(rows[0])[-3:] == ["snap_ms", "jpeg_ms", "prev_write_ms"] and rows[3]["seq"] == "4"
+    assert (tmp_path / "openmv_ae3.mjpeg").stat().st_size == sum(len(frames[i])
+                                                                 for i in (0, 1, 2, 4, 5, 6))

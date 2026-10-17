@@ -38,7 +38,7 @@ Pool 2 ready gate (docs/pool2_20261021/SPEC.md rev 5+, TEST_CARD_B.md; Nick 10/1
   recorder processes 30 s after the clip, clean previous shutdown, boards power-cycled. Video
   completeness (lost frames, fps, skew) is scored per cycle and never gates (d52). G-b (SD clean,
   its own verdict line): df/du readings at gate start, after each boot and 30 s after each clip.
-  RAM (mem_avail, CMA free) is report-only.
+  RAM (mem_avail, CMA free vs this boot's idle CMA) is report-only.
 Outputs: results/gate/<run>/{cycles.csv, cycles.jsonl, gate.log, run_manifest.json, rig.yaml,
   profiles/, <date>/exp_*/ (one experiment per cycle, with SHA256SUMS)}
 
@@ -97,8 +97,8 @@ POST_CLIP_WAIT_S = 30.0           # G-a process check + G-b / RAM readings this 
 SD_BAR_CYCLE_B = 100_000_000      # G-b 2: outside use grows <= 100 MB per cycle (post-clip pairs)
 SD_BAR_RUN_B = 250_000_000        # G-b 3: last reading <= 250 MB above the gate-start reading
 SD_MIN_FREE_B = 2_000_000_000     # G-b 4: SD free >= 2 GB at every reading
-RAM_FLAG_CMA_MB = 50              # report-only flags (Friday in water: 59 MB CMA, 193 MB avail)
-RAM_FLAG_AVAIL_MB = 150
+RAM_FLAG_CMA_DROP_MB = 20         # report-only (rev 7): CmaFree > 20 MB below that boot's idle
+RAM_FLAG_AVAIL_MB = 150           # reading (idle is ~42 MB: page cache borrows CMA); avail < 150 MB
 # Recorder processes that must be gone 30 s after the clip (G-a), by argv token basename.
 RECORDER_EXACT = ("sync_video.py", "pool_capture.py", "nereus-rig")
 RECORDER_PREFIX = ("ci-record", "ci_record", "rpicam-", "libcamera-", "capture_raw_")
@@ -116,7 +116,7 @@ VIDEO_ONLY_FIELDS = [
     "video_only", "imx_video", "n6_video", "ae3_video", "video_complete", "first_frame_ms",
     "procs_left", "sd_free_boot_b", "sd_free_post_b", "sd_outside_post_b", "sd_cycle_growth_b",
     "sd_run_growth_b", "gb_ok", "gb_fails", "journal_b", "home_b", "var_log_b",
-    "mem_avail_mb_post", "cma_free_mb_post", "ram_flag",
+    "mem_avail_mb_post", "cma_free_mb_post", "cma_free_mb_idle", "ram_flag",
 ]
 CSV_FIELDS += VIDEO_ONLY_FIELDS
 
@@ -374,18 +374,26 @@ def recorder_procs() -> list[str]:
     return left
 
 
-def ram_reading() -> dict:
-    """Report-only (spec rev 4): MemAvailable and CmaFree, MB."""
+def ram_reading(idle: dict | None = None) -> dict:
+    """Report-only (spec rev 4, rev 7): MemAvailable and CmaFree, MB. With ``idle`` (this boot's
+    reading before recording), flagged when CmaFree is > 20 MB below it or MemAvailable < 150 MB."""
     info = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
         k, _, v = line.partition(":")
         if k in ("MemAvailable", "CmaFree"):
             info[k] = int(v.split()[0]) // 1024
     out = {"mem_avail_mb": info.get("MemAvailable"), "cma_free_mb": info.get("CmaFree")}
-    out["flag"] = bool((out["cma_free_mb"] is not None and out["cma_free_mb"] < RAM_FLAG_CMA_MB)
-                       or (out["mem_avail_mb"] is not None
-                           and out["mem_avail_mb"] < RAM_FLAG_AVAIL_MB))
+    if idle is not None:
+        out["flag"] = ram_flag(out, idle)
     return out
+
+
+def ram_flag(post: dict, idle: dict) -> bool:
+    """Pure: the rev 7 report-only RAM flag."""
+    cma, cma0 = post.get("cma_free_mb"), idle.get("cma_free_mb")
+    avail = post.get("mem_avail_mb")
+    return bool((cma is not None and cma0 is not None and cma < cma0 - RAM_FLAG_CMA_DROP_MB)
+                or (avail is not None and avail < RAM_FLAG_AVAIL_MB))
 
 
 def evaluate_sd(rec: dict, state: dict) -> dict:
@@ -467,12 +475,13 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
     if state.get("video_only"):  # pool 2 ready gate: boot -> 30 s clip -> readings -> shutdown
         rec["video_only"] = True
         rec["sd_boot"] = sd_reading(run_dir)
+        rec["ram_boot"] = ram_reading()  # this boot's idle baseline (rev 7)
         rec["video"] = run_video(run_dir, n, float(state.get("video_s") or 30),
                                  log, state.get("video_args") or [])
         time.sleep(POST_CLIP_WAIT_S)  # then the G-a process check and the G-b / RAM readings
         rec["procs_after"] = recorder_procs()
         rec["sd_post"] = sd_reading(run_dir)
-        rec["ram_post"] = ram_reading()
+        rec["ram_post"] = ram_reading(rec["ram_boot"])
         rec.update(evaluate_sd(rec, state))
         log(f"post-clip +{POST_CLIP_WAIT_S:.0f}s: recorders left {rec['procs_after']} · SD free "
             f"{rec['sd_post'].get('free_b')} outside {rec['sd_post'].get('outside_b')} growth "
@@ -751,6 +760,7 @@ def _video_only_cols(rec: dict) -> dict:
         "gb_fails": ";".join(rec.get("gb_fails") or []), "journal_b": post.get("journal_b"),
         "home_b": post.get("home_b"), "var_log_b": post.get("var_log_b"),
         "mem_avail_mb_post": ram.get("mem_avail_mb"), "cma_free_mb_post": ram.get("cma_free_mb"),
+        "cma_free_mb_idle": (rec.get("ram_boot") or {}).get("cma_free_mb"),
         "ram_flag": ram.get("flag"),
     }
 

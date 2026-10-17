@@ -46,6 +46,8 @@ SKEW_MAX_MS = 25.0
 IMX_FPS_MIN = 26.0
 IMX_GAP_MAX_MS = 100.0
 AE3_REL_BELOW = 0.2
+USABLE_MIN = 0.95   # spec rev 7 (d57): an N6 clip is usable with >= 95 % of its expected frames
+N6_USABLE_OF_3 = 2  # an N6 setting holds when >= 2 of 3 clips are usable + every other bar holds
 
 
 def _load(name: str):
@@ -55,17 +57,26 @@ def _load(name: str):
     return mod
 
 
-def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None) -> dict:
+def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
+                seconds: float = 30.0) -> dict:
     """The card's bars for one clip. Pure: ``rows`` are video_clip_table.clip_rows() output.
     Returns misses (bar names), void (throttled), skew_only (the only miss is a start skew that
-    involves the IMX708, for d55) and cross-effect flags for the board not under test."""
+    involves the IMX708, for d55), cross-effect flags for the board not under test, and the N6's
+    ``usable`` (spec rev 7, d57): frames >= 95 % of expected, expected = asked fps x clip seconds
+    (10 x 30 = 300; not the seq span, which a dying stream would shorten). N6 under test (QE R3):
+    the fps, skew, IMX708 and host bars apply to its usable clips; an unusable clip counts only in
+    the usable share, so its misses are kept in ``ignored``. The AE3 keeps 0 frames lost."""
     by = {r["camera"]: r for r in rows}
-    misses, cross = [], []
+    misses, cross, wedges = [], [], []
     imx = by.get("imx708") or {}
     if (imx.get("fps") or 0) < IMX_FPS_MIN:
         misses.append("imx708_fps")
     if imx.get("max_gap_ms") is None or imx["max_gap_ms"] > IMX_GAP_MAX_MS:
         misses.append("imx708_max_gap")
+    n6 = by.get("openmv_n6") or {}
+    expected = float(n6.get("fps_asked") or 10) * seconds
+    usable = bool(n6) and (n6.get("frames") or 0) >= USABLE_MIN * expected \
+        and not str(n6.get("error") or "").startswith(("arm:", "fire:"))
     for cam in ("openmv_n6", "openmv_ae3"):
         r = by.get(cam) or {}
         floor = ae3_floor if (cam == "openmv_ae3" and ae3_floor) else FPS_MIN
@@ -74,14 +85,14 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None) ->
         bad = []
         if (r.get("fps") or 0) < floor:
             bad.append(f"{cam}_fps")
-        if lost != 0 or err:  # an errored stream or an unknown count counts as lost
+        if cam == "openmv_ae3" and (lost != 0 or err):  # errored / unknown count = lost
             bad.append(f"{cam}_lost")
-        if err.startswith("arm:"):
-            bad.append(f"{cam}_wedge")
         if cam == under:
             misses += bad
         else:
             cross += bad
+        if err.startswith("arm:"):  # spec F2 / rev 8: a wedge on either board fails the setting
+            wedges.append(f"{cam}_wedge")
     skew = rows[0].get("start_skew_ms") if rows else None
     skew_miss = skew is None or skew > SKEW_MAX_MS
     if skew_miss:
@@ -91,8 +102,32 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None) ->
     imx_d = (by.get("imx708") or {}).get("first_frame_delay_ms")
     imx_involved = imx_d is not None and imx_d in (max(delays), min(delays))
     throttled = any((r.get("host_throttled") or "0x0") != "0x0" for r in rows)
-    return {"misses": misses, "void": throttled, "cross_effect": cross,
-            "skew_only": skew_miss and misses == ["start_skew"] and imx_involved}
+    ignored = []
+    if under == "openmv_n6" and not usable:
+        ignored, misses = misses, []
+    misses += wedges
+    return {"misses": misses, "ignored": ignored, "void": throttled, "cross_effect": cross,
+            "skew_only": skew_miss and misses == ["start_skew"] and imx_involved,
+            "n6_usable": usable, "n6_frames": n6.get("frames"), "n6_expected": expected,
+            "n6_lost": n6.get("frames_lost")}
+
+
+def setting_holds(clips: list[dict], under: str, n: int = 3) -> bool:
+    """A setting holds on its first n scored clips: no misses on any of them (for the N6 under
+    test an unusable clip carries none, QE R3) and, for the N6, >= 2 of 3 usable (spec rev 7;
+    scaled for other n). Pure."""
+    first = [c for c in clips if not c["void"]][:n]
+    if len(first) < n or any(c["misses"] for c in first):
+        return False
+    if under == "openmv_n6":
+        return sum(bool(c.get("n6_usable")) for c in first) >= -(-N6_USABLE_OF_3 * n // 3)
+    return True
+
+
+def n6_hopeless(clips: list[dict], n: int = 3) -> bool:
+    """Fail fast for the N6 rule: too many unusable clips to reach the usable share."""
+    scored = [c for c in clips if not c["void"]][:n]
+    return sum(not c.get("n6_usable") for c in scored) > n - (-(-N6_USABLE_OF_3 * n // 3))
 
 
 def prechecks() -> list[str]:
@@ -151,12 +186,14 @@ def main() -> int:
         print(f"pool2_bench {a.label}: clip {k}: {' '.join(cmd[2:])}", flush=True)
         subprocess.run(cmd, timeout=a.seconds + 180)
         rows = table.clip_rows(clip) if (clip / "video_sync.json").exists() else []
-        res = clip_misses(rows, a.under, a.ae3_floor) if rows else {
+        res = clip_misses(rows, a.under, a.ae3_floor, a.seconds) if rows else {
             "misses": ["no_video_sync_json"], "void": False, "cross_effect": [],
-            "skew_only": False}
+            "skew_only": False, "n6_usable": False}
         rec["clips"].append({"clip": clip.name, **res, "rows": rows})
         print(f"pool2_bench {a.label}: clip {k}: misses {res['misses']} void {res['void']} "
-              f"cross {res['cross_effect']}", flush=True)
+              f"cross {res['cross_effect']} N6 usable {res.get('n6_usable')} "
+              f"({res.get('n6_frames')}/{res.get('n6_expected')}, lost {res.get('n6_lost')})",
+              flush=True)
         if res["void"]:
             voids_in_row += 1
             if voids_in_row >= 2:
@@ -166,16 +203,19 @@ def main() -> int:
             continue
         voids_in_row = 0
         scored_n += 1
-        if res["misses"] and not a.no_fail_fast:
+        if not a.no_fail_fast and (res["misses"] or (
+                a.under == "openmv_n6" and n6_hopeless(rec["clips"], a.n))):
             break
     scored = [c for c in rec["clips"] if not c["void"]]
-    rec["holds"] = (len(scored) >= a.n and all(not c["misses"] for c in scored[:a.n])
-                    and "stopped" not in rec)
+    rec["holds"] = setting_holds(rec["clips"], a.under, a.n) and "stopped" not in rec
+    rec["n6_usable_share"] = (f"{sum(bool(c.get('n6_usable')) for c in scored[:a.n])}"
+                              f"/{len(scored[:a.n])}")
     rec["skew_only"] = bool(scored) and all(c["skew_only"] or not c["misses"] for c in scored) \
         and any(c["skew_only"] for c in scored)
     (out / "setting.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
     print(f"pool2_bench {a.label}: {'HOLDS' if rec['holds'] else 'FAILS'}"
           f"{' (skew-only, d55)' if rec['skew_only'] else ''} · {len(scored)} scored clip(s) · "
+          f"N6 usable {rec['n6_usable_share']} · "
           f"{rec.get('stopped', '')}", flush=True)
     if "stopped" in rec and rec["stopped"].startswith("precheck"):
         return 2

@@ -294,3 +294,10 @@ def test_seal_covers_every_file_in_the_run_folder(tmp_path):
     assert sorted(ln.split("  ")[1] for ln in lines) == [
         "cycles.csv", "gate.log", "video/cycle001/openmv_n6.mjpeg"]
     assert gate.write_run_sums(tmp_path) == 3          # SHA256SUMS never lists itself
+
+
+def test_ram_flag_is_relative_to_the_boots_idle_cma_rev7():
+    idle = {"cma_free_mb": 42, "mem_avail_mb": 250}
+    assert not gate.ram_flag({"cma_free_mb": 23, "mem_avail_mb": 190}, idle)   # 19 MB below
+    assert gate.ram_flag({"cma_free_mb": 21, "mem_avail_mb": 190}, idle)       # 21 MB below
+    assert gate.ram_flag({"cma_free_mb": 40, "mem_avail_mb": 149}, idle)       # avail < 150
