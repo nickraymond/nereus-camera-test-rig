@@ -27,6 +27,18 @@ Usage (on the Pi, repo root ~/nereus-rig-poolcam):
   python scripts/gate_cycle.py stop                           # no further power cycles
   python scripts/gate_cycle.py disarm                         # cron + dive flag restored
   python scripts/gate_cycle.py mode switch|auto               # Nick's switch cycles vs UPS timer
+  python scripts/gate_cycle.py seal [RUN_ID]                  # SHA256SUMS over a whole run folder
+  python scripts/gate_cycle.py sd [RUN_ID]                    # SD reading now vs the run's start
+
+Pool 2 ready gate (docs/pool2_20261021/SPEC.md rev 5+, TEST_CARD_B.md; Nick 10/17, d52):
+  python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --target 60 \
+      --cycle-mb <per-cycle MB from part B> --video-args "--n6-framesize HD ..."
+  One cycle = boot -> board first contact -> one synced 30 s clip on all 3 cameras -> 30 s ->
+  checks -> clean shutdown. No stills. G-a (the 25-in-a-row line): every camera recorded, 0
+  recorder processes 30 s after the clip, clean previous shutdown, boards power-cycled. Video
+  completeness (lost frames, fps, skew) is scored per cycle and never gates (d52). G-b (SD clean,
+  its own verdict line): df/du readings at gate start, after each boot and 30 s after each clip.
+  RAM (mem_avail, CMA free) is report-only.
 Outputs: results/gate/<run>/{cycles.csv, cycles.jsonl, gate.log, run_manifest.json, rig.yaml,
   profiles/, <date>/exp_*/ (one experiment per cycle, with SHA256SUMS)}
 
@@ -44,6 +56,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -79,6 +92,16 @@ DARK_IMX_MEAN = 40.0              # grey 0-255: the IMX708 still of a dim scene
 MAX_FAILS_IN_ROW = 3              # auto mode stops power-cycling after this many FAILs
                                   # (arm --stop-after-fails; 0 = never, for baseline runs)
 BYID_TIMEOUT_S = 60.0
+# Pool 2 ready gate (spec rev 5+, QE 005 N1-N7). Bytes are decimal (1 MB = 1e6 B).
+POST_CLIP_WAIT_S = 30.0           # G-a process check + G-b / RAM readings this long after the clip
+SD_BAR_CYCLE_B = 100_000_000      # G-b 2: outside use grows <= 100 MB per cycle (post-clip pairs)
+SD_BAR_RUN_B = 250_000_000        # G-b 3: last reading <= 250 MB above the gate-start reading
+SD_MIN_FREE_B = 2_000_000_000     # G-b 4: SD free >= 2 GB at every reading
+RAM_FLAG_CMA_MB = 50              # report-only flags (Friday in water: 59 MB CMA, 193 MB avail)
+RAM_FLAG_AVAIL_MB = 150
+# Recorder processes that must be gone 30 s after the clip (G-a), by argv token basename.
+RECORDER_EXACT = ("sync_video.py", "pool_capture.py", "nereus-rig")
+RECORDER_PREFIX = ("ci-record", "ci_record", "rpicam-", "libcamera-", "capture_raw_")
 CSV_FIELDS = [
     "cycle", "started_by", "utc", "boot_id", "uptime_start_s", "prev_end", "prev_by",
     "vin_mv", "vbat_mv", "on_battery", "throttled", "msc_quirk", "ae3_enum_s", "n6_enum_s",
@@ -88,6 +111,14 @@ CSV_FIELDS = [
     "sync_raw_ms", "video", "video_skew_ms", "video_fps", "video_lost",
     "last_still_uptime_s", "result", "fail_reasons", "streak",
 ]
+# pool 2 ready gate (video-only cycles, spec rev 5+); empty on still cycles
+VIDEO_ONLY_FIELDS = [
+    "video_only", "imx_video", "n6_video", "ae3_video", "video_complete", "first_frame_ms",
+    "procs_left", "sd_free_boot_b", "sd_free_post_b", "sd_outside_post_b", "sd_cycle_growth_b",
+    "sd_run_growth_b", "gb_ok", "gb_fails", "journal_b", "home_b", "var_log_b",
+    "mem_avail_mb_post", "cma_free_mb_post", "ram_flag",
+]
+CSV_FIELDS += VIDEO_ONLY_FIELDS
 
 
 # -- small helpers ---------------------------------------------------------------------------
@@ -278,6 +309,136 @@ def contact_cols(rec: dict) -> tuple[str, float | None, int | None]:
     return text, (round(ticks / 1000, 1) if isinstance(ticks, int) else None), imp
 
 
+# -- pool 2 ready gate: SD, process and RAM readings ------------------------------------------
+def _du(path: Path, exclude: Path | None = None) -> int | None:
+    """Allocated bytes under ``path`` (``du -s -B1``, QE N3); unreadable files are skipped."""
+    cmd = ["du", "-s", "-B1"] + ([f"--exclude={exclude}"] if exclude else []) + [str(path)]
+    out = sh(cmd, timeout=120).split()
+    return int(out[0]) if out and out[0].isdigit() else None
+
+
+def _journal_bytes() -> int | None:
+    m = re.search(r"take up ([\d.]+)([KMGT]?)", sh(["journalctl", "--disk-usage"]))
+    if not m:
+        return None
+    return int(float(m.group(1)) * 1024 ** " KMGT".index(m.group(2) or " "))
+
+
+def sd_reading(run_dir: Path) -> dict:
+    """One G-b reading: ``df -B1`` of the filesystem holding results/, the run folder's own size,
+    and 'outside use' = used - run folder (the gate's clips are evidence, not leaks). Plus where
+    outside use could grow (QE N1): the journal, /var/log, apt, and ~ without results/."""
+    r: dict = {"uptime_s": round(uptime_s(), 1)}
+    df = sh(["df", "-B1", "--output=used,avail", str(run_dir)]).split()
+    if len(df) >= 2 and df[-1].isdigit() and df[-2].isdigit():
+        r["used_b"], r["free_b"] = int(df[-2]), int(df[-1])
+    r["run_b"] = _du(run_dir)
+    if "used_b" in r and r["run_b"] is not None:
+        r["outside_b"] = r["used_b"] - r["run_b"]
+    r["journal_b"] = _journal_bytes()
+    for key, path in (("var_log_b", "/var/log"), ("var_lib_apt_b", "/var/lib/apt"),
+                      ("var_cache_apt_b", "/var/cache/apt")):
+        r[key] = _du(Path(path))
+    r["home_b"] = _du(Path.home(), exclude=GATE_ROOT.parent)
+    return r
+
+
+def _ancestors(pid: int) -> set[int]:
+    out = set()
+    while pid > 1 and pid not in out:
+        out.add(pid)
+        try:
+            pid = int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
+        except (OSError, IndexError, ValueError):
+            break
+    return out
+
+
+def is_recorder(args: str) -> bool:
+    """A recorder process, judged by the basename of each argv token."""
+    for tok in args.split():
+        name = tok.rsplit("/", 1)[-1]
+        if name in RECORDER_EXACT or name.startswith(RECORDER_PREFIX):
+            return True
+    return False
+
+
+def recorder_procs() -> list[str]:
+    """Recorder processes still running (G-a), excluding this gate and its ancestors (QE N5)."""
+    mine = _ancestors(os.getpid())
+    left = []
+    for line in sh(["ps", "-eo", "pid=,args="]).splitlines():
+        pid, _, args = line.strip().partition(" ")
+        if pid.isdigit() and int(pid) not in mine and is_recorder(args):
+            left.append(f"{pid} {args.strip()[:160]}")
+    return left
+
+
+def ram_reading() -> dict:
+    """Report-only (spec rev 4): MemAvailable and CmaFree, MB."""
+    info = {}
+    for line in Path("/proc/meminfo").read_text().splitlines():
+        k, _, v = line.partition(":")
+        if k in ("MemAvailable", "CmaFree"):
+            info[k] = int(v.split()[0]) // 1024
+    out = {"mem_avail_mb": info.get("MemAvailable"), "cma_free_mb": info.get("CmaFree")}
+    out["flag"] = bool((out["cma_free_mb"] is not None and out["cma_free_mb"] < RAM_FLAG_CMA_MB)
+                       or (out["mem_avail_mb"] is not None
+                           and out["mem_avail_mb"] < RAM_FLAG_AVAIL_MB))
+    return out
+
+
+def evaluate_sd(rec: dict, state: dict) -> dict:
+    """G-b per cycle. Pure. Cycle growth = outside use post-clip(k) - post-clip(k-1), cycle 1 from
+    the gate-start reading (QE N2); SD free >= 2 GB at both of the cycle's readings. The run-level
+    250 MB bar is judged on the last reading (``sd_verdict``); here it is only recorded."""
+    start = state.get("sd_start") or {}
+    prev = state.get("sd_prev_post") or start
+    boot, post = rec.get("sd_boot") or {}, rec.get("sd_post") or {}
+    fails = []
+    for name, r in (("boot", boot), ("post", post)):
+        if r.get("free_b") is None or r.get("outside_b") is None:
+            fails.append(f"sd_{name}:no_reading")
+        elif r["free_b"] < SD_MIN_FREE_B:
+            fails.append(f"sd_{name}_free:{r['free_b']}")
+    growth = run_growth = None
+    if post.get("outside_b") is not None and prev.get("outside_b") is not None:
+        growth = post["outside_b"] - prev["outside_b"]
+        if growth > SD_BAR_CYCLE_B:
+            fails.append(f"sd_cycle_growth:{growth}")
+    if post.get("outside_b") is not None and start.get("outside_b") is not None:
+        run_growth = post["outside_b"] - start["outside_b"]
+    return {"gb_ok": not fails, "gb_fails": fails, "sd_cycle_growth_b": growth,
+            "sd_run_growth_b": run_growth}
+
+
+def sd_verdict(rows: list[dict], start: dict) -> dict:
+    """G-b over the whole gate (bars 2-4): every cycle's G-b passed and the last reading's outside
+    use is <= 250 MB above the gate start. Pure; rows are cycles.jsonl records in order."""
+    fails = [f"cycle {r.get('cycle')}: {';'.join(r.get('gb_fails') or [])}" for r in rows
+             if r.get("video_only") and not r.get("gb_ok")]
+    if start.get("free_b") is None or start["free_b"] < SD_MIN_FREE_B:
+        fails.append(f"start_free:{start.get('free_b')}")
+    last = next((r["sd_run_growth_b"] for r in reversed(rows)
+                 if r.get("sd_run_growth_b") is not None), None)
+    if last is None:
+        fails.append("no_post_clip_reading")
+    elif last > SD_BAR_RUN_B:
+        fails.append(f"run_growth:{last}")
+    return {"ok": not fails, "fails": fails, "last_run_growth_b": last}
+
+
+def write_run_sums(run_dir: Path) -> int:
+    """One SHA256SUMS over every file in the run folder (QE N4), ``shasum -a 256 -c`` format."""
+    files = sorted(p for p in run_dir.rglob("*") if p.is_file() and p.name != "SHA256SUMS")
+    tmp = run_dir / "SHA256SUMS.tmp"
+    with tmp.open("w") as f:
+        for p in files:
+            f.write(f"{sha256(p)}  {p.relative_to(run_dir)}\n")
+    tmp.replace(run_dir / "SHA256SUMS")
+    return len(files)
+
+
 def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
     n = state.get("cycles_done", 0) + 1
     t_start = uptime_s()
@@ -302,6 +463,23 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
 
     # First contact BEFORE any capture: the AE3 first (it is the board under test), then the N6.
     rec["contact"] = {cam: board_contact(cam, log) for cam in ("openmv_ae3", "openmv_n6")}
+
+    if state.get("video_only"):  # pool 2 ready gate: boot -> 30 s clip -> readings -> shutdown
+        rec["video_only"] = True
+        rec["sd_boot"] = sd_reading(run_dir)
+        rec["video"] = run_video(run_dir, n, float(state.get("video_s") or 30),
+                                 log, state.get("video_args") or [])
+        time.sleep(POST_CLIP_WAIT_S)  # then the G-a process check and the G-b / RAM readings
+        rec["procs_after"] = recorder_procs()
+        rec["sd_post"] = sd_reading(run_dir)
+        rec["ram_post"] = ram_reading()
+        rec.update(evaluate_sd(rec, state))
+        log(f"post-clip +{POST_CLIP_WAIT_S:.0f}s: recorders left {rec['procs_after']} · SD free "
+            f"{rec['sd_post'].get('free_b')} outside {rec['sd_post'].get('outside_b')} growth "
+            f"{rec.get('sd_cycle_growth_b')} · G-b {'ok' if rec['gb_ok'] else rec['gb_fails']} · "
+            f"RAM {rec['ram_post']}")
+        rec["uptime_end_s"] = round(uptime_s(), 1)
+        return evaluate(rec, state)
 
     # One set through the production path (pool_capture's own CLI call + run config).
     t_set = time.monotonic()
@@ -334,11 +512,13 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
     return evaluate(rec, state)
 
 
-def run_video(run_dir: Path, n: int, seconds: float, log: Log) -> dict:
-    """One synchronized video clip on all three cameras (scripts/sync_video.py); its summary."""
+def run_video(run_dir: Path, n: int, seconds: float, log: Log,
+              extra_args: list[str] | None = None) -> dict:
+    """One synchronized video clip on all three cameras (scripts/sync_video.py); its summary.
+    ``extra_args`` are passed through (pool 2: each board's settings, e.g. --n6-framesize HD)."""
     out = run_dir / "video" / f"cycle{n:03d}"
     cmd = [sys.executable, str(ROOT / "scripts" / "sync_video.py"), "--seconds", str(seconds),
-           "--out", str(out)]
+           "--out", str(out), *(extra_args or [])]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=seconds + 120)
         tail = (r.stdout + r.stderr).strip().splitlines()[-1:]
@@ -352,14 +532,45 @@ def run_video(run_dir: Path, n: int, seconds: float, log: Log) -> dict:
     v = {"ok": bool(summary.get("ok")), "skew_ms": summary.get("start_skew_ms"),
          "fps": {c: r.get("fps") for c, r in cams.items()},
          "lost": sum(r.get("frames_lost") or 0 for r in cams.values()),
-         "host": summary.get("host")}
+         "host": summary.get("host"), "cams": video_cams(summary, seconds)}
     log(f"video {seconds:.0f}s: {'ok' if v['ok'] else 'FAIL'} skew {v['skew_ms']} ms fps "
         f"{v['fps']} lost {v['lost']} host {v['host']}")
     return v
 
 
+def video_cams(summary: dict, seconds: float) -> dict:
+    """Per camera, from video_sync.json. ``recorded`` (G-a): the camera started (no arm/fire
+    error) and its file holds >= 1 frame. Everything else is the completeness score (d52: never
+    gates): frames, frames of nominal, lost, fps, its own fire -> first-frame delay. Pure."""
+    cams = summary.get("cameras") or {}
+    delays = summary.get("first_frame_delay_ms") or {}
+    out = {}
+    for cam in CAMERAS:
+        r = cams.get(cam)
+        if r is None:
+            out[cam] = {"recorded": False, "why": "missing"}
+            continue
+        err = str(r.get("error") or "")
+        started = not err.startswith(("arm:", "fire:"))
+        frames = r.get("frames") or 0
+        recorded = started and (r.get("bytes") or 0) > 0 and frames >= 1
+        asked = (r.get("settings") or {}).get("fps") or (summary.get("args") or {}).get(
+            "imx_fps" if cam == "imx708" else "board_fps")
+        lost = r.get("frames_lost") if cam != "imx708" else None
+        out[cam] = {"recorded": recorded, "why": None if recorded else (err[:80] or "no_frames"),
+                    "frames": frames, "fps": r.get("fps"), "lost": lost,
+                    "of_nominal": round(frames / (float(asked) * seconds), 3)
+                    if asked and seconds else None,
+                    "complete": bool(recorded and not err and not lost),
+                    "first_frame_ms": delays.get(cam), "bytes": r.get("bytes")}
+    return out
+
+
 def evaluate(rec: dict, state: dict) -> dict:
-    """PASS/FAIL per PREREG §4 and the streak. Pure: unit-tested on recorded dicts."""
+    """PASS/FAIL per PREREG §4 and the streak. Pure: unit-tested on recorded dicts.
+    Video-only cycles (pool 2 ready gate) are judged by G-a instead (``_video_only_fails``)."""
+    if rec.get("video_only"):
+        return _streak(rec, state, _video_only_fails(rec))
     fails: list[str] = []
     v = rec.get("verify") or {}
     for cam in CAMERAS:
@@ -404,6 +615,50 @@ def evaluate(rec: dict, state: dict) -> dict:
     else:
         rec["result"] = "FAIL" if fails else "PASS"
         rec["streak"] = 0 if fails else state.get("streak", 0) + 1
+    return rec
+
+
+def _boards_cycled(rec: dict) -> bool | None:
+    cycled = []
+    for cam in ("openmv_ae3", "openmv_n6"):
+        c = (rec.get("contact") or {}).get(cam) or {}
+        _, ticks_s, _ = contact_cols(c)
+        pi_up = (c.get("first") or {}).get("pi_uptime_s") or rec.get("uptime_start_s", 0)
+        if ticks_s is not None:
+            cycled.append(ticks_s <= pi_up + 30)
+    return all(cycled) if cycled else None
+
+
+def _video_only_fails(rec: dict) -> list[str]:
+    """G-a for one pool 2 cycle: booted (this ran), every camera recorded, 0 recorder processes
+    30 s after the clip, the previous shutdown was clean, the boards really lost power. Video
+    completeness, fps and skew are scored in rec["video"]["cams"] and never fail a cycle (d52)."""
+    fails = []
+    if rec.get("cycle", 1) > 1 and not (rec.get("prev") or {}).get("clean"):
+        fails.append("prev_shutdown_not_clean")
+    rec["boards_power_cycled"] = _boards_cycled(rec)
+    if rec["boards_power_cycled"] is False and rec.get("started_by") == "boot":
+        fails.append("boards_not_power_cycled")
+    vid = rec.get("video") or {}
+    cams = vid.get("cams") or {}
+    if not cams:
+        fails.append(f"video:{vid.get('error', 'missing')}")
+    for cam in CAMERAS:
+        c = cams.get(cam) or {}
+        if cams and not c.get("recorded"):
+            fails.append(f"{cam}_video:{c.get('why') or 'missing'}")
+    procs = rec.get("procs_after")
+    if procs is None:
+        fails.append("procs:not_checked")
+    elif procs:
+        fails.append(f"procs_left:{len(procs)}")
+    return fails
+
+
+def _streak(rec: dict, state: dict, fails: list[str]) -> dict:
+    rec["fail_reasons"] = fails
+    rec["result"] = "FAIL" if fails else "PASS"
+    rec["streak"] = 0 if fails else state.get("streak", 0) + 1
     return rec
 
 
@@ -464,6 +719,39 @@ def csv_row(rec: dict) -> dict:
         "video_lost": (rec.get("video") or {}).get("lost"),
         "last_still_uptime_s": rec.get("last_still_uptime_s"), "result": rec.get("result"),
         "fail_reasons": ";".join(rec.get("fail_reasons") or []), "streak": rec.get("streak"),
+        **_video_only_cols(rec),
+    }
+
+
+def _video_only_cols(rec: dict) -> dict:
+    if not rec.get("video_only"):
+        return dict.fromkeys(VIDEO_ONLY_FIELDS)
+    cams = (rec.get("video") or {}).get("cams") or {}
+
+    def cam(c):
+        v = cams.get(c) or {}
+        if not v.get("recorded"):
+            return f"NO {v.get('why')}"
+        return (f"{v.get('frames')}fr {v.get('fps')}fps lost {v.get('lost')} "
+                f"{v.get('of_nominal')} {'complete' if v.get('complete') else 'INCOMPLETE'}")
+
+    boot, post = rec.get("sd_boot") or {}, rec.get("sd_post") or {}
+    ram = rec.get("ram_post") or {}
+    return {
+        "video_only": True, "imx_video": cam("imx708"), "n6_video": cam("openmv_n6"),
+        "ae3_video": cam("openmv_ae3"),
+        "video_complete": all((cams.get(c) or {}).get("complete") for c in CAMERAS),
+        "first_frame_ms": "/".join(str((cams.get(c) or {}).get("first_frame_ms"))
+                                   for c in CAMERAS),
+        "procs_left": len(rec["procs_after"]) if rec.get("procs_after") is not None else None,
+        "sd_free_boot_b": boot.get("free_b"), "sd_free_post_b": post.get("free_b"),
+        "sd_outside_post_b": post.get("outside_b"),
+        "sd_cycle_growth_b": rec.get("sd_cycle_growth_b"),
+        "sd_run_growth_b": rec.get("sd_run_growth_b"), "gb_ok": rec.get("gb_ok"),
+        "gb_fails": ";".join(rec.get("gb_fails") or []), "journal_b": post.get("journal_b"),
+        "home_b": post.get("home_b"), "var_log_b": post.get("var_log_b"),
+        "mem_avail_mb_post": ram.get("mem_avail_mb"), "cma_free_mb_post": ram.get("cma_free_mb"),
+        "ram_flag": ram.get("flag"),
     }
 
 
@@ -509,6 +797,16 @@ def cmd_arm(a) -> int:
         f"_{a.label}" if a.label else "")
     run_dir = GATE_ROOT / run_id
     run_dir.mkdir()
+    video_only = bool(getattr(a, "video_only", False))
+    sd_start = sd_reading(run_dir) if video_only else None
+    if video_only:
+        # G-b 4: before arming, SD free >= 2 GB + target x the per-cycle run size (part B).
+        need = SD_MIN_FREE_B + int(a.target * float(getattr(a, "cycle_mb", 0) or 0) * 1e6)
+        if (sd_start.get("free_b") or 0) < need:
+            run_dir.rmdir()
+            print(f"gate: SD free {sd_start.get('free_b')} B < {need} B (2 GB + {a.target} x "
+                  f"{getattr(a, 'cycle_mb', 0)} MB): pull and clear first (spec rev 4, G-b 4)")
+            return 1
     before = crontab_lines()
     (run_dir / "crontab_before.txt").write_text("\n".join(before) + ("\n" if before else ""))
     flag = "absent"
@@ -530,10 +828,14 @@ def cmd_arm(a) -> int:
              "video_s": a.video_s, "until_streak": a.until_streak,
              "repeat": getattr(a, "repeat", 1), "dark_wake_min": getattr(a, "dark_wake_min", 0),
              "lens": a.lens_position, "config": a.config,
-             "previous_run": getattr(a, "previous_run", None)}
+             "previous_run": getattr(a, "previous_run", None),
+             "video_only": video_only, "video_args": list(getattr(a, "video_args", None) or []),
+             "cycle_mb": getattr(a, "cycle_mb", 0), "sd_start": sd_start}
     save_state(state)
-    pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg":
-                   "docs/rig_gate_20261014/PREREG.md", "host": os.uname().nodename})
+    prereg = ("docs/pool2_20261021/TEST_CARD_B.md" if video_only
+              else "docs/rig_gate_20261014/PREREG.md")
+    pc.atomic_json(run_dir / "run_manifest.json", {**state, "prereg": prereg,
+                                                   "host": os.uname().nodename})
     print(f"gate: ARMED {run_id} target {a.target} mode {a.mode}; dive flag pre-arm: {flag}")
     print("gate: next boot runs a cycle; `gate_cycle.py once` runs one now")
     return 0
@@ -607,7 +909,8 @@ def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
             video_s=prev.get("video_s", 0), until_streak=prev["until_streak"], repeat=left,
             dark_wake_min=prev.get("dark_wake_min", 0), lens_position=prev.get("lens", "0.8"),
             config=prev.get("config", "configs/rig.example.yaml"),
-            previous_run=prev["run_id"]))
+            previous_run=prev["run_id"], video_only=prev.get("video_only", False),
+            video_args=prev.get("video_args") or [], cycle_mb=prev.get("cycle_mb", 0)))
         state = load_state()
         run_dir = Path(state["run_dir"])
         log = Log(run_dir / "gate.log")
@@ -639,6 +942,50 @@ def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
     log(f"ups_power_cycle rc={r.returncode}: {(r.stdout + r.stderr).strip()[-300:]}")
 
 
+def _run_dir(a) -> Path | None:
+    if getattr(a, "run", None):
+        return GATE_ROOT / a.run
+    state = load_state()
+    return Path(state["run_dir"]) if state else None
+
+
+def cmd_seal(a) -> int:
+    """QE N4: one SHA256SUMS over the whole run folder (clips, cycles.csv/jsonl, gate.log, ...),
+    written on the Pi after the gate; verified on the Mac with `shasum -a 256 -c` before any
+    clear. Refuses while the gate is armed on that run."""
+    run_dir = _run_dir(a)
+    if run_dir is None or not run_dir.is_dir():
+        print("gate seal: name the run (gate_cycle.py seal <run_id>)")
+        return 1
+    if load_state().get("run_dir") == str(run_dir):
+        print("gate seal: that run is still armed; disarm first")
+        return 1
+    n = write_run_sums(run_dir)
+    print(f"gate seal: {run_dir / 'SHA256SUMS'} covers {n} files; on the Mac, in the pulled "
+          f"folder: shasum -a 256 -c SHA256SUMS")
+    return 0
+
+
+def cmd_sd(a) -> int:
+    """G-b now vs the run's gate-start reading (spec rev 4 item 5: the after-gate clean check)."""
+    run_dir = _run_dir(a)
+    manifest = (run_dir / "run_manifest.json") if run_dir else None
+    if not manifest or not manifest.is_file():
+        print("gate sd: name the run (gate_cycle.py sd <run_id>)")
+        return 1
+    start = json.loads(manifest.read_text()).get("sd_start") or {}
+    now = sd_reading(run_dir)
+    rows = [json.loads(ln) for ln in (run_dir / "cycles.jsonl").read_text().splitlines()
+            if ln.strip()] if (run_dir / "cycles.jsonl").exists() else []
+    v = sd_verdict(rows, start)
+    diff = (now.get("used_b") or 0) - (start.get("used_b") or 0)
+    print(json.dumps({"start": start, "now": now, "used_now_minus_start_b": diff,
+                      "free_ok": (now.get("free_b") or 0) >= SD_MIN_FREE_B,
+                      "within_250MB_of_start": diff <= SD_BAR_RUN_B, "gate_gb_verdict": v},
+                     indent=1))
+    return 0 if v["ok"] else 1
+
+
 def cmd_cycle(a) -> int:
     state = load_state()
     if not state:
@@ -665,6 +1012,8 @@ def cmd_cycle(a) -> int:
         state["fails_in_row"] = (0 if rec["result"] == "PASS"
                                  else state.get("fails_in_row", 0) + 1)
     state["best_streak"] = max(state.get("best_streak", 0), rec["streak"])
+    if (rec.get("sd_post") or {}).get("outside_b") is not None:
+        state["sd_prev_post"] = rec["sd_post"]  # QE N2: growth is post-clip to post-clip
     save_state(state)
     log(f"cycle {rec['cycle']} {rec['result']} {';'.join(rec.get('fail_reasons') or [])} "
         f"streak {rec['streak']} (best {state['best_streak']}) skew {rec.get('still_skew_s')}s "
@@ -699,18 +1048,28 @@ def main() -> int:
                      help="after the stills, a synchronized video clip of N s (0 = none)")
     arm.add_argument("--lens-position", default="0.8")
     arm.add_argument("--config", default="configs/rig.example.yaml")
+    arm.add_argument("--video-only", action="store_true",
+                     help="pool 2 ready gate: no stills; boot -> one --video-s clip -> 30 s -> "
+                          "G-a process check + G-b SD / RAM readings")
+    arm.add_argument("--video-args", type=shlex.split, default=[],
+                     help='passed to sync_video.py, e.g. "--n6-framesize HD --ae3-subsampling 420"')
+    arm.add_argument("--cycle-mb", type=float, default=0,
+                     help="per-cycle run-folder MB at Wed's settings (part B): pre-arm SD check")
     for name in ("boot", "once"):
         p = sub.add_parser(name)
         p.add_argument("--settle-s", type=float, default=20.0,
                        help="boot: start no earlier than this uptime")
     sub.add_parser("status")
+    for name in ("seal", "sd"):
+        sub.add_parser(name).add_argument("run", nargs="?", default="")
     sub.add_parser("stop")
     sub.add_parser("disarm")
     m = sub.add_parser("mode")
     m.add_argument("mode", choices=("auto", "switch"))
     a = ap.parse_args()
     return {"arm": cmd_arm, "disarm": cmd_disarm, "status": cmd_status, "stop": cmd_stop,
-            "mode": cmd_mode, "boot": cmd_cycle, "once": cmd_cycle}[a.cmd](a)
+            "mode": cmd_mode, "boot": cmd_cycle, "once": cmd_cycle, "seal": cmd_seal,
+            "sd": cmd_sd}[a.cmd](a)
 
 
 if __name__ == "__main__":
