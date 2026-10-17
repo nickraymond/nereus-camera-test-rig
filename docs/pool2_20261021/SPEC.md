@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 6, tier (a); rev 2–6 amendments at the end)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 8, tier (a); rev 2–8 amendments at the end)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -218,3 +218,35 @@ timeline e_pool1021, card prop_pool2_prep. Author: Principal Engineer, Fri 10/16
   - Every row and the Wed card name each camera's chroma format. The B results include a matched-frame crop pair of the
     AE3 in 4:4:4 vs 4:2:0. Nick rules on the trade (half the colour resolution for speed, and a like-for-like 4:2:0
     comparison with the N6) when he approves the Wed card (part C).
+
+## Amendment rev 7 (PE 002, Sat 10/17 3:28 PM; Nick's d57 + corrections). Overrides earlier revs where they conflict.
+- **d57 (Nick, Sat 10/17 3:26 PM PT, board thread 8b58f7d2, verbatim: "Approved."; it answers d57 v1 `ask`, which replaces
+  d53):**
+  1. The N6 resync fix (rig aa06bc7) goes into the build at the start of the bench tests, before B0. After it deploys, both
+     boards' 640×400 controls re-run (rev 1 must do 4), and the B card records the new rig sha. Rev 3 order rule 4's "if d53
+     is approved" is replaced by this.
+  2. No pause bar (d53's "> 1 in 20 clips" is not adopted) and no USB root-cause work.
+  3. **N6 frame bar:** "0 frames lost" (rev 1 pass/fail) is replaced, for the N6 only, by the usable-clip share.
+     - A clip is usable when it has ≥ 95 % of its expected frames (d52).
+     - An N6 setting holds when ≥ 2 of its 3 clips are usable ("most clips") and every other bar holds.
+     - Each N6 setting reports its usable share, and the lost-frame count per clip.
+     - Wed runs the highest N6 setting that holds.
+     - The AE3 keeps "0 frames lost"; d57 names the N6 only.
+  4. The 25 cold-boot ready gate (d52, rev 4 G-a + G-b) stays the reliability check. Video completeness stays separate
+     and is reported, as in d52.
+- **Carried onto the spec from QE 005's rev 6 nits (already binding on the B card):**
+  - R1: Nick's AE3 chroma call is decision d56, needed Mon 8 AM before the AE3 ladder. B0's fps for both formats and the
+    crop pair go in d56's `evidence` field Sun night. With no answer, rev 6's rule stands, and the Wed card says which
+    format ran.
+  - N9: the 960×600 probe clip doesn't count toward its n = 3.
+  - N10: a board-script change both boards share re-runs both 640×400 controls.
+  - N11: the Exit's option list for Nick names N6 H.264 for when openmv#3247 lands.
+- **Correction to rev 6's prediction rationale:** `lsusb -t` on nereus002 (pool2 session, Sat 3:27 PM) shows both boards as
+  cdc_acm at 480M (high-speed). "Virtual Comm Port in FS Mode" is only the N6's USB product string; rig RESULTS
+  10/14:344 is wrong on this. HD MJPEG at ~0.97 MB/s fits the link. The pre-registered prediction is now "HD holds 10 fps;
+  the risk is byte loss when the Pi's reader stalls", as corrected on the B card before any HD clip (rig #121 @ f54ecf6).
+  No bar moves.
+- **CMA flag (report-only, rev 4):** idle CmaFree is 42 MB on nereus002 (the page cache borrows CMA), so "< 50 MB" means
+  nothing on its own. The flag becomes "CmaFree more than 20 MB below that boot's idle reading". RESULTS shows the idle
+  baseline next to each reading.
+- d55 (start-skew bar) is still with Nick (Mon 8 AM). Its answer goes in the next rev.
