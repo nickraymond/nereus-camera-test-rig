@@ -1,6 +1,6 @@
 # Pool test 2 prep — part A: Friday's videos and the combined lessons list
 
-Spec: [SPEC.md](SPEC.md) rev 5 (must-dos 1–3; amendment rev 2 item 5). First written Sat 10/17 3:15 PM PT by the pool-2
+Spec: [SPEC.md](SPEC.md) rev 5 (must-dos 1–3; amendment rev 2 item 5). First written Sat 10/17 ~3:10 PM PT by the pool-2
 prep session; updated through Tue 10/20 (lens results, part B). Source: run pool049 on nereus002 (rig main@56d49b5),
 clips clip098–clip103, 2:57–3:03 PM PT Fri 10/16, raw files in
 `~/NereusPool/20261016/nereus002/pool049_20261016T212527Z/video/`. Images and full tables:
@@ -112,7 +112,7 @@ Moments: clip098 10 s (diver with the ChArUco board), clip099 25 s (card close),
 |---|---|---|
 | Resolutions | QVGA 320×200, VGA 640×400, HD 1280×800 (max) on both boards (our allowlists, verified 7/14–7/15). Per OpenMV's source, the N6 also accepts custom sizes up to HD (ISP-scaled from HD) and the AE3 only the three native ones; not tried on our boards | `openmv/*/board_config.py`; OpenMV `drivers/sensors/pag7936.c`, `boards/OPENMV_N6/board_config.h` |
 | N6 HD speed | HD q70 29.6 fps uncapped, 96.6 kB/frame, 2.86 MB/s; snapshot alone 8.5 ms, JPEG q60–q90 25–31 ms | 10/2 codec bench (rig PR #88, not on main) |
-| N6 H.264 | Not in v5.0.1 or the 10/16 Development Release; only draft PR openmv#3247 (`codec.H264Encoder`, N6 only, Annex-B) | GitHub API, checked Sat 3:08 PM |
+| N6 H.264 | Not in v5.0.1 or the 10/16 Development Release; only draft PR openmv#3247 (`codec.H264Encoder`, N6 only, Annex-B) | GitHub API, checked Sat ~3:05 PM |
 | AE3 JPEG | Software (`OMV_JPEG_CODEC_ENABLE 0`); ~2.3 fps at HD (S3 bench); 98 ms per 4 grey JPEG planes vs 26 ms on the N6 | `scripts/sync_video.py:31`; `compression_study/REPORT.md`; OpenMV `boards/OPENMV_AE3/board_config.h` |
 | AE3 at 10 fps | 10.0 fps (3000 frames, 0 lost) in a 5 min bench run in air (10/14); ~9.6 fps on the 10 s gate clips (10/15); 9.32–9.34 on Friday's underwater clips. So its rate depends on the scene (inferred: bigger, busier JPEGs take longer to encode and send). Friday's ~107 ms period is work, not sleep (no slack in the 100 ms loop) | `docs/rig_gate_20261014/RESULTS.md` (5 min run table, gate007 row); this table |
 | N6 USB speed | RESULTS.md calls the N6 a full-speed (12 Mbit/s) device; HD at 10 fps needs ~1 MB/s (~8 Mbit/s), near full speed's practical limit. The previous N6 moved 2.9–6.1 MB/s on 10/2, which needs high speed. Part B checks `lsusb -t` first | `docs/rig_gate_20261014/RESULTS.md` ("N6 USB limit"); 10/2 bench |
@@ -130,7 +130,7 @@ Moments: clip098 10 s (diver with the ChArUco board), clip099 25 s (card close),
 | L3 | No N6 H.264 off the shelf; a build from the draft PR would be custom firmware work | §3 | Nick (option only) | no |
 | L4 | N6 HD MJPEG is the realistic "best N6" for Wed | §3 | pool-2 prep session (part B) | yes |
 | L5 | N6 USB byte loss can cut a clip short; the pause bar (> 5 % of clips at a setting) is set before data | d53 | Nick → nereus002 rig session | yes, if d53 |
-| L6 | The start-skew bar (25 ms) sits next to the IMX708's 0–33 ms frame-phase term: Friday 8–24 ms, gate007 p90 38 ms. Part B records every camera's fire → first-frame delay so a skew miss can be traced | §1, §3 | pool-2 prep session; flagged to the PE Sat 3:20 PM | yes |
+| L6 | The start-skew bar (25 ms) sits next to the IMX708's 0–33 ms frame-phase term: Friday 8–24 ms, gate007 p90 38 ms. Part B records every camera's fire → first-frame delay so a skew miss can be traced | §1, §3 | pool-2 prep session; flagged to the PE Sat ~3:12 PM | yes |
 | L7 | Compare cameras on matched capture times, never on receive times or nominal-rate viewing copies | §2, summary 8 | pool-2 prep session; PjM 003 for copies | — |
 | L8 | Lens corrections are Mac-side and per camera, gated on B1–B6; the IMX708 corners are masked by the port vignette | prop_lens_calib_pool049 | lens calibration session | Tue noon |
 | L9 | Battery margin was thin (ended at 3.21 V on battery) | `power.csv` | PjM 003, Nick | yes |
@@ -144,7 +144,7 @@ Moments: clip098 10 s (diver with the ChArUco board), clip099 25 s (card close),
 ## 5. Notes and deviations
 
 - **Matching clock:** must-dos 2 and 12 were amended in rev 5 to capture time after this study found host_rx lags by
-  100–220 ms (PE 002 agreed, Sat 3:00 PM).
+  100–220 ms (PE 002 agreed; rev 5 QE PASS Sat 3:05 PM).
 - **Card tags:** Friday's card uses tag25h9 (the V3 layout), not tag36h11.
 - **Data not used:** the Mac MP4 copies (viewing only, nominal rates).
 - **Not measured here:** objective sharpness or noise metrics; part B and Wed's matched frames carry those.

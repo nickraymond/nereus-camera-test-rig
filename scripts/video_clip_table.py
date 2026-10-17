@@ -20,6 +20,8 @@ Definitions (all from the raw files):
     recorded there; a gap > 1.5 frame periods counts as a drop.
   - host: min mem_avail / CMA free and max CPU over the clip, from host_stats.csv; every distinct
     `throttled` value seen.
+  - first_frame_delay_ms: the camera's own fire -> first frame (traces a start-skew miss).
+  - boards with ``--timing``: medians of the per-frame snapshot / JPEG / previous-write ms.
 """
 
 from __future__ import annotations
@@ -72,22 +74,27 @@ def clip_rows(clip: Path) -> list[dict]:
                    start_offset_ms=(sync.get("start_offsets_ms") or {}).get(cam),
                    fps=rec.get("fps"), frames=rec.get("frames"),
                    max_gap_ms=rec.get("max_gap_ms"), bytes=rec.get("bytes"),
-                   resyncs=rec.get("resyncs", 0), error=rec.get("error") or rec.get("warning"))
+                   resyncs=rec.get("resyncs", 0), error=rec.get("error") or rec.get("warning"),
+                   first_frame_delay_ms=round((rec["first_frame_host_mono"]
+                                               - rec["fire_host_mono"]) * 1000, 1)
+                   if rec.get("first_frame_host_mono") and rec.get("fire_host_mono") else None)
         if cam == "imx708":
             times = _imx_times(clip)
             asked = float(args.get("imx_fps") or 30)
             fire, stop = rec.get("fire_host_mono"), rec.get("stop_host_mono")
-            win = [t for t in times if fire is not None and stop is not None and fire <= t <= stop]
-            nominal = round((stop - fire) * asked) if fire is not None and stop is not None else None
+            span = fire is not None and stop is not None
+            win = [t for t in times if span and fire <= t <= stop]
+            nominal = round((stop - fire) * asked) if span else None
             period = 1.0 / asked
             drops = sum(round((b - a) / period) - 1 for a, b in zip(win, win[1:])
                         if (b - a) > 1.5 * period)
-            file_s = (len(times) / (len(times) - 1) * (times[-1] - times[0])) if len(times) > 1 else None
+            file_s = (len(times) / (len(times) - 1) * (times[-1] - times[0])
+                      if len(times) > 1 else None)
+            gaps = [(b - a) * 1000 for a, b in zip(win, win[1:])]
             row.update(codec="H.264 (hw)", resolution=args.get("imx_size"), fps_asked=asked,
                        frames_lost=drops, frames_nominal=nominal,
                        mb_per_30s=round(rec["bytes"] / file_s * 30 / 1e6, 2) if file_s else None,
-                       period_med_ms=round(statistics.median(
-                           [(b - a) * 1000 for a, b in zip(win, win[1:])]), 1) if len(win) > 1 else None)
+                       period_med_ms=round(statistics.median(gaps), 1) if gaps else None)
         else:
             frames_csv = clip / f"{cam}_frames.csv"
             fr = list(csv.DictReader(frames_csv.open())) if frames_csv.exists() else []
@@ -95,21 +102,31 @@ def clip_rows(clip: Path) -> list[dict]:
             per = [b - a for a, b in zip(ticks, ticks[1:])]
             fps = rec.get("fps")
             dur = (rec["frames"] / fps) if fps and rec.get("frames") else None
+            settings = rec.get("settings") or {}
+
+            def med(key):
+                v = [float(r[key]) for r in fr if r.get(key) not in (None, "")]
+                return round(statistics.median(v), 1) if v else None
             row.update(codec="MJPEG (board)", resolution=rec.get("dims"),
-                       quality=args.get("board_quality"), fps_asked=args.get("board_fps"),
+                       quality=settings.get("jpeg_quality", args.get("board_quality")),
+                       fps_asked=settings.get("fps", args.get("board_fps")),
                        frames_lost=rec.get("frames_lost"), frames_nominal=None,
                        mb_per_30s=round(rec["bytes"] / dur * 30 / 1e6, 2) if dur else None,
                        period_med_ms=statistics.median(per) if per else None,
                        period_max_ms=max(per) if per else None,
                        frame_kb_mean=round(statistics.mean(int(r["bytes"]) for r in fr) / 1e3, 1)
                        if fr else None,
-                       reset_s=rec.get("reset_s"))
+                       reset_s=rec.get("reset_s"),
+                       subsampling=settings.get("subsampling", "auto"),
+                       snap_ms_med=med("snap_ms"), jpeg_ms_med=med("jpeg_ms"),
+                       write_ms_med=med("prev_write_ms"))
         rows.append(row)
     return rows
 
 
 COLS = ["clip", "camera", "codec", "resolution", "fps_asked", "fps", "frames", "frames_lost",
-        "max_gap_ms", "period_med_ms", "mb_per_30s", "start_offset_ms", "start_skew_ms",
+        "max_gap_ms", "period_med_ms", "mb_per_30s", "start_offset_ms", "first_frame_delay_ms",
+        "start_skew_ms", "subsampling", "snap_ms_med", "jpeg_ms_med", "write_ms_med",
         "resyncs", "host_min_mem_avail_mb", "host_min_cma_free_mb", "host_max_cpu_c",
         "host_throttled", "ok", "error"]
 
@@ -131,7 +148,8 @@ def main() -> int:
     for r in rows:
         print("| " + " | ".join("" if r.get(c) is None else str(r.get(c)) for c in COLS) + " |")
     if a.csv:
-        keys = sorted({k for r in rows for k in r}, key=lambda k: (k not in COLS, COLS.index(k) if k in COLS else 0, k))
+        keys = sorted({k for r in rows for k in r},
+                      key=lambda k: (k not in COLS, COLS.index(k) if k in COLS else 0, k))
         with a.csv.open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()

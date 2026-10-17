@@ -2,8 +2,8 @@
 """matched_frames.py — the same moment from IMX708, N6 and AE3 in one synced clip.
 
 Purpose: pool test 2 prep (docs/pool2_20261021/SPEC.md, must-do 2 and 12): N6 vs AE3 vs IMX708
-  stills matched in time (all three within a 50 ms span), to compare field of view, sharpness, colour, noise
-  and motion blur. Reads only the raw files scripts/sync_video.py wrote.
+  stills matched in time (all three within a 50 ms span), to compare field of view, sharpness,
+  colour, noise and motion blur. Reads only the raw files scripts/sync_video.py wrote.
 
 Matching clock: each frame's CAPTURE time on the Pi's monotonic clock — the IMX708's
   SensorTimestamp (imx708.meta.json, CLOCK_MONOTONIC) and, for a board, its snapshot ticks tied
