@@ -14,14 +14,17 @@ _SPEC.loader.exec_module(pb)
 
 
 def _rows(skew=17.1, imx=None, n6=None, ae3=None, throttled="0x0"):
+    # Friday clip102: IMX708 first frame 0.8 ms after the fire, N6 9.0, AE3 16.0
     base = {"start_skew_ms": skew, "host_throttled": throttled}
     return [
-        {**base, "camera": "imx708", "fps": 26.4, "max_gap_ms": 66.7,
+        {**base, "camera": "imx708", "fps": 26.4, "max_gap_ms": 66.7, "start_offset_ms": 0.0,
          "first_frame_delay_ms": 0.8, **(imx or {})},
         {**base, "camera": "openmv_n6", "fps": 10.0, "frames": 300, "fps_asked": 10,
-         "frames_lost": 0, "error": None, "first_frame_delay_ms": 9.0, **(n6 or {})},
+         "frames_lost": 0, "error": None, "start_offset_ms": 8.2, "first_frame_delay_ms": 9.0,
+         **(n6 or {})},
         {**base, "camera": "openmv_ae3", "fps": 9.33, "frames": 280, "fps_asked": 10,
-         "frames_lost": 0, "error": None, "first_frame_delay_ms": 16.0, **(ae3 or {})},
+         "frames_lost": 0, "error": None, "start_offset_ms": 17.1, "first_frame_delay_ms": 16.0,
+         **(ae3 or {})},
     ]
 
 
@@ -63,10 +66,10 @@ def test_n6_frame_loss_is_judged_by_usable_share_rev7():
     slow = pb.clip_misses(_rows(n6={"fps": 9.3, "frames": 290}), "openmv_n6")
     assert slow["misses"] == ["openmv_n6_fps"]  # a usable clip still needs >= 9.5 fps
     # QE R3: a 20 %-loss clip at ~8 fps (and a late start) counts only in the usable share
-    lossy = pb.clip_misses(_rows(skew=31.0, n6={"frames": 240, "fps": 8.0, "frames_lost": 60}),
-                           "openmv_n6")
+    lossy = pb.clip_misses(_rows(n6={"frames": 240, "fps": 8.0, "frames_lost": 60,
+                                     "start_offset_ms": 50.0}), "openmv_n6")
     assert lossy["misses"] == [] and not lossy["n6_usable"]
-    assert lossy["ignored"] == ["openmv_n6_fps", "start_skew"]
+    assert lossy["ignored"] == ["openmv_n6_fps", "board_skew"]
     # expected frames = asked fps x seconds: 284 of 300 is under 95 %
     assert not pb.clip_misses(_rows(n6={"frames": 284}), "openmv_n6")["n6_usable"]
     assert pb.clip_misses(_rows(n6={"frames": 285}), "openmv_n6")["n6_usable"]
@@ -78,20 +81,25 @@ def test_setting_holds_on_two_of_three_usable_n6_clips():
     assert pb.setting_holds([good, short, good], "openmv_n6")
     assert not pb.setting_holds([good, short, short], "openmv_n6")
     assert pb.n6_hopeless([good, short, short]) and not pb.n6_hopeless([short, good])
-    assert not pb.setting_holds([good, {**good, "misses": ["start_skew"]}, good], "openmv_n6")
+    assert not pb.setting_holds([good, {**good, "misses": ["board_skew"]}, good], "openmv_n6")
     assert not pb.setting_holds([good, good], "openmv_n6")              # too few clips
     assert pb.setting_holds([{"void": True, "misses": ["x"]}, good, good, good], "openmv_ae3")
 
 
-def test_imx_bars_and_skew_only_marking():
+def test_imx_bars_and_d55_sync_bars():
     assert pb.clip_misses(_rows(imx={"fps": 25.9}), "openmv_n6")["misses"] == ["imx708_fps"]
     assert pb.clip_misses(_rows(imx={"max_gap_ms": 133.3}), "openmv_n6")["misses"] == [
         "imx708_max_gap"]
-    late = pb.clip_misses(_rows(skew=28.0, imx={"first_frame_delay_ms": 33.3}), "openmv_n6")
-    assert late["misses"] == ["start_skew"] and late["skew_only"]
-    boards = pb.clip_misses(_rows(skew=28.0, imx={"first_frame_delay_ms": 12.0},
-                                  ae3={"first_frame_delay_ms": 37.0}), "openmv_n6")
-    assert boards["misses"] == ["start_skew"] and not boards["skew_only"]
+    # d55 (Nick 10/17): a late IMX708 (33.3 ms, Friday clip098) no longer fails the clip
+    late = pb.clip_misses(_rows(skew=24.3, imx={"first_frame_delay_ms": 33.3,
+                                                "start_offset_ms": 24.3},
+                                n6={"start_offset_ms": 0.0}, ae3={"start_offset_ms": 10.0}),
+                          "openmv_n6")
+    assert late["misses"] == [] and late["board_skew_ms"] == 10.0
+    assert pb.clip_misses(_rows(imx={"first_frame_delay_ms": 34.5}), "openmv_n6")["misses"] == [
+        "imx708_start"]
+    boards = pb.clip_misses(_rows(ae3={"start_offset_ms": 33.5}), "openmv_n6")
+    assert boards["misses"] == ["board_skew"] and boards["board_skew_ms"] == 25.3
 
 
 def test_throttled_clip_is_void():

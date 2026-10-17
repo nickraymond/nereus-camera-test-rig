@@ -6,7 +6,7 @@ Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before
 |---|---|
 | **Spec** | [SPEC.md](SPEC.md) rev 8 (sha256 `e5203f3fa492…`, in QE 005's re-gate; rev 7 `4c289cc95525…` PASS-with-nits Sat 3:31 PM with R2, R3) |
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6) |
-| **Decisions** | d52 (decided), d57 (decided Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53), d55 start-skew bar (open, Mon 8 AM), d56 AE3 chroma (open, Mon 8 AM) |
+| **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
 | **Ownership** | Held by the pool-2 prep session under the nereus002 rig session's written hand-over (Sat ~3:12 PM PT, slot ends Sun 10/18 12:00 PM). Later slots (Mon–Tue) only by PjM 003's sequencing and a new written hand-over |
 | **Session** | pool-2 prep, rig PR #121, branch `study/pool2-prep` |
@@ -105,9 +105,15 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      - a matched-frame crop pair of the AE3 in 4:4:4 vs 4:2:0, the same card region at 3× (`scripts/matched_frames.py`
        on one clip of each);
      - the format the rev 6 rule picks.
-   - **R1 / d56:** the B0 result goes into d56's `evidence` field only (pinned update, `if_version`), so it reaches
-     Nick's Mon 7 AM batch. If he hasn't answered by Mon 8 AM, rev 6's rule stands, and the Wed card says which format
-     ran.
+   - **R1 / d56:** the B0 result goes into d56's `evidence` field only (pinned update, `if_version`). Nick approved
+     the rule on Sat 3:32 PM: "AE3 can run with reduced color like the N6". The Wed card names the format that ran.
+   - **d56's added test** (Nick: "record same scenery with full and half color for the AE3 so I can see for myself
+     the impact … if this can be done in air thats also ok"):
+     - B0's two arms already record the same fixed bench scene in 4:4:4 and 4:2:0, back to back. The scene is static
+       and the light constant; each clip's IMX708 Lux is checked to confirm it.
+     - From them: a before/after slider page, same frame region, full frame and 1:1 crops, plus the 3× card-area crop
+       pair. The page link goes in d56's `evidence`.
+     - Underwater on Wed only if Nick asks (part C).
    - **E1, exploratory, not scored:** one N6 HD clip, to see the link limit early for the Mon plan. Labelled `explore`
      and never counted toward any n.
 3. **Controls at the chosen AE3 format** (Mon AM, after d56 or the rule):
@@ -159,7 +165,7 @@ the clip, the §5 bars, fail fast and the throttled-void rule. It writes `result
 | fps (the board under test) | delivered ≥ 9.5 fps over 30 s. AE3, if B0 fails: ≥ its own control 640×400 rate − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
 | frames | AE3: 0 lost; an errored stream or a missing board frame count counts as lost. N6: the usable share above (rev 7, d57) | spec; rev 7–8 |
 | wedges | 0 wedges and 0 ladder USB resets on either board during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2; rev 8 |
-| start skew | ≤ 25 ms per clip (video_sync.json). Each camera's fire → first frame is recorded; a setting that fails only on IMX708-involved skew is marked **skew-only** for d55 | spec; PE 002 |
+| sync (d55) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`), and the IMX708's first frame ≤ 34 ms after the trigger (one frame period). `start_skew_ms` over all three is still recorded. Applies once the spec rev carrying d55 passes QE (before any data); until then the spec's 25 ms over all three applies | spec; d55 |
 | IMX708 | ≥ 26.0 fps and max gap ≤ 100 ms | spec (F8) |
 | host | `throttled` = 0x0 over the clip (host_stats.csv); a throttled clip is void (§4) | spec |
 
