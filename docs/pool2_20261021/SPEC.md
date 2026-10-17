@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 8, tier (a); rev 2–8 amendments at the end)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 9, tier (a); rev 2–9 amendments at the end)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -270,3 +270,34 @@ timeline e_pool1021, card prop_pool2_prep. Author: Principal Engineer, Fri 10/16
   - Any clip with a wedge or a ladder USB reset (F2) still fails the setting.
   - A throttled clip is still void (cool down, re-run).
 - The rev 7 block says d55 goes in rev 8. It now goes in **rev 9**.
+
+## Amendment rev 9 (PE 002, Sat 10/17 3:34 PM; Nick's d55 + d56, and the lens result). Overrides earlier revs where they conflict.
+- **d55 (Nick, Sat 10/17 3:32 PM PT, board thread 10b6d36a, verbatim: "aproved"; answers d55 (a) + (b) as written):**
+  - (a) The "start skew ≤ 25 ms per clip" bar now applies to **N6 ↔ AE3 only**: |N6 first frame − AE3 first frame| from
+    video_sync.json (the same capture clock as rev 5).
+  - (b) **IMX708 start check:** its first frame ≤ 34 ms (one frame period) after its fire, i.e. first_frame_host_mono −
+    fire_host_mono ≤ 34 ms, per clip. It's its own verdict line, reported per setting, and does **not** decide whether an
+    N6 or AE3 setting holds. That decoupling is d55's point. Host starvation by bigger board frames (F8) stays covered by
+    the IMX708 fps ≥ 26.0 and max_gap ≤ 100 ms bars.
+- **d56 (Nick, Sat 10/17 3:32 PM PT, board thread e0fb1d33, verbatim):** "yes, good call. AE3 can run with reduced color like
+  the N6. Hopefully this enables higher rez at 10 fps for AE3. Please also add a test then when underwater to record same
+  scenery with full and half color for the AE3 so I can see for myself the impact, or if this can be done in air thats also
+  ok".
+  - Rev 6's B0 format rule stands as approved.
+  - Added, from his "can run with reduced color … hopefully this enables higher rez": if the AE3 ladder runs in 4:4:4 and
+    its first rung above 640×400 fails, that rung re-runs in 4:2:0 (n = 3). If it holds, the AE3 ladder continues in
+    4:2:0. No bar moves; it adds at most one rung.
+  - **His side-by-side test (in air, on the bench):** B0's same-scene 4:4:4 and 4:2:0 clips go to him as a viewing pair:
+    two QuickTime-playable copies, plus 100 % crops of matched frames. They're under
+    `~/NereusData/nereus-camera-test-rig/<date>_ae3_chroma/`, with a MANIFEST and the path in d56's `evidence`. The
+    viewing copies are labelled "re-encoded for viewing" and the originals stay untouched. The re-encode runs only under
+    PjM 003's compute all-clear.
+  - Optional on Wed: one underwater 30 s pair of the same scene, if the Wed card has room (part C decides; Nick approves
+    the card).
+- **Lens calibration result (c_charuco, Sat 3:33 PM; provisional until QE passes bm #184's tool code):** IMX708, N6 and AE3
+  all fail B3 and B5c. The board never reached the bottom ~40 % of any frame. So per rev 3, Wed records uncorrected video
+  on all three cameras, labelled so, and corrections are applied afterwards only to cameras that later pass.
+- **Conditional, decision d58:** if Nick approves the lens session's lower-half calibration block (~15 min of pool time,
+  ~20 poses, all three cameras at once; the rig raised ~40 cm, tilted up ~25° or rolled 180° for that block only, then
+  restored), part C's Wed card includes it per the recipe on c_charuco. This extends must do 14 to the IMX708. The rig
+  change for that block is announced (§10) and written into the envelope's rig section (must do 15).
