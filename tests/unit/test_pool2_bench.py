@@ -153,8 +153,11 @@ def test_r1_the_cards_command_lines_parse(argv, under, sync_args):
 
 
 def test_r1_options_after_dashdash_belong_to_sync_video_and_usage_is_exit_2():
-    a = pb.parse_args("x --under openmv_n6 -- --under openmv_ae3".split())
-    assert a.under == "openmv_n6" and a.sync_args == ["--under", "openmv_ae3"]
+    a = pb.parse_args("x --under openmv_n6 -- --n6-quality 80 --cameras openmv_n6".split())
+    assert a.under == "openmv_n6" and a.sync_args == ["--n6-quality", "80", "--cameras",
+                                                      "openmv_n6"]
+    with pytest.raises(SystemExit):   # not a sync_video option: refused before any clip
+        pb.parse_args("x --under openmv_n6 -- --under openmv_ae3".split())
     assert pb.parse_args("p --under openmv_n6 --probe 960x600".split()).n == 1
     with pytest.raises(SystemExit) as e:
         pb.parse_args("x -- --under openmv_n6".split())   # --under only after --: usage error
@@ -396,3 +399,11 @@ def test_probe_decodes_every_frame_with_pillow(tmp_path):
         "decode:1 of 3")
     assert pb.probe_result([row], "openmv_n6", "64x40",
                            decode={"frames": 3, "failed": 0})["probe_ok"]
+
+
+def test_sync_args_are_checked_before_any_clip():
+    with pytest.raises(SystemExit) as e:
+        pb.parse_args("n6_hd --under openmv_n6 -- --n6-framesize hd".split())
+    assert e.value.code == pb.EXIT_USAGE
+    with pytest.raises(SystemExit):
+        pb.parse_args("x --under openmv_ae3 -- --ae3-framesize 960x600".split())

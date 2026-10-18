@@ -410,8 +410,46 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
     return s
 
 
-def main() -> int:
+CALLER_OWNED = ("--seconds", "--out")  # a caller passing extra args (pool_capture) sets these
+
+
+def check_extra_args(extra: list[str]) -> None:
+    """Raise ValueError unless ``extra`` parses as this script's options: a dive program's
+    per-phase args (pool_capture --program "video:6x30[...]") are checked before any recording.
+    --seconds / --out belong to the caller."""
+    import contextlib
+    import io
+
+    for tok in extra:
+        if tok.split("=", 1)[0] in CALLER_OWNED:
+            raise ValueError(f"{tok} is set by the caller, not the phase")
+    err = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(err):
+            build_parser().parse_args(list(extra))
+    except SystemExit:
+        lines = err.getvalue().strip().splitlines()
+        raise ValueError(lines[-1] if lines else f"bad sync_video args {extra}") from None
+
+
+SUBSAMPLINGS = ("auto", "420", "422", "444")  # openmv/common/capture_service.py _SUBSAMPLING
+
+
+def board_framesizes(board: str) -> list[str]:
+    """The framesize names a board's own script accepts (openmv/<board>/board_config.py), so a
+    typo or a size that board can't make (the AE3 has no 960x600) fails here, not on the board."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(f"{board}_board_config",
+                                                  ROOT / "openmv" / board / "board_config.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return list(mod.FRAMESIZES)
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sizes = {b: board_framesizes(b) for b in ("n6", "ae3")}
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--out", default="")
     ap.add_argument("--cameras", default="imx708,openmv_n6,openmv_ae3")
@@ -421,24 +459,30 @@ def main() -> int:
     ap.add_argument("--imx-buffers", type=int, default=4,
                     help="rpicam-vid --buffer-count (CMA headroom; 0 = rpicam default)")
     ap.add_argument("--board-framesize", default="VGA",
-                    help="QVGA | VGA | HD (both boards); the N6 also takes 960x600 (ISP-scaled "
+                    choices=[f for f in sizes["n6"] if f in sizes["ae3"]],
+                    help="both boards; the N6 also takes 960x600 via --n6-framesize (ISP-scaled "
                          "from HD, openmv/n6/board_config.py)")
     ap.add_argument("--board-quality", type=int, default=70)
     ap.add_argument("--board-fps", type=float, default=10,
                     help="board frame cap, both boards (0 = as fast as each can). 10: the AE3's "
                          "VGA ceiling, and the N6 (a 480M link; it drops bytes when the Pi's "
                          "reader stalls) dropped bytes at 30-63 fps over minutes (soak 2026-10-14)")
-    ap.add_argument("--board-subsampling", default="auto",
+    ap.add_argument("--board-subsampling", default="auto", choices=SUBSAMPLINGS,
                     help="JPEG chroma subsampling: auto (firmware choice: AE3 4:4:4 at q>=60, "
                          "N6 hardware 4:2:0) | 420 | 422 | 444")
     for key in ("n6", "ae3"):
-        ap.add_argument(f"--{key}-framesize", default=None, help=f"{key} only; default --board-*")
+        ap.add_argument(f"--{key}-framesize", default=None, choices=sizes[key],
+                        help=f"{key} only; default --board-*")
         ap.add_argument(f"--{key}-quality", type=int, default=None)
         ap.add_argument(f"--{key}-fps", type=float, default=None)
-        ap.add_argument(f"--{key}-subsampling", default=None)
+        ap.add_argument(f"--{key}-subsampling", default=None, choices=SUBSAMPLINGS)
     ap.add_argument("--timing", action="store_true",
                     help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
-    a = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    a = build_parser().parse_args()
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(a.out) if a.out else ROOT / "results" / "video" / ts
     out.mkdir(parents=True, exist_ok=True)

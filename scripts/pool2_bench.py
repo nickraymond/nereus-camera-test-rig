@@ -109,6 +109,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     owned = [t for t in a.sync_args if t.split("=", 1)[0] in OWNED]
     if owned:
         ap.error(f"{owned} after -- : this script sets --seconds / --out / --cameras itself")
+    try:  # a typo would otherwise cost a clip, and under R4 fail the label for good
+        _load("sync_video").check_extra_args(a.sync_args)
+    except ValueError as exc:
+        ap.error(f"sync_video args after --: {exc}")
     if a.probe:
         a.n, a.no_fail_fast = 1, True
     return a
