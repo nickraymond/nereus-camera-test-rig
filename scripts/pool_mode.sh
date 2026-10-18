@@ -62,7 +62,10 @@ newest_run() { ls -1d "$POOL"/pool[0-9]* 2>/dev/null | sort | tail -1; }
 cmd_arm() {
   local args=("$@")
   [ -x "$PY" ] || die "python not found: $PY (set POOL_PYTHON)"
-  "$PY" "$ROOT/scripts/pool_capture.py" run --help >/dev/null || die "pool_capture.py does not load"
+  # Check the run's own arguments now (a bad --program would otherwise surface at the next boot,
+  # in the pool); --check-only touches no hardware.
+  "$PY" "$ROOT/scripts/pool_capture.py" run --check-only ${args[@]+"${args[@]}"} \
+    || die "pool_capture.py refused these arguments (see above)"
   local bk="$HOME/pool_backup/$(ts)"; mkdir -p "$bk"
   if crontab -l >"$bk/crontab_before.txt" 2>/dev/null; then :; else : >"$bk/crontab_before.txt"; fi
   # Flag pre-arm state, recorded so disarm restores exactly it (QE #97): "absent" -> pool mode
