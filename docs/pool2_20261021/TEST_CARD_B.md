@@ -11,7 +11,7 @@ at the FAIL sha, so **rig main 9ff4ab5 is never deployed as is**: the bench buil
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6); QE 005 FAIL @ a938f76: R1, R2, R4–R8 + nits (rev 2 of this card) |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
-| **Ownership** | The rig session ("nereus002: fix AE3 wedge, 25× start/stop gate, Friday dive") owns nereus002. This session works on it only under a new written hand-over to it, sequenced by PjM 004 and recorded on c_pool1016_video_review, after QE 006 PASSes the fix PR. The 10/17 slot (to Sun 12:00 PM) was declined on Sun 9:24 AM: nothing was touched |
+| **Ownership** | The rig session ("nereus002: fix AE3 wedge, 25× start/stop gate, Friday dive") owns nereus002. This session works on it only under a new written hand-over to it, sequenced by PjM 004 and recorded on c_pool1016_video_review, after QE 006 PASSes the fix PR. The 10/17 slot (to Sun 12:00 PM) was declined by message on Sun morning, before 9:28 AM: nothing was touched |
 | **Session** | "Pool test 2 prep (Wed 10/21) successor" (from Sun 10/18 9:09 AM; the first pool-2 prep session stopped at 9:03 AM, handoff HANDOFF_1.md). Fix PR on branch `study/pool2-prep-qe-fixes`; QE = QE 006 |
 
 ## 1. Question (Nick's words)
