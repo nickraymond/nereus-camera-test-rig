@@ -46,17 +46,17 @@ def load() -> list[dict]:
 
 
 def knee(worst: dict[int, float | None]) -> str:
+    """Spec rev 3: the knee is a ladder size (ceiling = 1 MB); with three sizes it is only bracketed."""
     if any(worst.get(s) is None for s in SIZES):
         return "n/a (missing sizes)"
     top = worst[1000]
+    names = {100: "100 KB", 500: "500 KB", 1000: "1 MB"}
     for i, s in enumerate(SIZES):
         if all(worst[t] >= top - 3.0 for t in SIZES[i:]):
             if i == 0:
-                return "≤ 100 KB"
-            if i == len(SIZES) - 1:  # only the ceiling itself qualifies: no flattening seen up to 1 MB
-                return "500 KB–1 MB or above (bracket; still rising at 1 MB)"
-            return f"{SIZES[i - 1]}–{s} KB (bracket)"
-    return "500 KB–1 MB or above (bracket; still rising at 1 MB)"
+                return "100 KB (≤ 100 KB)"
+            return f"{names[s]} (bracket {names[SIZES[i - 1]]}–{names[s]})"
+    return "1 MB (bracket 500 KB–1 MB)"
 
 
 def manifest() -> None:
@@ -82,6 +82,16 @@ def manifest() -> None:
     for c in POOL:
         p = ref_path(c, 10)
         lines.append(f"- {p}: sha256 {sha256(p)}")
+    lines += ["", "## Also here", "",
+              "- checks/ae3_mjpeg_q_sweep_rc_c3.json: AE3 MJPEG size/VMAF vs quality on the primary window "
+              "(PjM sanity check, Sat 3:33 PM)",
+              "- peek/: contact strips and a 1:1 crop montage used for the visual check",
+              "- sheet/: the first-look page as published (https://claude.ai/artifact/BDDpQpuvqjEgqZcUQJxqGi), "
+              "spec.json, clips/",
+              "- e7_720p_video_screen_offline/ (+ .zip): offline copy of the page for Nick; opens from disk in Chrome",
+              "- superseded/: the first scoring pass before the colour-tag fix (results_pre_colorfix.jsonl), not used",
+              "- Scores were produced by the scoring code as of e36447a (unchanged since; QE 006 reproduced two cells "
+              "at a2931c5); the head above regenerated the tables and this file."]
     (RUN / "MANIFEST.md").write_text("\n".join(lines) + "\n")
 
 

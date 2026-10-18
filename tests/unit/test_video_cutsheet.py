@@ -21,11 +21,11 @@ def test_openmv_subsampling_rule():
 
 
 def test_knee_bracket():
-    assert analyze.knee({100: 80.0, 500: 81.0, 1000: 82.0}) == "≤ 100 KB"
-    assert analyze.knee({100: 40.0, 500: 80.0, 1000: 82.0}) == "100–500 KB (bracket)"
-    assert analyze.knee({100: 10.0, 500: 50.0, 1000: 70.0}).startswith("500 KB–1 MB")
+    assert analyze.knee({100: 80.0, 500: 81.0, 1000: 82.0}) == "100 KB (≤ 100 KB)"
+    assert analyze.knee({100: 40.0, 500: 80.0, 1000: 82.0}) == "500 KB (bracket 100 KB–500 KB)"
+    assert analyze.knee({100: 10.0, 500: 50.0, 1000: 70.0}) == "1 MB (bracket 500 KB–1 MB)"
     # monotone envelope: a dip at 500 KB keeps the knee above it
-    assert analyze.knee({100: 81.0, 500: 70.0, 1000: 82.0}).startswith("500 KB–1 MB")
+    assert analyze.knee({100: 81.0, 500: 70.0, 1000: 82.0}) == "1 MB (bracket 500 KB–1 MB)"
     assert analyze.knee({100: None, 500: 70.0, 1000: 82.0}).startswith("n/a")
 
 
