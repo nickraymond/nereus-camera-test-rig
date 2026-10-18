@@ -3,12 +3,13 @@
 Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before the first clip and again before the gate.
 **Rev 2 (Sun 10/18, the successor session):** QE 005's FAIL on rig #121 @ a938f76 (R1, R2, R4–R8 + nits) is fixed on
 the fix PR (branch `study/pool2-prep-qe-fixes` off main 9ff4ab5), and this card now describes that code. #121 merged
-at the FAIL sha, so **rig main 9ff4ab5 is never deployed as is**: the bench build is the fix PR's QE PASS sha.
+at the FAIL sha, so **rig main 9ff4ab5 is never deployed as is**: the bench build is the fix PR's QE PASS sha. QE 006's
+FAIL on the fix PR @ 9ec4bfe (R1, R2 + nits) is fixed on the same PR.
 
 | | |
 |---|---|
 | **Spec** | [SPEC.md](SPEC.md) rev 9 (sha256 `aacf8d28116a…`, QE 005 PASS Sat 3:37 PM: d55, d56, lens) |
-| **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6); QE 005 FAIL @ a938f76: R1, R2, R4–R8 + nits (rev 2 of this card) |
+| **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6); QE 005 FAIL @ a938f76: R1, R2, R4–R8 + nits (rev 2 of this card); QE 006 FAIL @ 9ec4bfe: R1, R2 + nits |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
 | **Ownership** | The rig session ("nereus002: fix AE3 wedge, 25× start/stop gate, Friday dive") owns nereus002. This session works on it only under a new written hand-over to it, sequenced by PjM 004 and recorded on c_pool1016_video_review, after QE 006 PASSes the fix PR. The 10/17 slot (to Sun 12:00 PM) was declined by message on Sun morning, before 9:28 AM: nothing was touched |
@@ -129,11 +130,12 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
        - B0's pair as QuickTime-playable viewing copies, plus 100 % crops of the same region (`chroma_pair.py … --zoom
          1`);
        - under `~/NereusData/nereus-camera-test-rig/<date>_ae3_chroma/` with a MANIFEST;
+       - the viewing copies are labelled "re-encoded for viewing", and the original clips stay untouched (rev 9);
        - its path goes in d56's `evidence`;
        - the re-encode runs only under the PjM's heavy-compute all-clear (PjM 004 from Sun 10/18).
      - A slider page of the crops is optional. An underwater pair is optional on the Wed card (part C).
-   - **E1, exploratory, not scored:** one N6 HD clip, to see the link limit early for the Mon plan. Labelled `explore`
-     and never counted toward any n: `pool2_bench.py explore_n6_hd --under openmv_n6 --probe 1280x800 --
+   - **E1, exploratory, not scored:** one N6 HD clip, to see the link limit early for the Mon plan. Label
+     `explore_n6_hd`, never counted toward any n: `pool2_bench.py explore_n6_hd --under openmv_n6 --probe 1280x800 --
      --n6-framesize HD --timing`. A probe prints PROBE PASS/FAIL, never HOLDS.
    - **Resync on real streams (QE 005 nit):** the resync fix is untested at HD and at 4:2:0 on real streams. On the first
      healthy 4:2:0 clip (`ae3_420`) and the first healthy HD clip (E1 or `n6_hd`): `short_frames` = 0, `bad_frames` = 0,
@@ -154,8 +156,10 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
    - `n6_hd`: N6 1280×800 q70, n = 3.
    - **Only if `n6_hd` fails:**
      - `n6_960_probe`: one clip at 960×600 q70 (`--under openmv_n6 --probe 960x600 -- --n6-framesize 960x600`, plus
-       the AE3 format chosen in B0). PROBE PASS = every N6 frame is a whole JPEG whose SOF says 960×600, and its last
-       frame is ≥ 29.5 s after the fire. **N9:** the probe isn't one of the n = 3, and never prints HOLDS.
+       the AE3 format chosen in B0). Spec rev 6's "frames decode at 960×600 and the stream runs 30 s" is read as:
+       **decode** = every N6 frame fully decoded by Pillow at 960×600 (plus SOF size and 0 bad frames); **runs 30 s**
+       = its last frame ≥ 29.5 s after the fire. **N9:** the probe isn't one of the n = 3, and never prints HOLDS. A
+       probe whose clips were all void resumes under its label.
      - If the probe passes: `n6_960`, n = 3. If it fails, the N6's answer is 640×400 and the limit is stated.
    - **AE3:**
      - `ae3_hd`: AE3 1280×800 q70 in the B0 format, run as fail-fast clip 1. The software JPEG did ~2.3 fps at HD on the
@@ -172,14 +176,18 @@ throttled clip is void: cool down ≥ 5 min and re-run it; 2 throttled in a row 
 **One command per setting:** `python scripts/pool2_bench.py <label> --under <openmv_n6|openmv_ae3> [--ae3-floor X] --
 <sync_video args>`. Its own options come before `--`; everything after goes to `sync_video.py` unchanged (QE 005 R1).
 - It runs every per-clip pre-check (§4 step 0 and §8): the flag is present; no gate (`~/.gate_armed.json`) or pool mode
-  (`~/.pool_armed`) is armed; the process check ran (`ps` gave output) and found no recorder; SD ≥ 2 GB; VBAT.
+  (`~/.pool_armed`) is armed; the process check ran (`ps` gave output) and found no recorder; SD ≥ 2 GB; VBAT;
+  `vcgencmd get_throttled` = 0x0 now (sticky bits from earlier in the boot would void every clip until a reboot, so
+  the bench refuses and the Pi is cold-booted through the UPS first, flag present).
 - Then the clip, the §5 bars, fail fast and the throttled-void rule. It writes `results/pool2_bench/<label>/clipNN/`
   and `setting.json`, rewritten after every clip.
-- **The verdict is over every clip in the label's folder (QE 005 R4).** A label whose clips already decide it (a miss,
-  or n passing clips) gets no new clip. A clip folder with no record (a crash mid-clip) is scored from its files, and a
-  missing `video_sync.json` is a miss. A label interrupted by a pre-check resumes on the next run. The same label with
-  other arguments is refused. A new label for the same setting is only for a new build (`ctl_2`, …) and is reported
-  next to the old one.
+- **The verdict is over every clip the label ever had (QE 005 R4, QE 006 R1).** A label whose clips already decide it (a
+  miss, or n passing clips) gets no new clip. A clip that `setting.json` lists stays in the verdict even if its folder
+  is deleted (`folder_missing`), and its number is never reused. A clip folder with no record (a crash mid-clip) is
+  scored from its files, and a missing `video_sync.json` is a miss. A label interrupted by a pre-check resumes on the
+  next run. The same label with other arguments is refused, and so is a label started on another build (the Pi's
+  REVISION): a new build gets new labels (`ctl_2`, …), reported next to the old ones.
+- `--seconds`, `--out` and `--cameras` after `--` are refused: the bench sets them (QE 006 nit).
 - Exit: 0 holds (probe: PROBE PASS), 1 fails (probe: PROBE FAIL), 2 usage error, 3 a pre-check refused or the label
   can't be resumed, 4 stopped after 2 throttled clips in a row (§8 rule 3: the bench stops).
 - Probes use `--probe WxH` (one clip, PROBE PASS/FAIL). Examples, verbatim (each has a unit test):
@@ -200,10 +208,11 @@ throttled clip is void: cool down ≥ 5 min and re-run it; 2 throttled in a row 
 |---|---|---|
 | fps (the board under test) | delivered ≥ 9.5 fps over 30 s = `fps_clip`: frames captured in [fire, fire + 30 s] ÷ 30 (QE 005 R2), so a stream that stops early fails. `fps` (first → last frame) is reported only. AE3, if B0 fails: ≥ its own control 640×400 `fps_clip` − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
 | frames | AE3: 0 lost; an errored stream or a missing board frame count counts as lost. N6: the usable share above (rev 7, d57) | spec; rev 7–8 |
+| format | the board's frames are what was asked, from their JPEG headers: measured size = the asked framesize (QVGA 320×200, VGA 640×400, HD 1280×800, `960x600` literal), measured chroma = the asked `subsampling` when one was asked (`auto` = the firmware's choice, recorded only), and 0 bad frames. A miss for the board under test; flagged (`cross_effect`) for the other board | QE 006 nit |
 | wedges | 0 wedges and 0 ladder USB resets on either board during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2; rev 8 |
 | sync (d55, rev 9) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`). The IMX708's first frame ≤ 34 ms after the trigger is its **own verdict line**, reported per setting next to its real frame period (1000 / delivered fps, ~38 ms at 26.4 fps) and not part of "holds"; some misses are expected and decide nothing. `start_skew_ms` over all three is still recorded. Applies once rev 9 passes QE (before any data); until then rev 8's 25 ms over all three applies | spec; d55 |
 | IMX708 | `fps_clip` ≥ 26.0 and max gap ≤ 100 ms, and rpicam-vid `ok` with rc 0 (QE 005 R2) | spec (F8) |
-| host | not throttled over the clip (host_stats.csv, 1 Hz): no current-state bit (0xF) in any sample and no "has occurred" bit (0xF0000) that appears during the clip. Sticky bits already set at the clip's first sample are recorded, not a void (they would void every later clip of that boot). A throttled clip is void (§4). No reading is a miss | spec; QE 005 nit |
+| host | `throttled` = 0x0 in every host_stats.csv sample over the clip (spec rev 9), sticky "has occurred" bits included; they also catch a transient between the 1 Hz samples. A throttled clip is void (§4); the next pre-check then refuses until a reboot. No reading is a miss | spec; QE 006 R2 |
 
 Also recorded per clip, not bars:
 - MB per 30 s, frame kB, median timing ms (B0), first-frame delays, `lsusb` speeds;
@@ -270,7 +279,9 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
       than rev 4's 25×, on purpose: the gate may run up to 60 cycles, and every clip stays on the Pi until the pull
       (N6);
     - **stop (F9, §8 rule 4; QE 005 R6):** auto mode stops power-cycling after any cycle with a reading of SD free
-      < 2 GB, or no reading. The rig stays up for the pull and clear.
+      < 2 GB, or no reading, and writes the run's STOP file. A boot whose own reading is < 2 GB (or unread) records no
+      clip (that cycle fails G-a), so a later hard reset or switch boot can't add clips. The rig stays up for the pull
+      and clear.
     - MB = 10⁶ B.
   - **N1 before arming:** the part-B cold boots (the gate's dry runs) measure outside-use growth per boot. If it averages
     more than 6 MB per boot, it is mitigated first (e.g. a journald size cap) as a reversible rig change under the
@@ -291,8 +302,10 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
   4. On the Mac: `shasum -a 256 -c SHA256SUMS`, all OK.
   5. Only then clear the run folder from the Pi.
   6. `gate_cycle.py sd <run> --wed-mb <the Wed card's planned SD MB>` (QE 005 R5). Rev 4 item 5: SD free within 250 MB
-     of the gate-start reading, ≥ 2 GB, and ≥ 2× Wed's planned SD use. Exit 0 only when all three hold. The gate-start
-     reading comes from `~/.gate_sd_start_<run>.json`, written at arm, so it survives the clear.
+     of the gate-start reading, ≥ 2 GB, and ≥ 2× Wed's planned SD use. Exit 0 only when all three hold and the run
+     folder is gone from the Pi. The gate-start reading comes from `~/.gate_sd_start_<run>.json`, written at arm, so it
+     survives the clear. If Nick says yes to PE 003's rev 10–11 (W1–W3, ~0.6 GB), the Wed MB includes those clips.
+     `seal` skips and counts a torn last line of `cycles.jsonl` (a hard reset mid-write).
 
   Gate clips stay on the Pi until that pull; there is no per-cycle clearing (**N6**). Nothing is cleared that isn't
   verified on the Mac first.
