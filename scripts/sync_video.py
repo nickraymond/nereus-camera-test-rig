@@ -426,8 +426,8 @@ def main() -> int:
     ap.add_argument("--board-quality", type=int, default=70)
     ap.add_argument("--board-fps", type=float, default=10,
                     help="board frame cap, both boards (0 = as fast as each can). 10: the AE3's "
-                         "VGA ceiling, and the N6 (full-speed USB) dropped bytes at 30-63 fps "
-                         "over minutes (soak 2026-10-14)")
+                         "VGA ceiling, and the N6 (a 480M link; it drops bytes when the Pi's "
+                         "reader stalls) dropped bytes at 30-63 fps over minutes (soak 2026-10-14)")
     ap.add_argument("--board-subsampling", default="auto",
                     help="JPEG chroma subsampling: auto (firmware choice: AE3 4:4:4 at q>=60, "
                          "N6 hardware 4:2:0) | 420 | 422 | 444")

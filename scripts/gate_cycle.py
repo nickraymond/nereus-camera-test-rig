@@ -113,6 +113,11 @@ RECORDER_PREFIX = ("ci-record", "ci_record", "rpicam-", "libcamera-", "capture_r
                    "selfcheck_")
 # Launchers whose program is a later argv token: `python3 -u x.py`, `env A=1 x`, `timeout 60 x`.
 LAUNCHER_RE = re.compile(r"(python[\d.]*|bash|sh|dash|env|nice|nohup|sudo|timeout|stdbuf|ionice)")
+# Launcher options that take a value, per launcher: `python3 -X dev`, `timeout -s INT 60`,
+# `sudo -u pi`, ... (python's -u takes none).
+LAUNCHER_OPT_VALUE = {"python": ("-X", "-W"), "timeout": ("-s", "-k"), "sudo": ("-u", "-g", "-C"),
+                      "nice": ("-n",), "ionice": ("-c", "-n"), "stdbuf": ("-i", "-o", "-e")}
+SHELLS = ("bash", "sh", "dash")
 CSV_FIELDS = [
     "cycle", "started_by", "utc", "boot_id", "uptime_start_s", "prev_end", "prev_by",
     "vin_mv", "vbat_mv", "on_battery", "throttled", "msc_quirk", "ae3_enum_s", "n6_enum_s",
@@ -376,14 +381,18 @@ def program_name(args: str) -> str:
         name = toks[i].rsplit("/", 1)[-1]
         if not LAUNCHER_RE.fullmatch(name):
             return name
+        kind = "python" if name.startswith("python") else name
+        takes_value = LAUNCHER_OPT_VALUE.get(kind, ())
         i += 1
         while i < len(toks) and (toks[i].startswith("-") or "=" in toks[i]
                                  or re.fullmatch(r"[\d.]+[smhd]?", toks[i])):
-            if toks[i] == "-m" and i + 1 < len(toks):
+            if kind == "python" and toks[i] == "-m" and i + 1 < len(toks):
                 return toks[i + 1]
-            if toks[i] == "-c":
+            if kind == "python" and toks[i] == "-c":  # python -c CODE runs no program file
                 return "-c"
-            i += 1
+            if kind in SHELLS and toks[i] == "-c":    # bash -c CMD runs CMD
+                return toks[i + 1].rsplit("/", 1)[-1] if i + 1 < len(toks) else "-c"
+            i += 2 if toks[i] in takes_value else 1
     return ""
 
 
@@ -495,6 +504,22 @@ def sd_clean(start: dict, now: dict, wed_mb: float | None) -> dict:
             "free_drop_b": (free0 - free) if free is not None and free0 is not None else None}
 
 
+def read_jsonl(path: Path) -> tuple[list[dict], int]:
+    """Records of a JSON-lines file and how many lines didn't parse (a hard reset mid-write
+    leaves a torn last line; QE 006 nit)."""
+    if not path.exists():
+        return [], 0
+    rows, torn = [], 0
+    for ln in path.read_text(errors="replace").splitlines():
+        if not ln.strip():
+            continue
+        try:
+            rows.append(json.loads(ln))
+        except ValueError:
+            torn += 1
+    return rows, torn
+
+
 def write_run_sums(run_dir: Path) -> int:
     """One SHA256SUMS over every file in the run folder (QE N4), ``shasum -a 256 -c`` format."""
     tmp = run_dir / "SHA256SUMS.tmp"
@@ -536,8 +561,7 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
         rec["video_only"] = True
         rec["ram_boot"] = ram_reading()  # this boot's idle baseline (rev 7), before the slow du
         rec["sd_boot"] = sd_reading(run_dir)
-        rec["video"] = run_video(run_dir, n, float(state.get("video_s") or 30),
-                                 log, state.get("video_args") or [], rec["boot_id"])
+        rec["video"] = cycle_clip(rec, run_dir, n, state, log)
         time.sleep(POST_CLIP_WAIT_S)  # then the G-a process check and the G-b / RAM readings
         rec["procs_after"] = recorder_procs()
         rec["ram_post"] = ram_reading(rec["ram_boot"])
@@ -579,6 +603,18 @@ def run_cycle(state: dict, run_dir: Path, started_by: str, log: Log) -> dict:
         rec["video"] = run_video(run_dir, n, float(state["video_s"]), log, None, rec["boot_id"])
     rec["uptime_end_s"] = round(uptime_s(), 1)
     return evaluate(rec, state)
+
+
+def cycle_clip(rec: dict, run_dir: Path, n: int, state: dict, log: Log) -> dict:
+    """A video-only cycle's clip, unless SD free was < 2 GB (or unread) at this boot's reading:
+    then no clip is added (F9; a hard reset or a switch-mode boot after the SD stop would
+    otherwise keep adding clips, QE 006 nit). The cycle then fails G-a (nothing recorded)."""
+    free = (rec.get("sd_boot") or {}).get("free_b")
+    if free is None or free < SD_MIN_FREE_B:
+        log(f"SD free {free} B < 2 GB at boot: no clip this cycle")
+        return {"ok": False, "error": f"skipped: SD free {free} B at boot"}
+    return run_video(run_dir, n, float(state.get("video_s") or 30), log,
+                     state.get("video_args") or [], rec.get("boot_id", ""))
 
 
 def video_dir(run_dir: Path, n: int, boot_id: str) -> Path:
@@ -1013,8 +1049,9 @@ def next_step(state: dict, rec: dict, run_dir: Path, log: Log) -> None:
         log("STOP present — not power-cycling; rig stays up")
         return
     if rec.get("video_only") and sd_stop(rec):
-        log(f"SD stop (F9, card §8 rule 4): {rec.get('gb_fails')} — not power-cycling; rig stays "
-            "up; pull + clear, then re-check")
+        (run_dir / "STOP").write_text(f"SD stop {now_utc()}: {rec.get('gb_fails')}\n")
+        log(f"SD stop (F9, card §8 rule 4): {rec.get('gb_fails')} — STOP written, not "
+            "power-cycling; rig stays up; pull + clear, then re-check")
         return
     stop_after = state.get("stop_after_fails", MAX_FAILS_IN_ROW)
     if stop_after and state.get("fails_in_row", 0) >= stop_after:
@@ -1057,12 +1094,13 @@ def cmd_seal(a) -> int:
     gb = None
     if manifest.is_file() and json.loads(manifest.read_text()).get("video_only"):
         # G-b over the whole gate (bars 2-4), written before the sums so it is pulled and sealed
-        rows = [json.loads(ln) for ln in (run_dir / "cycles.jsonl").read_text().splitlines()
-                if ln.strip()] if (run_dir / "cycles.jsonl").exists() else []
+        rows, torn = read_jsonl(run_dir / "cycles.jsonl")
         gb = sd_verdict(rows, json.loads(manifest.read_text()).get("sd_start") or {})
-        pc.atomic_json(run_dir / "gb_verdict.json", {**gb, "cycles": len(rows), "utc": now_utc()})
+        pc.atomic_json(run_dir / "gb_verdict.json", {**gb, "cycles": len(rows), "torn_lines": torn,
+                                                     "utc": now_utc()})
         print(f"gate seal: G-b {'PASS' if gb['ok'] else 'FAIL'} {gb['fails']} "
-              f"(last run growth {gb['last_run_growth_b']} B) -> gb_verdict.json")
+              f"(last run growth {gb['last_run_growth_b']} B; {torn} torn line(s) skipped) "
+              "-> gb_verdict.json")
     n = write_run_sums(run_dir)
     print(f"gate seal: {run_dir / 'SHA256SUMS'} covers {n} files; on the Mac, in the pulled "
           f"folder: shasum -a 256 -c SHA256SUMS")
@@ -1098,12 +1136,14 @@ def cmd_sd(a) -> int:
     v = sd_clean(start, now, a.wed_mb)
     print(json.dumps({"run": run, "run_folder_still_on_pi": run_dir.exists(),
                       "wed_mb": a.wed_mb, "start": start, "now": now, **v}, indent=1))
-    if run_dir.exists():
+    still = run_dir.exists()
+    if still:
         print("gate sd: the run folder is still on the Pi; clear it only after the Mac verify "
               "(card §6 steps 3-5), then re-run")
-    print(f"gate sd: {'CLEAN' if v['ok'] else 'NOT CLEAN'} "
-          f"{[k for k, ok in v['checks'].items() if not ok]}")
-    return 0 if v["ok"] else 1
+    ok = v["ok"] and not still  # step 6 is the after-clear check (QE 006 nit)
+    misses = [k for k, c in v["checks"].items() if not c] + (["run_folder_on_pi"] if still else [])
+    print(f"gate sd: {'CLEAN' if ok else 'NOT CLEAN'} {misses}")
+    return 0 if ok else 1
 
 
 def cmd_cycle(a) -> int:

@@ -23,9 +23,9 @@ Definitions (all from the raw files):
   - IMX708 frames lost: nominal frames in the synced window (window x asked fps) minus frames
     recorded there; a gap > 1.5 frame periods counts as a drop.
   - host: min mem_avail / CMA free and max CPU over the clip, from host_stats.csv; every distinct
-    `throttled` value seen. host_throttle_void: a current-state bit (0xF) in any sample, or a
-    sticky "has occurred" bit (0xF0000) that was not set at the clip's first sample; sticky bits
-    from before the clip don't void it. None when there is no reading.
+    `throttled` value seen. host_throttle_void (spec rev 9 "host throttled = 0x0", QE 006 R2):
+    any sample that isn't 0x0, sticky "has occurred" bits included. None when there is no
+    reading.
   - boards: resolution_measured / subsampling_measured from each frame's JPEG SOF header (the
     asked `subsampling` is a separate column); bad_frames = frames that don't start FF D8, end
     FF D9 and carry one SOF size.
@@ -57,10 +57,11 @@ def _imx_times(clip: Path) -> list[float]:
 
 
 def throttle_void(values: list[str]) -> bool | None:
-    """vcgencmd get_throttled samples over one clip, in order -> void? Bits 0-3 are the current
-    state, bits 16-19 'has occurred since boot' (sticky). A current bit in any sample, or a sticky
-    bit that appears during the clip, voids it; sticky bits already set at its first sample do
-    not (they would void every later clip of that boot). None = no readable sample. Pure."""
+    """vcgencmd get_throttled samples over one clip -> void? Spec rev 9's bar is "throttled =
+    0x0", so any sample with any bit set voids the clip, the sticky "has occurred since boot"
+    bits (0xF0000) included: they also catch an under-voltage between the 1 Hz samples (QE 006
+    R2). Sticky bits last until a reboot, so pool2_bench's pre-check refuses until then.
+    None = no readable sample. Pure."""
     bits = []
     for v in values:
         try:
@@ -69,8 +70,7 @@ def throttle_void(values: list[str]) -> bool | None:
             continue
     if not bits:
         return None
-    sticky0 = (bits[0] >> 16) & 0xF
-    return any(b & 0xF for b in bits) or any(((b >> 16) & 0xF) & ~sticky0 for b in bits)
+    return any(bits)
 
 
 def _host(clip: Path) -> dict:
@@ -219,6 +219,7 @@ def clip_rows(clip: Path) -> list[dict]:
                 v = [float(r[key]) for r in fr if r.get(key) not in (None, "")]
                 return round(statistics.median(v), 1) if v else None
             row.update(codec="MJPEG (board)", resolution=rec.get("dims"),
+                       framesize_asked=settings.get("framesize", args.get("board_framesize")),
                        quality=settings.get("jpeg_quality", args.get("board_quality")),
                        fps_asked=settings.get("fps", args.get("board_fps")),
                        frames_lost=rec.get("frames_lost"), frames_nominal=None,

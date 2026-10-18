@@ -13,14 +13,19 @@ Purpose: pool test 2 prep part B (docs/pool2_20261021/TEST_CARD_B.md §4–§5).
   - the clip's rows come from scripts/video_clip_table.py, scored against the card's bars. The
     fps bars use fps_clip = frames captured in the clip's 30 s / 30 (QE 005 R2), so a camera
     that stops early fails;
-  - a throttled clip is VOID (a current throttle bit, or a sticky bit new during the clip): cool
-    down 5 min and re-run it; 2 throttled in a row -> stop. No throttle reading = a miss;
+  - a throttled clip is VOID (spec rev 9: any host_stats sample not 0x0, QE 006 R2): cool down
+    5 min and re-run it; 2 throttled in a row -> stop. No throttle reading = a miss. The pre-check
+    refuses while `vcgencmd get_throttled` isn't 0x0 (sticky bits stay until a reboot);
+  - the board's frames must be what was asked (QE 006 nit): measured size = the asked framesize,
+    measured chroma = the asked subsampling (when one was asked), 0 bad frames;
   - sync (d55, rev 9): N6 <-> AE3 start skew <= 25 ms is a bar; the IMX708's first frame <= 34 ms
     after the trigger is reported as its own verdict line, not part of "the setting holds";
   - one miss fails the setting, so it stops at its first clip that misses a bar.
-  - the verdict is over EVERY clip in the label's folder (QE 005 R4): setting.json is rewritten
-    after each clip, clip folders it doesn't list (a crash mid-clip) are scored from their
-    files, and a label whose clips already decide the setting gets no new clips.
+  - the verdict is over EVERY clip of the label (QE 005 R4, QE 006 R1): setting.json is rewritten
+    after each clip; clips it lists stay in the verdict even if their folder is gone
+    (folder_missing) and their numbers are never reused; clip folders it doesn't list (a crash
+    mid-clip) are scored from their files; a label whose clips already decide the setting gets
+    no new clips; a label started on another build (REVISION / git sha) is refused.
 
 Usage (on the Pi, repo root):
   python scripts/pool2_bench.py <label> --under openmv_n6 [--n 3] [--ae3-floor 9.1] \\
@@ -30,9 +35,10 @@ Usage (on the Pi, repo root):
   --under: the board this setting changes (its fps bar applies); the other board stays at its
   control and is recorded (a drop is flagged "cross_effect", not a bar). Everything after `--`
   goes to sync_video.py unchanged.
-  --probe WxH: one clip, not scored as a setting (N9). PROBE PASS = the board under test's
-  frames are all whole JPEGs at WxH and its stream ran the whole clip (last frame >= clip
-  seconds - 0.5 s).
+  --probe WxH: one clip, not scored as a setting (N9). PROBE PASS = every frame of the board
+  under test decodes (Pillow, full decode) at WxH, and its stream ran the whole clip (last frame
+  >= clip seconds - 0.5 s).
+  --seconds / --out / --cameras after `--` are refused: this script owns them (QE 006 nit).
 Outputs: results/pool2_bench/<label>/clipNN/ (sync_video files) + setting.json (rows, misses,
   verdict).
 Exit: 0 = the setting HOLDS (probe: PROBE PASS), 1 = it FAILS (probe: PROBE FAIL), 2 = usage
@@ -72,6 +78,9 @@ PROBE_TAIL_S = 0.5  # N9 probe: the stream ran the clip when its last frame is t
 EXIT_HOLDS, EXIT_FAILS, EXIT_USAGE, EXIT_REFUSED, EXIT_THROTTLED = 0, 1, 2, 3, 4
 # setting.json must match these to resume a label (QE 005 R4)
 SAME_ARGS = ("under", "n", "seconds", "ae3_floor", "sync_args", "probe")
+OWNED = ("--seconds", "--out", "--cameras")  # the bench's own; refused after `--` (QE 006 nit)
+# PAG7936 frame size per board framesize name (openmv/*/board_config.py); "WxH" names are literal
+FRAMESIZE_DIMS = {"QVGA": "320x200", "VGA": "640x400", "HD": "1280x800"}
 
 
 def _load(name: str):
@@ -97,9 +106,32 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--no-fail-fast", action="store_true", help="keep going after a miss")
     a = ap.parse_args(argv[:i])
     a.sync_args = list(argv[i + 1:])
+    owned = [t for t in a.sync_args if t.split("=", 1)[0] in OWNED]
+    if owned:
+        ap.error(f"{owned} after -- : this script sets --seconds / --out / --cameras itself")
     if a.probe:
         a.n, a.no_fail_fast = 1, True
     return a
+
+
+def format_misses(r: dict) -> list[str]:
+    """One board's frames vs what was asked (QE 006 nit): measured size = the asked framesize,
+    measured chroma = the asked subsampling (only when one was asked; "auto" is the firmware's
+    choice), 0 frames that aren't whole JPEGs. Skipped for a board with no frames (its other
+    misses cover it). Pure."""
+    if not (r.get("frames") or 0):
+        return []
+    why = []
+    asked = r.get("framesize_asked")
+    dims = FRAMESIZE_DIMS.get(asked, asked)
+    if dims and r.get("resolution_measured") != dims:
+        why.append(f"size:{r.get('resolution_measured')}!={dims}")
+    sub = r.get("subsampling")
+    if sub not in (None, "", "auto") and r.get("subsampling_measured") != str(sub):
+        why.append(f"chroma:{r.get('subsampling_measured')}!={sub}")
+    if r.get("bad_frames") != 0:
+        why.append(f"bad_frames:{r.get('bad_frames')}")
+    return why
 
 
 def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
@@ -134,6 +166,8 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
             bad.append(f"{cam}_fps")
         if cam == "openmv_ae3" and (lost != 0 or err):  # errored / unknown count = lost
             bad.append(f"{cam}_lost")
+        if format_misses(r):
+            bad.append(f"{cam}_format")
         if cam == under:
             misses += bad
         else:
@@ -147,8 +181,8 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
         misses.append("board_skew")
     imx_d = imx.get("first_frame_delay_ms")
     imx_start_ok = imx_d is not None and imx_d <= IMX_START_MAX_MS  # reported, not a setting bar
-    # Throttle (card §5 host bar): void on a current bit or a sticky bit new during the clip;
-    # no reading means the bar can't be shown to hold, so it is a miss, not a pass.
+    # Throttle (spec rev 9 host bar): void when any sample isn't 0x0; no reading means the bar
+    # can't be shown to hold, so it is a miss, not a pass.
     voids = [r.get("host_throttle_void") for r in rows]
     throttled = any(v is True for v in voids)
     if not rows or any(v is None for v in voids):
@@ -158,6 +192,7 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
         ignored, misses = misses, []
     misses += wedges
     return {"misses": misses, "ignored": ignored, "void": throttled, "cross_effect": cross,
+            "format": {c: format_misses(by.get(c) or {}) for c in ("openmv_n6", "openmv_ae3")},
             "board_skew_ms": board_skew, "imx_start_ok": imx_start_ok,
             "imx_first_frame_ms": imx_d, "imx_period_ms": round(1000 / imx["fps"], 1)
             if imx.get("fps") else None, "n6_usable": usable,
@@ -165,15 +200,48 @@ def clip_misses(rows: list[dict], under: str, ae3_floor: float | None = None,
             "n6_lost": n6.get("frames_lost")}
 
 
-def probe_result(rows: list[dict], under: str, dims: str, seconds: float = 30.0) -> dict:
-    """N9 probe verdict (not a setting verdict): the board under test's frames are all whole
-    JPEGs at ``dims`` and its stream ran the whole clip. Pure."""
+def decode_check(clip: Path, cam: str, dims: str) -> dict:
+    """N9 "frames decode at WxH": every frame of <cam>.mjpeg fully decoded by Pillow, at ``dims``.
+    Returns frames, failed (decode error or another size) and the first failure."""
+    import csv
+    import io
+
+    try:
+        from PIL import Image
+    except ImportError:
+        return {"frames": 0, "failed": None, "first_failure": "Pillow not installed"}
+    try:
+        sizes = [int(r["bytes"]) for r in csv.DictReader((clip / f"{cam}_frames.csv").open())]
+        failed, first = 0, None
+        with (clip / f"{cam}.mjpeg").open("rb") as f:
+            for k, n in enumerate(sizes):
+                try:
+                    with Image.open(io.BytesIO(f.read(n))) as im:
+                        im.load()
+                        ok = f"{im.size[0]}x{im.size[1]}" == dims
+                except Exception as exc:  # noqa: BLE001 - any decode failure counts
+                    ok, first = False, first or f"frame {k}: {exc!r}"[:120]
+                if not ok:
+                    failed += 1
+                    first = first or f"frame {k}: not {dims}"
+    except OSError as exc:
+        return {"frames": 0, "failed": None, "first_failure": repr(exc)[:120]}
+    return {"frames": len(sizes), "failed": failed, "first_failure": first}
+
+
+def probe_result(rows: list[dict], under: str, dims: str, seconds: float = 30.0,
+                 decode: dict | None = None) -> dict:
+    """N9 probe verdict (not a setting verdict): every frame of the board under test decodes at
+    ``dims`` (``decode``, from decode_check) and its stream ran the whole clip. Pure."""
     r = next((x for x in rows if x.get("camera") == under), {})
     why = []
     if r.get("resolution_measured") != dims:
         why.append(f"dims:{r.get('resolution_measured')}")
     if r.get("bad_frames") != 0:
         why.append(f"bad_frames:{r.get('bad_frames')}")
+    if not decode or decode.get("failed") != 0 or not decode.get("frames"):
+        why.append(f"decode:{(decode or {}).get('failed')} of {(decode or {}).get('frames')} "
+                   f"failed {(decode or {}).get('first_failure')}")
     if (r.get("last_frame_s") or 0) < seconds - PROBE_TAIL_S:
         why.append(f"ended_at_s:{r.get('last_frame_s')}")
     if r.get("error"):
@@ -228,23 +296,41 @@ def _clip_no(name: str) -> int:
     return int(name[4:]) if name[4:].isdigit() else 0
 
 
+def build_id() -> str:
+    """The deployed build: REVISION's first word on the Pi (git archive tree), else git HEAD."""
+    rev = ROOT / "REVISION"
+    if rev.is_file() and rev.read_text().split():
+        return rev.read_text().split()[0]
+    r = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"],
+                       capture_output=True, text=True)
+    return r.stdout.strip() or "unknown"
+
+
 def load_setting(out: Path, a: argparse.Namespace) -> tuple[dict, str | None]:
-    """The label's record, rebuilt over every clip folder (QE 005 R4). Returns (record,
-    refusal). A setting.json written with other arguments can't be resumed."""
+    """The label's record over every clip it ever had (QE 005 R4, QE 006 R1). Returns (record,
+    refusal). Clips setting.json lists stay even when their folder is gone (folder_missing, its
+    misses still count); folders it doesn't list are scored from their files. A setting.json
+    written with other arguments or on another build can't be resumed."""
     path = out / "setting.json"
-    new = {"label": a.label, **{k: getattr(a, k) for k in SAME_ARGS}, "clips": [],
-           "runs": []}
+    build = build_id()
+    new = {"label": a.label, **{k: getattr(a, k) for k in SAME_ARGS}, "build": build,
+           "clips": [], "runs": []}
     rec = json.loads(path.read_text()) if path.exists() else new
     if path.exists():
         diff = {k: (rec.get(k), getattr(a, k)) for k in SAME_ARGS if rec.get(k) != getattr(a, k)}
         if diff:
             return rec, f"{path} was written with other arguments {diff}: use a new label"
-    known = {c["clip"]: c for c in rec.get("clips", [])}
-    clips = []
-    for d in sorted(out.glob("clip[0-9]*"), key=lambda p: _clip_no(p.name)):
-        clips.append(known.get(d.name) or {**score_clip(d, a.under, a.ae3_floor, a.seconds),
-                                           "orphan": True})
-    rec["clips"] = clips
+        if rec.get("build") != build:
+            return rec, (f"{path} was started on build {rec.get('build')}, this is {build} "
+                         "(QE 006 nit): a new build gets new labels (ctl_2, ...)")
+    clips = {c["clip"]: c for c in rec.get("clips", [])}
+    on_disk = {d.name for d in out.glob("clip[0-9]*")}
+    for name in on_disk - set(clips):
+        clips[name] = {**score_clip(out / name, a.under, a.ae3_floor, a.seconds), "orphan": True}
+    for name, c in clips.items():
+        if name not in on_disk:
+            c["folder_missing"] = True  # deleting a clip folder never erases its miss
+    rec["clips"] = [clips[k] for k in sorted(clips, key=_clip_no)]
     return rec, None
 
 
@@ -253,7 +339,8 @@ def write_setting(out: Path, rec: dict, a: argparse.Namespace) -> None:
     scored = [c for c in rec["clips"] if not c["void"]]
     if a.probe:
         last = scored[-1] if scored else {}
-        rec.update(probe_result(last.get("rows") or [], a.under, a.probe, a.seconds)
+        rec.update(probe_result(last.get("rows") or [], a.under, a.probe, a.seconds,
+                                last.get("decode"))
                    if last else {"probe_ok": False, "probe_why": ["no_clip"]})
         rec["holds"] = None  # N9: a probe never decides a setting
     else:
@@ -266,6 +353,16 @@ def write_setting(out: Path, rec: dict, a: argparse.Namespace) -> None:
     tmp = out / "setting.json.tmp"
     tmp.write_text(json.dumps(rec, indent=1, default=str) + "\n")
     tmp.replace(out / "setting.json")
+
+
+def throttled_now() -> str:
+    """`vcgencmd get_throttled` now, e.g. "0x0"; "unread" if it can't be read."""
+    try:
+        out = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return "unread"
+    return out.strip().split("=")[-1] or "unread"
 
 
 def prechecks() -> list[str]:
@@ -285,6 +382,9 @@ def prechecks() -> list[str]:
     free = shutil.disk_usage(ROOT / "results").free
     if free < SD_MIN_FREE_B:
         refuse.append(f"SD free {free} B < 2 GB")
+    thr = throttled_now()
+    if thr != "0x0":  # spec rev 9: any non-0x0 sample voids a clip; sticky bits last to a reboot
+        refuse.append(f"vcgencmd get_throttled = {thr} (not 0x0): cold boot the Pi first")
     try:
         pw = _load("pool_capture").ups_power()
     except Exception:  # noqa: BLE001 - no UPS reading is a refusal, not a crash
@@ -325,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
     rec.setdefault("runs", []).append(run)
     rec.pop("stopped", None)
     decided = None if a.probe else verdict(rec["clips"], a.under, a.n)
-    if decided or (a.probe and rec["clips"]):
+    if decided or (a.probe and any(not c["void"] for c in rec["clips"])):
         write_setting(out, rec, a)
         print(f"pool2_bench {a.label}: already decided by its {len(rec['clips'])} clip(s); "
               "no new clip", flush=True)
@@ -353,6 +453,8 @@ def main(argv: list[str] | None = None) -> int:
         except subprocess.TimeoutExpired:
             print(f"pool2_bench {a.label}: clip {k}: sync_video.py timed out", flush=True)
         res = score_clip(clip, a.under, a.ae3_floor, a.seconds)
+        if a.probe and not res["void"]:
+            res["decode"] = decode_check(clip, a.under, a.probe)
         rec["clips"].append(res)
         run["clips"].append(res["clip"])
         write_setting(out, rec, a)

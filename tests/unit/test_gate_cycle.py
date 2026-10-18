@@ -257,6 +257,12 @@ def test_recorder_match_is_by_the_program_a_process_runs():
                  "selfcheck_inject.py", "pool2_bench.py", "capture_raw_openmv.py"):
         assert gate.is_recorder(f"python3 scripts/{name} --x"), name
     assert gate.program_name("python3 -c 'import x'") == "-c"
+    # QE 006 nit: launcher options that take a value
+    assert gate.is_recorder("python3 -X dev scripts/sync_video.py --seconds 30")
+    assert gate.is_recorder("timeout -s INT 60 rpicam-vid -t 0")
+    assert gate.is_recorder("sudo -u pi /home/pi/.venv/bin/nereus-rig experiment")
+    assert gate.is_recorder("bash -c rpicam-vid -t 0 -o x.h264")
+    assert gate.is_recorder("nice -n 10 python3 scripts/hil_soak.py run")
 
 
 def test_r7_a_failed_ps_is_not_checked_never_clean(monkeypatch):
@@ -296,6 +302,23 @@ def test_r6_low_sd_stops_the_power_cycling(tmp_path, monkeypatch):
            "gb_fails": ["sd_post_free:1999999999"]}
     gate.next_step(state, rec, tmp_path, gate.Log(tmp_path / "gate.log"))
     assert ups == [] and "SD stop" in (tmp_path / "gate.log").read_text()
+    assert (tmp_path / "STOP").exists()     # QE 006 nit: persisted for the next boot
+
+
+def test_no_clip_is_added_below_2gb_at_boot(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "uptime_s", lambda: 123.4)
+    monkeypatch.setattr(gate, "run_video", lambda *a, **k: pytest.fail("no clip below 2 GB"))
+    log = gate.Log(tmp_path / "gate.log")
+    for free in (1_999_999_999, None):
+        v = gate.cycle_clip({"sd_boot": {"free_b": free}}, tmp_path, 3, {}, log)
+        assert not v["ok"] and v["error"].startswith("skipped")
+    rec = _vrec(video={"ok": False, "error": "skipped: SD free 1 B at boot"})
+    assert "video:skipped: SD free 1 B at boot" in gate.evaluate(rec, {})["fail_reasons"]
+    seen = []
+    monkeypatch.setattr(gate, "run_video", lambda *a, **k: seen.append(a) or {"ok": True})
+    assert gate.cycle_clip({"sd_boot": {"free_b": 3_000_000_000}, "boot_id": "ab"}, tmp_path,
+                           3, {"video_s": 30, "video_args": ["--timing"]}, log)["ok"]
+    assert seen[0][1:3] == (3, 30.0) and seen[0][4:] == (["--timing"], "ab")
 
 
 def test_r5_sd_after_the_clear_reads_the_start_kept_in_home(tmp_path, monkeypatch):
@@ -314,6 +337,8 @@ def test_r5_sd_after_the_clear_reads_the_start_kept_in_home(tmp_path, monkeypatc
     assert gate.cmd_sd(SimpleNamespace(run="gate009_x", wed_mb=None)) == 1   # no Wed MB
     assert gate.cmd_sd(SimpleNamespace(run="gate009_x", wed_mb=15_000.0)) == 1  # < 2x Wed
     assert gate.cmd_sd(SimpleNamespace(run="nope", wed_mb=1.0)) == 1
+    (tmp_path / "gate" / "gate009_x").mkdir(parents=True)      # QE 006 nit: not cleared yet
+    assert gate.cmd_sd(a) == 1
 
 
 def test_r5_sd_clean_bars():
@@ -334,9 +359,11 @@ def test_seal_writes_the_gb_verdict_before_the_sums(tmp_path, monkeypatch):
     (run / "run_manifest.json").write_text(json.dumps({"video_only": True, "sd_start": start}))
     (run / "cycles.jsonl").write_text(json.dumps(
         {"cycle": 1, "video_only": True, "gb_ok": True, "sd_run_growth_b": 1_000_000}) + "\n")
+    with (run / "cycles.jsonl").open("a") as f:
+        f.write('{"cycle": 2, "video_only": tr')   # a hard reset mid-write (QE 006 nit)
     assert gate.cmd_seal(SimpleNamespace(run="gate009_x")) == 0
     gb = json.loads((run / "gb_verdict.json").read_text())
-    assert gb["ok"] and gb["cycles"] == 1
+    assert gb["ok"] and gb["cycles"] == 1 and gb["torn_lines"] == 1
     assert "gb_verdict.json" in (run / "SHA256SUMS").read_text()
 
 

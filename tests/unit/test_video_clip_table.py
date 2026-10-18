@@ -43,10 +43,10 @@ def test_jpeg_sof_on_real_encoder_output():
         assert vct.jpeg_sof(buf.getvalue()) == {"width": 64, "height": 40, "subsampling": name}
 
 
-def test_throttle_void_uses_current_bits_and_new_sticky_bits_only():
+def test_throttle_void_is_any_sample_not_0x0_spec_rev9():
     assert vct.throttle_void(["0x0", "0x0"]) is False
-    assert vct.throttle_void(["0x50000", "0x50000"]) is False   # occurred before the clip
-    assert vct.throttle_void(["0x0", "0x80008", "0x80000"]) is True   # throttled now
+    assert vct.throttle_void(["0x50000", "0x50000"]) is True    # QE 006 R2: sticky bits count
+    assert vct.throttle_void(["0x0", "0x80008", "0x80000"]) is True
     assert vct.throttle_void(["0x0", "0x80000"]) is True        # happened between samples
     assert vct.throttle_void([]) is None and vct.throttle_void(["?"]) is None
 
@@ -81,6 +81,7 @@ def test_fps_clip_and_frame_checks_from_the_raw_files(tmp_path):
     assert row["fps"] == 10.0 and row["fps_clip"] == 6.7 and row["last_frame_s"] == 20.0
     assert row["resolution_measured"] == "640x400" and row["subsampling_measured"] == "444"
     assert row["subsampling"] == "auto" and row["bad_frames"] == 0
+    assert row["framesize_asked"] is None   # the synthetic clip asked no framesize
     assert row["host_throttle_void"] is False and row["host_max_cpu_c"] == 50.0
 
 
