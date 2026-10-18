@@ -20,9 +20,18 @@ SENSOR_NAME = "PAG7936"          # sensor.get_id() == 0x7936, verified 2026-07-1
 # Framesize allowlist: wire name -> sensor module attribute. Only sizes verified to
 # produce a frame on the PAG7936 are offered (B320X320 raised "Sensor control failed").
 # Native aspect is 16:10 — QVGA yields 320x200, VGA 640x400, HD 1280x800 (max).
+# A tuple value is a custom size passed to ``sensor.set_framesize((w, h))``. "960x600" (pool 2
+# fallback, spec rev 6; untested on hardware until the N9 probe): on OpenMV v5.0.1 the legacy
+# ``sensor`` module is a shim over ``csi`` (scripts/libraries/sensor.py), ``csi.framesize``
+# takes a (w, h) tuple as a custom framesize (modules/py_csi_ng.c), and the PAG7936 driver
+# accepts any custom size <= 1280x800 when the board defines OMV_CSI_HW_SCALE_ENABLE: the sensor
+# runs its HD mode and the N6 ISP scales to 960x600, so the field of view is HD's
+# (drivers/sensors/pag7936.c get_framesize/set_framesize; boards/OPENMV_N6/board_config.h).
+# The AE3 does not define it, so the AE3 allowlist has no custom size.
 FRAMESIZES = {
     "QVGA": "QVGA",   # 320x200
     "VGA": "VGA",     # 640x400
+    "960x600": (960, 600),  # ISP-scaled from HD (see above)
     "HD": "HD",       # 1280x800 (max)
 }
 DEFAULT_FRAMESIZE = "HD"
