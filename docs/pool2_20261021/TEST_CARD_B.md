@@ -1,15 +1,18 @@
 # Test card B — pool 2 bench study on nereus002 + the 25× ready gate
 
 Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before the first clip and again before the gate.
+**Rev 2 (Sun 10/18, the successor session):** QE 005's FAIL on rig #121 @ a938f76 (R1, R2, R4–R8 + nits) is fixed on
+the fix PR (branch `study/pool2-prep-qe-fixes` off main 9ff4ab5), and this card now describes that code. #121 merged
+at the FAIL sha, so **rig main 9ff4ab5 is never deployed as is**: the bench build is the fix PR's QE PASS sha.
 
 | | |
 |---|---|
 | **Spec** | [SPEC.md](SPEC.md) rev 9 (sha256 `aacf8d28116a…`, QE 005 PASS Sat 3:37 PM: d55, d56, lens) |
-| **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6) |
+| **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6); QE 005 FAIL @ a938f76: R1, R2, R4–R8 + nits (rev 2 of this card) |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
-| **Ownership** | Held by the pool-2 prep session under the nereus002 rig session's written hand-over (Sat ~3:12 PM PT, slot ends Sun 10/18 12:00 PM). Later slots (Mon–Tue) only by PjM 003's sequencing and a new written hand-over |
-| **Session** | pool-2 prep, rig PR #121, branch `study/pool2-prep` |
+| **Ownership** | The rig session ("nereus002: fix AE3 wedge, 25× start/stop gate, Friday dive") owns nereus002. This session works on it only under a new written hand-over to it, sequenced by PjM 004 and recorded on c_pool1016_video_review, after QE 006 PASSes the fix PR. The 10/17 slot (to Sun 12:00 PM) was declined on Sun 9:24 AM: nothing was touched |
+| **Session** | "Pool test 2 prep (Wed 10/21) successor" (from Sun 10/18 9:09 AM; the first pool-2 prep session stopped at 9:03 AM, handoff HANDOFF_1.md). Fix PR on branch `study/pool2-prep-qe-fixes`; QE = QE 006 |
 
 ## 1. Question (Nick's words)
 
@@ -29,12 +32,18 @@ Spec items checked: must-dos 4–10, F1–F9, the pass/fail block, the rev 3 ord
   OpenMV build has N6 H.264 (rev 6).
 
 **Bench build** (deployed before the first clip; d57: the N6 resync fix is in from the start):
-- Host: `study/pool2-prep @ <sha>`, merged with the resync fix's branch (aa06bc7, the rig session's own PR). It is unpacked
-  over `~/nereus-rig-poolcam` from `git archive <sha>`: files are overwritten or added, nothing is deleted. Beyond git,
-  the Pi tree holds only caches and REVISION.
-- Boards: `host_tools/deploy_openmv.py` to both boards. This is a shared board-script change: `capture_service.py` and
-  `command_protocol.py` gain the optional `subsampling` and `timing` stream settings. With neither set, the wire request
-  is the same as Friday's.
+- Host: the fix PR's **QE PASS sha** (main 9ff4ab5 + the R1–R8 fixes; #121 already carries the resync fix aa06bc7). It
+  is unpacked over `~/nereus-rig-poolcam` from `git archive <sha>`: files are overwritten or added, nothing is deleted.
+  Beyond git, the Pi tree holds only caches and REVISION.
+- Boards: `host_tools/deploy_openmv.py` to both boards. This is a shared board-script change:
+  - `capture_service.py` and `command_protocol.py` gain the optional `subsampling` and `timing` stream settings. With
+    neither set, the wire request is the same as Friday's.
+  - `capture_service.py` accepts a board's custom (w, h) size, and `openmv/n6/board_config.py` offers `960x600` (the
+    rev 6 fallback; QE 005 nit). Source, OpenMV v5.0.1 (= our 1.28.0): `sensor` is a shim over `csi`,
+    `csi.framesize((w, h))` is a custom framesize, and the PAG7936 driver lets the N6's ISP scale it from HD
+    (`OMV_CSI_HW_SCALE_ENABLE`). So 960×600 keeps HD's field of view. The AE3 has no ISP scaler and doesn't offer it.
+    Untested on hardware until the N9 probe.
+  - All of it is in the step-1 build, so `ctl_1` is N10's control run for it; no extra deploy is needed for 960×600.
 - **Recorded at deploy, into the run folder's `BUILD.md`:**
   - the Pi REVISION;
   - the Pi-tree sha256 list vs `git ls-tree <sha>`;
@@ -80,8 +89,8 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
   - Clips: 30 s, synced by `scripts/sync_video.py` (one fire, Pi monotonic clock).
 - **One variable at a time:** each setting changes one board's framesize or chroma format. The other board stays at its
   control.
-- **Network:** clips are pulled only between settings, never while a board is recording (the N6 is full-speed USB and
-  drops bytes when the Pi stalls).
+- **Network:** clips are pulled only between settings, never while a board is recording (the N6 drops USB bytes when the
+  Pi's reader stalls; both boards link at 480M, `lsusb -t` Sat 3:25 PM).
 
 ## 4. Steps, in order
 
@@ -95,15 +104,20 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      0x0; quirk present; REVISION main@56d49b5. CmaFree was 42 MB at idle: page cache borrows CMA, so the report-only
      RAM flag needs this baseline.
    - Save the scene stills.
-1. **Deploy the bench build** (§2: study branch + the resync fix merged, QE PASS on that push first) and record it.
+1. **Deploy the bench build** (§2: the fix PR's QE 006 PASS sha, never main 9ff4ab5 as is) and record it.
 2. **B0, AE3 chroma** (by Sun night; rev 6), with `--timing` on both boards:
    - `ctl_1`: both boards at 640×400 q70 in the firmware's own chroma (N6 4:2:0, AE3 4:4:4), n = 3. These are N10's
      controls on the bench build, and also the AE3 444 arm.
    - `ae3_420`: AE3 640×400 q70 `--ae3-subsampling 420`, N6 at control, n = 3.
    - **Output:**
      - fps, frames lost and median snapshot / JPEG / USB-write ms per arm;
-     - a matched-frame crop pair of the AE3 in 4:4:4 vs 4:2:0, the same card region at 3× (`scripts/matched_frames.py`
-       on one clip of each);
+     - a crop pair of the AE3 in 4:4:4 vs 4:2:0: the same box at 3×, nearest neighbour, from the frame nearest 15 s after
+       the fire in one clip of each arm (`scripts/chroma_pair.py <ctl_1 clipNN> <ae3_420 clipNN> --camera openmv_ae3
+       --t 15 --crop X,Y,W,H --zoom 3 --out …`). The box is chosen on the scene stills before the crops are made, on the
+       busiest detail. Both frames have the same size, so the box has the same footprint; the tool refuses different
+       sizes;
+     - each arm's chroma format as measured from the JPEG SOF headers (`subsampling_measured`, video_clip_table), not
+       only the asked value;
      - the format the rev 6 rule picks.
    - **R1 / d56:** the B0 result goes into d56's `evidence` field only (pinned update, `if_version`). Nick approved
      the rule on Sat 3:32 PM: "AE3 can run with reduced color like the N6". The Wed card names the format that ran.
@@ -112,13 +126,18 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      - B0's two arms already record the same fixed bench scene in 4:4:4 and 4:2:0, back to back. The scene is static
        and the light constant; each clip's IMX708 Lux is checked to confirm it.
      - Rev 9 deliverable, in air:
-       - B0's pair as QuickTime-playable viewing copies, plus 100 % crops of the same region;
+       - B0's pair as QuickTime-playable viewing copies, plus 100 % crops of the same region (`chroma_pair.py … --zoom
+         1`);
        - under `~/NereusData/nereus-camera-test-rig/<date>_ae3_chroma/` with a MANIFEST;
        - its path goes in d56's `evidence`;
-       - the re-encode runs only under PjM 003's compute all-clear.
+       - the re-encode runs only under the PjM's heavy-compute all-clear (PjM 004 from Sun 10/18).
      - A slider page of the crops is optional. An underwater pair is optional on the Wed card (part C).
    - **E1, exploratory, not scored:** one N6 HD clip, to see the link limit early for the Mon plan. Labelled `explore`
-     and never counted toward any n.
+     and never counted toward any n: `pool2_bench.py explore_n6_hd --under openmv_n6 --probe 1280x800 --
+     --n6-framesize HD --timing`. A probe prints PROBE PASS/FAIL, never HOLDS.
+   - **Resync on real streams (QE 005 nit):** the resync fix is untested at HD and at 4:2:0 on real streams. On the first
+     healthy 4:2:0 clip (`ae3_420`) and the first healthy HD clip (E1 or `n6_hd`): `short_frames` = 0, `bad_frames` = 0,
+     and the measured size and chroma format equal the asked ones. Otherwise that setting stops and the PE + PjM are told.
 3. **Controls at the chosen AE3 format** (Mon AM, after d56 or the rule):
    - If the format is 4:2:0, `ae3_420` is its control.
    - The AE3's own 640×400 rate for the relative bar comes from its format's control.
@@ -134,8 +153,9 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
        ~3.4× Friday's data rate. With the resync fix a loss costs one frame; the usable-share bar decides it (rev 7).
    - `n6_hd`: N6 1280×800 q70, n = 3.
    - **Only if `n6_hd` fails:**
-     - `n6_960_probe`: one clip at 960×600 q70. It passes if its frames decode at 960×600 and the stream runs 30 s.
-       **N9:** the probe isn't one of the n = 3.
+     - `n6_960_probe`: one clip at 960×600 q70 (`--under openmv_n6 --probe 960x600 -- --n6-framesize 960x600`, plus
+       the AE3 format chosen in B0). PROBE PASS = every N6 frame is a whole JPEG whose SOF says 960×600, and its last
+       frame is ≥ 29.5 s after the fire. **N9:** the probe isn't one of the n = 3, and never prints HOLDS.
      - If the probe passes: `n6_960`, n = 3. If it fails, the N6's answer is 640×400 and the limit is stated.
    - **AE3:**
      - `ae3_hd`: AE3 1280×800 q70 in the B0 format, run as fail-fast clip 1. The software JPEG did ~2.3 fps at HD on the
@@ -150,11 +170,22 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
 throttled clip is void: cool down ≥ 5 min and re-run it; 2 throttled in a row → stop (§8).
 
 **One command per setting:** `python scripts/pool2_bench.py <label> --under <openmv_n6|openmv_ae3> [--ae3-floor X] --
-<sync_video args>`. It runs every per-clip pre-check (§4 step 0 and §8: flag present, no recorder, SD ≥ 2 GB, VBAT),
-the clip, the §5 bars, fail fast and the throttled-void rule. It writes `results/pool2_bench/<label>/` and
-`setting.json`. Probes use `--n 1 --no-fail-fast`. Examples:
-- `ae3_420`: `--under openmv_ae3 -- --ae3-subsampling 420 --timing`
-- `n6_hd`: `--under openmv_n6 -- --n6-framesize HD` (plus the AE3 format chosen in B0)
+<sync_video args>`. Its own options come before `--`; everything after goes to `sync_video.py` unchanged (QE 005 R1).
+- It runs every per-clip pre-check (§4 step 0 and §8): the flag is present; no gate (`~/.gate_armed.json`) or pool mode
+  (`~/.pool_armed`) is armed; the process check ran (`ps` gave output) and found no recorder; SD ≥ 2 GB; VBAT.
+- Then the clip, the §5 bars, fail fast and the throttled-void rule. It writes `results/pool2_bench/<label>/clipNN/`
+  and `setting.json`, rewritten after every clip.
+- **The verdict is over every clip in the label's folder (QE 005 R4).** A label whose clips already decide it (a miss,
+  or n passing clips) gets no new clip. A clip folder with no record (a crash mid-clip) is scored from its files, and a
+  missing `video_sync.json` is a miss. A label interrupted by a pre-check resumes on the next run. The same label with
+  other arguments is refused. A new label for the same setting is only for a new build (`ctl_2`, …) and is reported
+  next to the old one.
+- Exit: 0 holds (probe: PROBE PASS), 1 fails (probe: PROBE FAIL), 2 usage error, 3 a pre-check refused or the label
+  can't be resumed, 4 stopped after 2 throttled clips in a row (§8 rule 3: the bench stops).
+- Probes use `--probe WxH` (one clip, PROBE PASS/FAIL). Examples, verbatim (each has a unit test):
+  - `ctl_1`: `--under openmv_ae3 -- --timing`
+  - `ae3_420`: `--under openmv_ae3 -- --ae3-subsampling 420 --timing`
+  - `n6_hd`: `--under openmv_n6 -- --n6-framesize HD` (plus the AE3 format chosen in B0)
 
 ## 5. Bars per setting (set now; the spec's, unchanged)
 
@@ -167,12 +198,12 @@ the clip, the §5 bars, fail fast and the throttled-void rule. It writes `result
 
 | Bar | Value | Source |
 |---|---|---|
-| fps (the board under test) | delivered ≥ 9.5 fps over 30 s. AE3, if B0 fails: ≥ its own control 640×400 rate − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
+| fps (the board under test) | delivered ≥ 9.5 fps over 30 s = `fps_clip`: frames captured in [fire, fire + 30 s] ÷ 30 (QE 005 R2), so a stream that stops early fails. `fps` (first → last frame) is reported only. AE3, if B0 fails: ≥ its own control 640×400 `fps_clip` − 0.2 fps (relative bar) | spec pass/fail; rev 6 |
 | frames | AE3: 0 lost; an errored stream or a missing board frame count counts as lost. N6: the usable share above (rev 7, d57) | spec; rev 7–8 |
 | wedges | 0 wedges and 0 ladder USB resets on either board during the setting's clips. The normal per-clip `reset_board` (3.4–5.5 s) doesn't count | F2; rev 8 |
 | sync (d55, rev 9) | N6 ↔ AE3 start skew ≤ 25 ms per clip (\|N6 − AE3\| `start_offset_ms`). The IMX708's first frame ≤ 34 ms after the trigger is its **own verdict line**, reported per setting next to its real frame period (1000 / delivered fps, ~38 ms at 26.4 fps) and not part of "holds"; some misses are expected and decide nothing. `start_skew_ms` over all three is still recorded. Applies once rev 9 passes QE (before any data); until then rev 8's 25 ms over all three applies | spec; d55 |
-| IMX708 | ≥ 26.0 fps and max gap ≤ 100 ms | spec (F8) |
-| host | `throttled` = 0x0 over the clip (host_stats.csv); a throttled clip is void (§4) | spec |
+| IMX708 | `fps_clip` ≥ 26.0 and max gap ≤ 100 ms, and rpicam-vid `ok` with rc 0 (QE 005 R2) | spec (F8) |
+| host | not throttled over the clip (host_stats.csv, 1 Hz): no current-state bit (0xF) in any sample and no "has occurred" bit (0xF0000) that appears during the clip. Sticky bits already set at the clip's first sample are recorded, not a void (they would void every later clip of that boot). A throttled clip is void (§4). No reading is a miss | spec; QE 005 nit |
 
 Also recorded per clip, not bars:
 - MB per 30 s, frame kB, median timing ms (B0), first-frame delays, `lsusb` speeds;
@@ -193,8 +224,10 @@ N6's highest setting that holds (d57).
 §5's answer:
 
 ```bash
-python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --target 60 --label pool2 --cycle-mb <MB per cycle measured at Wed's settings> --video-args "<Wed's per-board sync_video args>"
+python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --target 60 --label pool2 --cycle-mb <MB per cycle measured at Wed's settings> --video-args="<Wed's per-board sync_video args>"
 ```
+
+`--video-args` needs the `=`: argparse reads a value that starts with `--` as an option (QE 005 nit; unit-tested).
 
 - **The cycle** (cold boot through the UPS, `ups_power_cycle.sh` via the gate):
   1. boot;
@@ -207,9 +240,12 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
 - **G-a, 25 in a row** (a failed cycle resets the count). A cycle passes when all of these hold:
   - it booted and ran;
   - every camera recorded: no arm/fire error, and ≥ 1 frame in its file;
-  - 0 recorder processes 30 s after `sync_video.py` returns. That covers ci-record, rpicam-*, `sync_video.py`,
-    `pool_capture.py`, `capture_raw_*` and `nereus-rig`, matched by argv basename, excluding the gate's own PID and its
-    ancestors (**N5**);
+  - 0 recorder processes 30 s after `sync_video.py` returns. That covers ci-record, rpicam-*, libcamera-*,
+    `sync_video.py`, `pool_capture.py`, `capture_raw_*`, `capture_dark.py`, `hil_soak.py`, `pool_selfcheck.py`,
+    `selfcheck_*`, `pool2_bench.py` and `nereus-rig` / `nereus_camera_test_rig.cli`. They're matched by the program a
+    process runs (argv[0], or the script after python / bash / env / timeout), never by another argv token, so `vim
+    sync_video.py` doesn't count. The gate's own PID and its ancestors are excluded (**N5**). If `ps` gives no output,
+    nothing was checked and the cycle fails (`procs:not_checked`, QE 005 R7);
   - the previous shutdown was clean;
   - the boards really lost power.
 - **Video completeness, scored per cycle and never resetting the count (d52):**
@@ -230,25 +266,33 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
     - ≤ 100 MB growth per cycle;
     - the last reading ≤ 250 MB above the gate start;
     - SD free ≥ 2 GB at every reading;
-    - before arming, SD free ≥ 2 GB + 25 × the per-cycle MB (the arm refuses otherwise).
+    - before arming, SD free ≥ 2 GB + `--target` (60) × the per-cycle MB (the arm refuses otherwise). That is stricter
+      than rev 4's 25×, on purpose: the gate may run up to 60 cycles, and every clip stays on the Pi until the pull
+      (N6);
+    - **stop (F9, §8 rule 4; QE 005 R6):** auto mode stops power-cycling after any cycle with a reading of SD free
+      < 2 GB, or no reading. The rig stays up for the pull and clear.
     - MB = 10⁶ B.
   - **N1 before arming:** the part-B cold boots (the gate's dry runs) measure outside-use growth per boot. If it averages
     more than 6 MB per boot, it is mitigated first (e.g. a journald size cap) as a reversible rig change under the
     owner's hand-over, before order step 3. **The 100/250 MB bars are never loosened;** that would go to Nick.
 - **RAM:** report only.
-  - Each cycle reads mem_avail and CMA free after boot (the idle baseline) and 30 s after its clip.
+  - Each cycle reads mem_avail and CMA free after boot (the idle baseline) and 30 s after its clip, each before that
+    reading's slow `du` scans.
   - Flagged: CMA free more than 20 MB below that boot's idle reading (rev 7: idle CMA is ~42 MB because the page cache
     borrows CMA), or mem_avail < 150 MB.
   - RESULTS shows the idle baseline next to each reading.
+- **Clip folders (QE 005 R8):** each cycle attempt records into `video/cycleNNN_<boot id[:8]>/` (plus `_2` if it
+  exists). A hard reset mid-cycle re-runs cycle N on the next boot, and the failed attempt's clips stay as evidence.
 - **After the gate (N4, N6), in order:**
   1. `gate_cycle.py disarm`.
-  2. `gate_cycle.py seal <run>`: one SHA256SUMS over the whole run folder, including `video/cycleNNN`,
-     `cycles.csv/jsonl` and `gate.log`.
+  2. `gate_cycle.py seal <run>`: first `gb_verdict.json` (G-b bars 2–4 over every cycle), then one SHA256SUMS over the
+     whole run folder: `video/cycleNNN_*`, `cycles.csv/jsonl`, `gate.log`, `gb_verdict.json`, nested files included.
   3. Pull it to `~/NereusData/nereus-camera-test-rig/2026-10-20_gate25/`.
   4. On the Mac: `shasum -a 256 -c SHA256SUMS`, all OK.
   5. Only then clear the run folder from the Pi.
-  6. `gate_cycle.py sd <run>`. Rev 4 item 5: SD free within 250 MB of the gate start, ≥ 2 GB, and ≥ 2× Wed's planned SD
-     use.
+  6. `gate_cycle.py sd <run> --wed-mb <the Wed card's planned SD MB>` (QE 005 R5). Rev 4 item 5: SD free within 250 MB
+     of the gate-start reading, ≥ 2 GB, and ≥ 2× Wed's planned SD use. Exit 0 only when all three hold. The gate-start
+     reading comes from `~/.gate_sd_start_<run>.json`, written at arm, so it survives the clear.
 
   Gate clips stay on the Pi until that pull; there is no per-cycle clearing (**N6**). Nothing is cleared that isn't
   verified on the Mac first.
@@ -265,7 +309,7 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
 - Never recommend from n = 1: the probes (`explore`, `n6_960_probe`) inform the plan only.
 - The gate's n is 25 cycles in a row (Nick).
 
-## 8. Stop rules (from the proposal and spec; any one stops the bench, then card + PE 002 + PjM 003 are told)
+## 8. Stop rules (from the proposal and spec; any one stops the bench, then the card, the PE (PE 003; PE 002 stood down Sun) and PjM 004 are told)
 
 1. 3 AE3 cold-boot wedges in one day → stop the AE3 and report.
 2. VBAT < 3.4 V off the charger.
@@ -275,8 +319,8 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
    doesn't wake): stop and report. No improvising. There is no firmware change this round, so there is no firmware
    recovery.
 6. Any rig change after Tue 10/20 6 PM (freeze, §10).
-7. The hand-over slot ends (Sun 12:00 PM): hand back by message with the flag present; resume only under a new written
-   hand-over.
+7. The hand-over slot ends: hand back by message with the flag present; resume only under a new written hand-over
+   (sequenced by PjM 004).
 8. ci-record or another recorder is found running before a setting: stop and ask the owner.
 
 ## 9. Cost
@@ -302,4 +346,4 @@ guesses. The gate proves the rig boots and records reliably before a field day.
 - If either board doesn't hold above 640×400, Wed runs it at 640×400 with the limit named (USB link, encoder, pacing)
   and an option list for Nick.
 - **N11:** N6 H.264 is a future option once openmv#3247 lands in an OpenMV release.
-- RESULTS goes to `docs/pool2_20261021/RESULTS_B.md` on this PR; QE checks it; the PjM merges.
+- RESULTS goes to `docs/pool2_20261021/RESULTS_B.md` on the bench-results PR; QE checks it; the PjM merges.
