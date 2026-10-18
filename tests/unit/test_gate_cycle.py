@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -236,7 +238,7 @@ def test_recorder_left_running_or_unchecked_fails_the_cycle():
     assert "procs:not_checked" in gate.evaluate(rec, {})["fail_reasons"]
 
 
-def test_recorder_match_is_by_argv_basename():
+def test_recorder_match_is_by_the_program_a_process_runs():
     assert gate.is_recorder("/usr/bin/rpicam-vid -t 0 --codec h264")
     assert gate.is_recorder("python3 /home/pi/nereus-rig-poolcam/scripts/sync_video.py -t 3")
     assert gate.is_recorder("/home/pi/.venv/bin/nereus-rig experiment --raw")
@@ -244,6 +246,106 @@ def test_recorder_match_is_by_argv_basename():
     # the repo folder name contains "nereus-rig" but is not the CLI; the gate itself is not one
     assert not gate.is_recorder("python3 /home/pi/nereus-rig-poolcam/scripts/gate_cycle.py boot")
     assert not gate.is_recorder("sshd: pi@pts/0")
+    # QE 005 nit: only the program counts, not any argv token
+    assert not gate.is_recorder("vim scripts/sync_video.py")
+    assert not gate.is_recorder("less /home/pi/results/hil_soak.py")
+    assert gate.is_recorder("/home/pi/.venv/bin/python3 -u scripts/hil_soak.py run")
+    assert gate.is_recorder("timeout 60 rpicam-still -o x.jpg")
+    assert gate.is_recorder("env PYTHONPATH=src python3 -m nereus_camera_test_rig.cli experiment")
+    assert gate.is_recorder("/home/pi/.venv/bin/python3 /home/pi/.venv/bin/nereus-rig experiment")
+    for name in ("capture_dark.py", "pool_selfcheck.py", "selfcheck_bench.py",
+                 "selfcheck_inject.py", "pool2_bench.py", "capture_raw_openmv.py"):
+        assert gate.is_recorder(f"python3 scripts/{name} --x"), name
+    assert gate.program_name("python3 -c 'import x'") == "-c"
+
+
+def test_r7_a_failed_ps_is_not_checked_never_clean(monkeypatch):
+    monkeypatch.setattr(gate, "sh", lambda cmd, timeout=20: "")   # OSError / timeout -> ""
+    assert gate.recorder_procs() is None
+    rec = _vrec()
+    rec["procs_after"] = gate.recorder_procs()
+    assert "procs:not_checked" in gate.evaluate(rec, {})["fail_reasons"]
+    monkeypatch.setattr(gate, "sh", lambda cmd, timeout=20: "  1 /sbin/init\n")
+    assert gate.recorder_procs() == []
+
+
+def test_r8_each_cycle_attempt_records_into_its_own_folder(tmp_path, monkeypatch):
+    first = gate.video_dir(tmp_path, 7, "3f1c9a20aaaa")
+    assert first.name == "cycle007_3f1c9a20"
+    first.mkdir(parents=True)   # a hard reset mid-cycle left this attempt's clips
+    assert gate.video_dir(tmp_path, 7, "3f1c9a20aaaa").name == "cycle007_3f1c9a20_2"
+    assert gate.video_dir(tmp_path, 7, "77aa0000ffff").name == "cycle007_77aa0000"
+    seen = []
+    monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: seen.append(cmd) or
+                        type("R", (), {"stdout": "", "stderr": ""})())
+    v = gate.run_video(tmp_path, 7, 30.0, gate.Log(tmp_path / "gate.log"), [], "3f1c9a20aaaa")
+    out = seen[-1][seen[-1].index("--out") + 1]
+    assert out.endswith("video/cycle007_3f1c9a20_2") and v["dir"] == "video/cycle007_3f1c9a20_2"
+    assert not v["ok"]   # the fake sync_video wrote no video_sync.json
+
+
+def test_r6_low_sd_stops_the_power_cycling(tmp_path, monkeypatch):
+    assert gate.sd_stop({"gb_fails": ["sd_post_free:1999999999"]})
+    assert gate.sd_stop({"gb_fails": ["sd_boot:no_reading"]})
+    assert not gate.sd_stop({"gb_fails": ["sd_cycle_growth:110000001"]})
+    monkeypatch.setattr(gate, "uptime_s", lambda: 123.4)
+    ups = []
+    monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: ups.append(cmd))
+    state = {"run_id": "g", "mode": "auto", "target": 60, "cycles_done": 4, "streak": 4}
+    rec = {"cycle": 4, "result": "PASS", "video_only": True,
+           "gb_fails": ["sd_post_free:1999999999"]}
+    gate.next_step(state, rec, tmp_path, gate.Log(tmp_path / "gate.log"))
+    assert ups == [] and "SD stop" in (tmp_path / "gate.log").read_text()
+
+
+def test_r5_sd_after_the_clear_reads_the_start_kept_in_home(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(gate, "GATE_ROOT", tmp_path / "gate")
+    monkeypatch.setattr(gate, "STATE", tmp_path / ".gate_armed.json")
+    start = {"free_b": 30_000_000_000, "used_b": 5_000_000_000}
+    (tmp_path / ".gate_sd_start_gate009_x.json").write_text(json.dumps({"sd_start": start}))
+    now = {"free_b": 29_800_000_000}
+    monkeypatch.setattr(gate, "sd_reading", lambda run_dir: dict(now))
+    a = SimpleNamespace(run="gate009_x", wed_mb=2000.0)
+    assert gate.cmd_sd(a) == 0                  # run folder gone; start from ~
+    now["free_b"] = 29_700_000_000              # 300 MB below the start
+    assert gate.cmd_sd(a) == 1
+    now["free_b"] = 29_800_000_000
+    assert gate.cmd_sd(SimpleNamespace(run="gate009_x", wed_mb=None)) == 1   # no Wed MB
+    assert gate.cmd_sd(SimpleNamespace(run="gate009_x", wed_mb=15_000.0)) == 1  # < 2x Wed
+    assert gate.cmd_sd(SimpleNamespace(run="nope", wed_mb=1.0)) == 1
+
+
+def test_r5_sd_clean_bars():
+    start = {"free_b": 30_000_000_000}
+    v = gate.sd_clean(start, {"free_b": 29_750_000_000}, 1000)
+    assert v["ok"] and v["free_drop_b"] == 250_000_000
+    assert gate.sd_clean(start, {"free_b": 1_900_000_000}, 100)["checks"] == {
+        "free_within_250MB_of_start": False, "free_ge_2GB": False, "free_ge_2x_wed": True}
+    assert not gate.sd_clean(start, {}, 100)["ok"]
+
+
+def test_seal_writes_the_gb_verdict_before_the_sums(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "GATE_ROOT", tmp_path)
+    monkeypatch.setattr(gate, "STATE", tmp_path / ".gate_armed.json")
+    run = tmp_path / "gate009_x"
+    run.mkdir()
+    start = {"free_b": 30_000_000_000, "outside_b": 5_000_000_000}
+    (run / "run_manifest.json").write_text(json.dumps({"video_only": True, "sd_start": start}))
+    (run / "cycles.jsonl").write_text(json.dumps(
+        {"cycle": 1, "video_only": True, "gb_ok": True, "sd_run_growth_b": 1_000_000}) + "\n")
+    assert gate.cmd_seal(SimpleNamespace(run="gate009_x")) == 0
+    gb = json.loads((run / "gb_verdict.json").read_text())
+    assert gb["ok"] and gb["cycles"] == 1
+    assert "gb_verdict.json" in (run / "SHA256SUMS").read_text()
+
+
+def test_video_args_parse_with_equals(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(gate, "cmd_arm", lambda a: seen.update(vars(a)) or 0)
+    monkeypatch.setattr(sys, "argv", ["gate_cycle.py", "arm", "--video-only",
+                                      "--video-args=--timing --n6-framesize HD"])
+    assert gate.main() == 0 and seen["video_args"] == ["--timing", "--n6-framesize", "HD"]
 
 
 def _sd(free, outside):
@@ -289,11 +391,14 @@ def test_seal_covers_every_file_in_the_run_folder(tmp_path):
     (tmp_path / "video" / "cycle001" / "openmv_n6.mjpeg").write_bytes(b"\xff\xd8abc")
     (tmp_path / "cycles.csv").write_text("cycle\n1\n")
     (tmp_path / "gate.log").write_text("x\n")
-    assert gate.write_run_sums(tmp_path) == 3
+    (tmp_path / "2026-10-20" / "exp_1").mkdir(parents=True)
+    (tmp_path / "2026-10-20" / "exp_1" / "SHA256SUMS").write_text("x  a\n")  # nested: covered
+    assert gate.write_run_sums(tmp_path) == 4
     lines = (tmp_path / "SHA256SUMS").read_text().splitlines()
     assert sorted(ln.split("  ")[1] for ln in lines) == [
-        "cycles.csv", "gate.log", "video/cycle001/openmv_n6.mjpeg"]
-    assert gate.write_run_sums(tmp_path) == 3          # SHA256SUMS never lists itself
+        "2026-10-20/exp_1/SHA256SUMS", "cycles.csv", "gate.log",
+        "video/cycle001/openmv_n6.mjpeg"]
+    assert gate.write_run_sums(tmp_path) == 4          # the top SHA256SUMS never lists itself
 
 
 def test_ram_flag_is_relative_to_the_boots_idle_cma_rev7():
