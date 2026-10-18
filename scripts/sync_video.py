@@ -25,7 +25,9 @@ Usage (Pi, repo root):
   python scripts/sync_video.py --seconds 10 --board-framesize VGA --board-fps 10 --out DIR
 Outputs (DIR, default results/video/<ts>/): imx708.h264 (+ .pts, .meta.json, .log),
   openmv_n6.mjpeg + openmv_n6_frames.csv, openmv_ae3.mjpeg + openmv_ae3_frames.csv,
-  host_stats.csv, video_sync.json (start skew, fps, frames, gaps, files + sha256).
+  host_stats.csv, video_sync.json (start skew, fps, frames, gaps, files + sha256). Per camera,
+  fps_clip = frames captured in the clip's --seconds / --seconds (the pool 2 bars' input, QE 005
+  R2) next to fps = (frames - 1) / (first -> last frame), and last_frame_s.
 Exit 0 = every camera recorded and the start skew was measured; 1 otherwise.
 
 Limits: the AE3's software JPEG caps it at ~14 fps VGA / ~2.3 fps HD (Nick's S3 bench); the
@@ -68,11 +70,24 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def clip_rate(times: list[float], fire: float | None, seconds: float | None) -> dict:
+    """The fps bar's input (pool 2, QE 005 R2): frames captured in [fire, fire + seconds] divided
+    by the clip seconds, so a camera that stops early scores low. ``fps`` (first -> last frame
+    span) stays as the rate while streaming. Also the last frame's time after the fire. Pure."""
+    if fire is None or not seconds:
+        return {"fps_clip": None, "last_frame_s": None}
+    win = [t for t in times if fire <= t <= fire + seconds]
+    return {"fps_clip": round(len(win) / seconds, 2),
+            "last_frame_s": round(max(times) - fire, 3) if times else None}
+
+
 class BoardVideo:
     """One OpenMV board's synchronized MJPEG stream (arm -> fire -> stop -> finish)."""
 
-    def __init__(self, name: str, serial: str, out: Path, settings: dict):
+    def __init__(self, name: str, serial: str, out: Path, settings: dict,
+                 seconds: float | None = None):
         self.name, self.serial, self.out, self.settings = name, serial, out, settings
+        self.seconds = seconds
         self.cam = OpenMvUsbCamera(serial)
         self.rec: dict = {"camera": name, "ok": False, "settings": dict(settings)}
         self.thread: threading.Thread | None = None
@@ -206,7 +221,7 @@ class BoardVideo:
                         dims=f"{rows[0]['width']}x{rows[0]['height']}" if rows else None,
                         file=mjpeg.name, bytes=mjpeg.stat().st_size if mjpeg.exists() else 0,
                         sha256=sha256(mjpeg) if mjpeg.exists() else None,
-                        board_sync=sync)
+                        board_sync=sync, **clip_rate(times, fire_host, self.seconds))
         self.rec["ok"] = bool(rows) and "error" not in self.rec and bool(times)
         return self.rec
 
@@ -219,7 +234,7 @@ class ImxVideo:
 
     def __init__(self, out: Path, width: int, height: int, fps: int, lens: float | None,
                  warmup_s: float, buffers: int, seconds: float):
-        self.out, self.warmup_s, self.fps = out, warmup_s, fps
+        self.out, self.warmup_s, self.fps, self.seconds = out, warmup_s, fps, seconds
         # rpicam-vid stops on its own timer (-t), its normal exit path: stopping it with a
         # signal segfaulted it at teardown once in ~15 clips (gate006 c1, rc -11, metadata cut
         # off mid-frame). Started after the boards are armed: warm-up + clip + 1.5 s margin.
@@ -299,7 +314,8 @@ class ImxVideo:
                         fps=round((len(times) - 1) / (times[-1] - times[0]), 2)
                         if len(times) > 1 and times[-1] > times[0] else None,
                         max_gap_ms=round(max((b - a) * 1000 for a, b in zip(times, times[1:])),
-                                         1) if len(times) > 1 else None)
+                                         1) if len(times) > 1 else None,
+                        **clip_rate(times, fire, self.seconds))
         # Judged by the artifacts (CLAUDE.md: trust the artifacts): a file, and >= 2/3 of the
         # nominal frames inside the synchronized window.
         window = (stop_t - fire) if stop_t < 1e17 else 0
@@ -404,7 +420,9 @@ def main() -> int:
     ap.add_argument("--lens-position", type=float, default=0.8)
     ap.add_argument("--imx-buffers", type=int, default=4,
                     help="rpicam-vid --buffer-count (CMA headroom; 0 = rpicam default)")
-    ap.add_argument("--board-framesize", default="VGA", help="QVGA | VGA | HD")
+    ap.add_argument("--board-framesize", default="VGA",
+                    help="QVGA | VGA | HD (both boards); the N6 also takes 960x600 (ISP-scaled "
+                         "from HD, openmv/n6/board_config.py)")
     ap.add_argument("--board-quality", type=int, default=70)
     ap.add_argument("--board-fps", type=float, default=10,
                     help="board frame cap, both boards (0 = as fast as each can). 10: the AE3's "
@@ -430,7 +448,8 @@ def main() -> int:
     if "imx708" in cams:
         devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
                              buffers=a.imx_buffers, seconds=a.seconds))
-    devs += [BoardVideo(n, s, out, board_settings(a, n)) for n, s in BOARDS.items() if n in cams]
+    devs += [BoardVideo(n, s, out, board_settings(a, n), seconds=a.seconds)
+             for n, s in BOARDS.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
 
     stop = threading.Event()
@@ -513,7 +532,8 @@ def main() -> int:
     (out / "video_sync.json").write_text(json.dumps(summary, indent=2, default=str) + "\n")
     for n, r in results.items():
         print(f"  {n}: {'ok' if r.get('ok') else 'FAIL'} frames {r.get('frames')} fps "
-              f"{r.get('fps')} max_gap {r.get('max_gap_ms')} ms bytes {r.get('bytes')} "
+              f"{r.get('fps')} (over the clip {r.get('fps_clip')}) max_gap {r.get('max_gap_ms')} "
+              f"ms bytes {r.get('bytes')} "
               f"lost {r.get('frames_lost')} resyncs {r.get('resyncs', 0)} "
               f"short {r.get('short_frames', 0)} "
               f"{str(r.get('error', ''))[:120]}", flush=True)

@@ -150,3 +150,16 @@ def test_combined_decode_byte_loss_costs_one_frame_and_keeps_timing_columns(tmp_
     assert list(rows[0])[-3:] == ["snap_ms", "jpeg_ms", "prev_write_ms"] and rows[3]["seq"] == "4"
     assert (tmp_path / "openmv_ae3.mjpeg").stat().st_size == sum(len(frames[i])
                                                                  for i in (0, 1, 2, 4, 5, 6))
+
+
+# -- QE 005 R2: the fps bar is frames over the clip's seconds ------------------------------------
+def test_clip_rate_counts_frames_in_the_clip_window():
+    fire = 100.0
+    full = [fire + 0.016 + 0.107 * k for k in range(281)]          # Friday's AE3 pace, 30 s
+    r = sv.clip_rate(full, fire, 30.0)
+    assert r["fps_clip"] == 9.37 and r["last_frame_s"] == 29.976
+    # QE 005's case: 201 clean frames in 20 s scored 10.0 fps on the first -> last span
+    early = [fire + 0.1 * k for k in range(201)]
+    assert sv.clip_rate(early, fire, 30.0) == {"fps_clip": 6.7, "last_frame_s": 20.0}
+    assert sv.clip_rate([], fire, 30.0) == {"fps_clip": 0.0, "last_frame_s": None}
+    assert sv.clip_rate(full, None, 30.0)["fps_clip"] is None
