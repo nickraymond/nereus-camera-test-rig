@@ -620,16 +620,17 @@ def cmd_audit(run: Path) -> int:
             tile, text, (6, h + 21), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA
         )
         tiles.append(tile)
-    th = max(t.shape[0] for t in tiles)
     per_sheet = 12
     paths = []
     for s in range(math.ceil(len(tiles) / per_sheet)):
         part = tiles[s * per_sheet : (s + 1) * per_sheet]
-        rows = math.ceil(len(part) / cols)
-        sheet = np.full((rows * th, cols * width, 3), 30, np.uint8)
+        # each row is as tall as its tallest tile (4:3 and 16:9 videos mix)
+        row_h = [max(t.shape[0] for t in part[r : r + cols]) for r in range(0, len(part), cols)]
+        tops = np.cumsum([0, *row_h])
+        sheet = np.full((int(tops[-1]), cols * width, 3), 30, np.uint8)
         for j, t in enumerate(part):
             r, cc = divmod(j, cols)
-            sheet[r * th : r * th + t.shape[0], cc * width : (cc + 1) * width] = t
+            sheet[tops[r] : tops[r] + t.shape[0], cc * width : (cc + 1) * width] = t
         p = out / f"audit_{s + 1}.jpg"
         cv2.imwrite(str(p), sheet, [cv2.IMWRITE_JPEG_QUALITY, 85])
         paths.append(p)
