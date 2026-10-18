@@ -153,9 +153,8 @@ def test_r1_the_cards_command_lines_parse(argv, under, sync_args):
 
 
 def test_r1_options_after_dashdash_belong_to_sync_video_and_usage_is_exit_2():
-    a = pb.parse_args("x --under openmv_n6 -- --n6-quality 80 --cameras openmv_n6".split())
-    assert a.under == "openmv_n6" and a.sync_args == ["--n6-quality", "80", "--cameras",
-                                                      "openmv_n6"]
+    a = pb.parse_args("x --under openmv_n6 -- --n6-quality 80 --timing".split())
+    assert a.under == "openmv_n6" and a.sync_args == ["--n6-quality", "80", "--timing"]
     with pytest.raises(SystemExit):   # not a sync_video option: refused before any clip
         pb.parse_args("x --under openmv_n6 -- --under openmv_ae3".split())
     assert pb.parse_args("p --under openmv_n6 --probe 960x600".split()).n == 1
