@@ -1,0 +1,6 @@
+num,folder,video,duration_s,resolution,fps,codec,candidates,window_best,kept,stills_per_min,blur_share,dup_share,median_sharpness,cand_share_0.05,cand_share_0.3,scale_ref,sample_usable,video_verdict
+1,Oct 2022,FullersResto-2022-10-15-xxx-JanFreiwald-leadline.MP4,68.3,3840x2160,29.97,hevc,137,35,22,19.33,0.314,0.057,231.5,1.0,0.227,0/20,8/8,too few to say
+2,Oct 2022,FullersResto-2022-10-15-xxx-JanFreiwald-leadline2.MP4,181.55,3840x2160,29.97,hevc,363,91,68,22.47,0.242,0.011,392.4,1.0,0.426,0/20,24/24,good enough
+3,Oct 2025,Caspar-South-Restoration-25-10-16-1130-IanNorton-c1.MP4,62.56,3840x2160,29.97,hevc,125,32,27,25.9,0.156,0.0,298.7,1.0,0.519,20/20 (tape),9/9,too few to say
+6,South Wreck,South Wreck-21-7-30-0946-DanAbbott-f4.MP4,288.62,1280x960,59.94,h264,577,145,99,20.58,0.297,0.021,51.7,0.949,0.889,0/20,34/34,good enough
+7,South Wreck,South Wreck-24-07-14-1320-TrueBarnes-f3.mp4,185.54,5312x2988,59.94,hevc,371,93,72,23.28,0.226,0.0,98.8,1.0,0.75,0/20,23/25,good enough

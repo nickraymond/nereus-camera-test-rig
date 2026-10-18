@@ -1,0 +1,92 @@
+{
+ "outcome": "good enough to work",
+ "usable": {
+  "k": 98,
+  "n": 100,
+  "p": 0.98,
+  "lo": 0.93,
+  "hi": 0.994
+ },
+ "urchin_present": {
+  "k": 59,
+  "n": 100,
+  "p": 0.59,
+  "lo": 0.492,
+  "hi": 0.681,
+  "unsure": 12
+ },
+ "videos": {
+  "Caspar-South-Restoration-25-10-16-1130-IanNorton-c1": {
+   "k": 9,
+   "n": 9,
+   "p": 1.0,
+   "lo": 0.701,
+   "hi": 1.0,
+   "verdict": "too few to say"
+  },
+  "FullersResto-2022-10-15-xxx-JanFreiwald-leadline": {
+   "k": 8,
+   "n": 8,
+   "p": 1.0,
+   "lo": 0.676,
+   "hi": 1.0,
+   "verdict": "too few to say"
+  },
+  "FullersResto-2022-10-15-xxx-JanFreiwald-leadline2": {
+   "k": 24,
+   "n": 24,
+   "p": 1.0,
+   "lo": 0.862,
+   "hi": 1.0,
+   "verdict": "good enough"
+  },
+  "South Wreck-21-7-30-0946-DanAbbott-f4": {
+   "k": 34,
+   "n": 34,
+   "p": 1.0,
+   "lo": 0.898,
+   "hi": 1.0,
+   "verdict": "good enough"
+  },
+  "South Wreck-24-07-14-1320-TrueBarnes-f3": {
+   "k": 23,
+   "n": 25,
+   "p": 0.92,
+   "lo": 0.75,
+   "hi": 0.978,
+   "verdict": "good enough"
+  }
+ },
+ "folders": {
+  "Oct 2022": {
+   "k": 32,
+   "n": 32,
+   "p": 1.0,
+   "lo": 0.893,
+   "hi": 1.0,
+   "videos": 2,
+   "recommendation": "process in full"
+  },
+  "Oct 2025": {
+   "k": 9,
+   "n": 9,
+   "p": 1.0,
+   "lo": 0.701,
+   "hi": 1.0,
+   "videos": 1,
+   "recommendation": "no recommendation (1 video(s) from this folder)"
+  },
+  "South Wreck": {
+   "k": 57,
+   "n": 59,
+   "p": 0.966,
+   "lo": 0.885,
+   "hi": 0.991,
+   "videos": 2,
+   "recommendation": "process in full"
+  }
+ },
+ "n_videos": 5,
+ "line": "Pilot, Nick-screened urchin footage only, 5 videos: usable 98% (Wilson 95 % 93%–99%, n = 100 stills) → good enough to work on the usable-share half of PREREG Q1 (bar ≥ 60 %, lower bound ≥ 50 %). Not a Q1 pass: the label minimums are not tested yet.",
+ "scored_utc": "2026-10-18T16:28:54+00:00"
+}
