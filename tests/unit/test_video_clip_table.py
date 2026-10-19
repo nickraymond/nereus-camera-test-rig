@@ -141,3 +141,20 @@ def test_matched_frames_skips_a_camera_that_never_started(tmp_path):
     sync = json.loads((clip / "video_sync.json").read_text())
     sync["cameras"]["openmv_n6"] = {"camera": "openmv_n6", "ok": False, "error": "arm: x"}
     assert mf.usable_cameras(clip, sync) == ["openmv_ae3"]
+
+
+def test_chroma_pair_never_lets_two_settings_clip01_overwrite_each_other(tmp_path, capsys):
+    cp = _script("chroma_pair")
+    for setting in ("ctl_1", "ae3_420"):
+        (tmp_path / setting).mkdir()
+        _clip(tmp_path / setting, n_frames=10)
+    out = tmp_path / "out"
+    try:
+        cp.main([str(tmp_path / "ctl_1" / "clip01"), str(tmp_path / "ae3_420" / "clip01"),
+                 "--t", "0.5", "--crop", "0,0,10,10", "--out", str(out)])
+    except Exception:  # noqa: BLE001 - ffmpeg may be missing on CI; the JPEG names come first
+        pass
+    jpgs = sorted(p.name for p in out.glob("*.jpg"))
+    assert jpgs == ["ae3_420_clip01_openmv_ae3_seq0005.jpg", "ctl_1_clip01_openmv_ae3_seq0005.jpg"]
+    assert cp.main([str(tmp_path / "ctl_1" / "clip01"), str(tmp_path / "ctl_1" / "clip01"),
+                    "--crop", "0,0,10,10", "--out", str(out)]) == 1

@@ -1,0 +1,17 @@
+# Pool test 2 W1 board layout: TEMPLATE (spec rev 13 must do 16). Not for scoring.
+# Copy to board_layout_wed.yaml, then replace every value below with the mounted board's measured
+# positions (Nick's ruler, or the rig session from a flat photo of the mounted board, before the
+# dive) and set measured: true. Board mm = the card's own frame: origin at the card trim's
+# top-left, x right, y down, board upright facing the camera; the card is 420 x 270 mm.
+board_id: pool2_board_template
+card: configs/cards/nereus_v3_c1.yaml   # Friday's frames decode tags 0-3 = c1
+source: "TEMPLATE: placeholder positions, nothing measured"
+measured: false
+tag_edge_mm: 63.0                       # card YAML design; Nick measures one tag before the dive
+outline_mm: [-120.0, -120.0, 540.0, 390.0]   # placeholder: the whole board incl. taped samples
+samples:                                # centre [x, y] mm; diameter = spine tip to spine tip
+  u80a: {centre_mm: [-60.0, 60.0], diameter_mm: 80}
+  u80b: {centre_mm: [480.0, 60.0], diameter_mm: 80}
+  u50a: {centre_mm: [-60.0, 210.0], diameter_mm: 50}
+  u50b: {centre_mm: [480.0, 210.0], diameter_mm: 50}
+slanted_edge: {centre_mm: [210.0, 330.0], side_mm: 50, angle_deg: 5, grey_margin_mm: 10}
