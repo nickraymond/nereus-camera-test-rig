@@ -1,0 +1,30 @@
+{
+ "source": {
+  "board": "https://claude.ai/artifact/R4bv59riyrbtbkKcAmyXZM",
+  "thread": "7314c96c-2738-47bc-9151-244119ad329b",
+  "time": "2026-10-18T15:28Z (Sun 10/18 8:28 AM PT)",
+  "author": "the user (owner)",
+  "read_by": "this session, ArtifactComments read, Sun 10/18 8:42 AM PT"
+ },
+ "nick_verbatim": {
+  "1": "not many urchings, there is a rock at 18:42:42",
+  "2": "more, at 18:44:13 and afterwars.",
+  "3": "not many, and murky water which makes this a great test. some at 11:34:13 and after.",
+  "4": "very murky and i did not see any purple urchin",
+  "5": "murky I did not see any urchin",
+  "6": "lots and lots, and the video goes from a green cast to a blue cast over the drive so a great reference for different color cast",
+  "7": "urchin at the start, then less at the last 1/3 of video",
+  "8": "I did not see urchin"
+ },
+ "reading": "yes = urchins present per his note (#1 'not many' = few but present); no = 'did not see'",
+ "marks": {
+  "1": "yes",
+  "2": "yes",
+  "3": "yes",
+  "4": "no",
+  "5": "no",
+  "6": "yes",
+  "7": "yes",
+  "8": "no"
+ }
+}

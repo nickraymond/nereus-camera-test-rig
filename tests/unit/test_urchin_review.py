@@ -103,3 +103,24 @@ def test_coco_roundtrip():
     np.testing.assert_allclose(back["a.jpg"][0], [[1, 2, 11, 22]])
     np.testing.assert_allclose(back["a.jpg"][1], [[50, 50, 60, 60]])
     assert back["b.jpg"][0].shape == (0, 4)
+
+
+def test_still_sheets_number_items_in_list_order(tmp_path):
+    root = tmp_path / "stills"
+    (root / "v").mkdir(parents=True)
+    names = []
+    for k in range(7):
+        cv2.imwrite(str(root / "v" / f"v_t{k:06d}.jpg"), np.full((90, 160, 3), 20 * k, np.uint8))
+        names.append(f"v/v_t{k:06d}.jpg")
+    (tmp_path / "list.txt").write_text("\n".join(names) + "\n")
+    out = tmp_path / "sheets"
+    assert review.main(["still-sheets", str(tmp_path / "list.txt"), str(root), str(out)]) == 0
+    sheets = sorted(out.glob("still_sheet_*.jpg"))
+    assert len(sheets) == 2  # 6 + 1
+    import json
+
+    assert json.loads((out / "still_sheet_001.json").read_text()) == ["v/v_t000006.jpg"]
+    img = cv2.imread(str(sheets[0]))
+    assert img.shape[1] == 2 * 960
+    with pytest.raises(FileNotFoundError):
+        review.still_sheets(["v/missing.jpg"], root, out)
