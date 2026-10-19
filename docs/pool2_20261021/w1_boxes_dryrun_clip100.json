@@ -1,0 +1,831 @@
+{
+ "stage": "select",
+ "scan_manifest_sha256": "46e2f86f6a419b04a7b98c3affcacaf14a36df39915de5405d3ae04ffb2eb69a",
+ "layout_sha256": "79e50d67beda2264d48b2587d78a4f49e91c8aa383e9dcab71119129b9395fc0",
+ "layout_measured": false,
+ "card_values": {
+  "path": "docs/pool2_20261021/card_values_dryrun_fri1016.json",
+  "sha256": "702650b6a260d64cf2960fef60de1fbf5ecdc99fcb53966b3ec81ba28df40665",
+  "source": "DRY RUN ONLY, not Wed card values: Fri 10/16 pool049 clips 099-103 (~/NereusPool/20261016/nereus002/pool049_20261016T212527Z), part-B chroma = what those clips measured (N6 4:2:0, AE3 4:4:4, 640x400 both, mapped); pool-2 prep successor 4, Sun 10/18",
+  "partb": {
+   "openmv_n6": "420",
+   "openmv_ae3": "444"
+  },
+  "first_bin": {
+   "imx708": 1.0,
+   "openmv_n6": 1.0,
+   "openmv_ae3": 1.0
+  },
+  "guard_cameras": [],
+  "detector": {
+   "model_id": "google/owlv2-base-patch16-ensemble",
+   "revision": "cfd3195ba4ea9592eec887ded089f4c08eff231d",
+   "threshold": 0.3
+  },
+  "commit": "b64b12c9c1f1c7a554215cd0894c29802b223da3"
+ },
+ "lenses": {
+  "imx708": {
+   "1920x1080": {
+    "camera": "imx708",
+    "K": [
+     [
+      1095.117813247284,
+      0.0,
+      964.1064249694193
+     ],
+     [
+      0.0,
+      1094.9956244545403,
+      539.2622742838993
+     ],
+     [
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "mapped": true,
+    "why": "ScalerCrop (0, 0, 4608, 2592) -> K scaled",
+    "dist": [
+     11.338614489468014,
+     -41.08504653749358,
+     0.004718703593224851,
+     0.005119347265476883,
+     27.277140257091695,
+     11.081435854095098,
+     -44.979689528772745,
+     36.96860838773947
+    ],
+    "calib_file": "~/NereusData/bm_cam_legacy/2026-10-17_pool049_calib/20261017_152713_pool049_imx708_dng/summary.json",
+    "calib_sha256": "178dd3556110a15603e2ba22ef3c0139b4af26d9c38352ffcaf9cd11e7b5444e"
+   }
+  },
+  "openmv_n6": {
+   "640x400": {
+    "camera": "openmv_n6",
+    "K": [
+     [
+      814.4280995387589,
+      0.0,
+      318.7030467661253
+     ],
+     [
+      0.0,
+      815.0177857202418,
+      245.19403782391768
+     ],
+     [
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "mapped": true,
+    "why": "640x400 shows the calibrated 1280x800 field -> K scaled",
+    "dist": [
+     -0.4214072011739352,
+     0.25358372909391313,
+     0.002648833257357536,
+     0.0012107824320776424,
+     -0.10986596216508071
+    ],
+    "calib_file": "~/NereusData/bm_cam_legacy/2026-10-17_pool049_calib/20261017_153029_pool049_openmv_raw/summary.json",
+    "calib_sha256": "681dda546912506fdc33be40368dbcedeb8aa84d0d62c2ae793204c63443a458"
+   }
+  },
+  "openmv_ae3": {
+   "640x400": {
+    "camera": "openmv_ae3",
+    "K": [
+     [
+      697.1105573085886,
+      0.0,
+      338.68453322839804
+     ],
+     [
+      0.0,
+      696.6278876171156,
+      187.5257319849913
+     ],
+     [
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "mapped": true,
+    "why": "640x400 shows the calibrated 1280x800 field -> K scaled",
+    "dist": [
+     0.39104288364647183,
+     -0.15981930550952725,
+     0.004303504641045737,
+     -0.0023332439182556846,
+     1.2675838245698394
+    ],
+    "calib_file": "~/NereusData/bm_cam_legacy/2026-10-17_pool049_calib/20261017_153029_pool049_openmv_raw/summary.json",
+    "calib_sha256": "681dda546912506fdc33be40368dbcedeb8aa84d0d62c2ae793204c63443a458"
+   }
+  }
+ },
+ "lost": {
+  "pass1": []
+ },
+ "code": {
+  "sha": "b64b12c9c1f1c7a554215cd0894c29802b223da3",
+  "dirty": false
+ },
+ "f10": {
+  "pass1": {
+   "instants": 279,
+   "flagged": 3,
+   "share": 0.011,
+   "pass_unmeasured": false,
+   "pair_ratio_median": {
+    "openmv_n6/openmv_ae3": 0.9823,
+    "imx708/openmv_n6": 1.0035,
+    "imx708/openmv_ae3": 0.9837
+   },
+   "raw_corners": {
+    "instants": 279,
+    "flagged": 40,
+    "share": 0.143,
+    "pass_unmeasured": false,
+    "pair_ratio_median": {
+     "openmv_n6/openmv_ae3": 1.0544,
+     "imx708/openmv_n6": 0.9357,
+     "imx708/openmv_ae3": 0.9872
+    }
+   }
+  }
+ },
+ "cameras": {
+  "imx708": {
+   "w1_pass": "pass1",
+   "why": "IMX708: same setting on both passes -> pass 1",
+   "first_bin": 1.0,
+   "bins": {
+    "0.5": null,
+    "1.0": null,
+    "1.5": null,
+    "2.0": [
+     {
+      "clip": "video/clip100",
+      "index": 1,
+      "t": 2109.4526,
+      "range_m": 2.0892,
+      "speed_ms": 0.0843,
+      "tags": 3,
+      "samples": {
+       "u80a": {
+        "px": 44.26,
+        "box": [
+         953.1,
+         323.0,
+         996.2,
+         367.0
+        ]
+       },
+       "u80b": {
+        "px": 50.86,
+        "box": [
+         1258.0,
+         330.3,
+         1308.0,
+         377.0
+        ]
+       },
+       "u50a": {
+        "px": 27.13,
+        "box": [
+         956.0,
+         413.2,
+         982.8,
+         440.2
+        ]
+       },
+       "u50b": {
+        "px": 30.96,
+        "box": [
+         1259.5,
+         425.9,
+         1290.3,
+         454.4
+        ]
+       }
+      },
+      "mtf50_lpmm": 0.5233,
+      "de00": {
+       "gray_black": 42.25,
+       "gray_light": 23.6,
+       "gray_light2": 24.65,
+       "gray_mid": 29.49,
+       "red": 47.98,
+       "red_orange": 43.82,
+       "orange": 38.65,
+       "yellow": 26.87,
+       "green": 11.39,
+       "cyan": 28.36,
+       "blue": 38.72,
+       "magenta": 49.62
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 248,
+      "t": 2118.4495,
+      "range_m": 2.0344,
+      "speed_ms": 0.0101,
+      "tags": 3,
+      "samples": {
+       "u80a": {
+        "px": 45.77,
+        "box": [
+         936.4,
+         328.4,
+         980.6,
+         374.2
+        ]
+       },
+       "u80b": {
+        "px": 52.77,
+        "box": [
+         1248.5,
+         333.5,
+         1299.6,
+         381.9
+        ]
+       },
+       "u50a": {
+        "px": 27.37,
+        "box": [
+         942.5,
+         421.5,
+         969.6,
+         448.7
+        ]
+       },
+       "u50b": {
+        "px": 31.34,
+        "box": [
+         1248.4,
+         431.7,
+         1279.4,
+         460.3
+        ]
+       }
+      },
+      "mtf50_lpmm": 0.2517,
+      "de00": {
+       "gray_black": 42.8,
+       "gray_light": 22.29,
+       "gray_light2": 25.19,
+       "gray_mid": 30.19,
+       "red": 42.08,
+       "red_orange": 35.25,
+       "orange": 34.85,
+       "yellow": 23.46,
+       "green": 14.95,
+       "cyan": 27.83,
+       "blue": 37.43,
+       "magenta": 31.42
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 463,
+      "t": 2126.6134,
+      "range_m": 1.9935,
+      "speed_ms": 0.0644,
+      "tags": 4,
+      "samples": {
+       "u80a": {
+        "px": 46.22,
+        "box": [
+         932.6,
+         328.7,
+         977.2,
+         374.8
+        ]
+       },
+       "u80b": {
+        "px": 54.35,
+        "box": [
+         1249.8,
+         333.9,
+         1302.5,
+         383.2
+        ]
+       },
+       "u50a": {
+        "px": 27.56,
+        "box": [
+         939.8,
+         422.2,
+         966.9,
+         449.4
+        ]
+       },
+       "u50b": {
+        "px": 32.05,
+        "box": [
+         1249.3,
+         433.6,
+         1281.0,
+         462.4
+        ]
+       }
+      },
+      "mtf50_lpmm": 0.7845,
+      "de00": {
+       "gray_black": 38.83,
+       "gray_light": 23.89,
+       "gray_light2": 24.07,
+       "gray_mid": 27.73,
+       "red": 45.48,
+       "red_orange": 37.86,
+       "orange": 39.18,
+       "yellow": 27.63,
+       "green": 9.86,
+       "cyan": 26.72,
+       "blue": 34.28,
+       "magenta": 22.9
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 668,
+      "t": 2134.4773,
+      "range_m": 2.0354,
+      "speed_ms": 0.034,
+      "tags": 4,
+      "samples": {
+       "u80a": {
+        "px": 45.74,
+        "box": [
+         926.4,
+         331.1,
+         971.7,
+         376.8
+        ]
+       },
+       "u80b": {
+        "px": 51.92,
+        "box": [
+         1238.0,
+         334.4,
+         1287.5,
+         381.4
+        ]
+       },
+       "u50a": {
+        "px": 27.42,
+        "box": [
+         933.7,
+         423.5,
+         961.1,
+         450.1
+        ]
+       },
+       "u50b": {
+        "px": 30.43,
+        "box": [
+         1235.6,
+         429.3,
+         1265.2,
+         456.5
+        ]
+       }
+      },
+      "mtf50_lpmm": 0.5618,
+      "de00": {
+       "gray_black": 38.56,
+       "gray_light": 25.15,
+       "gray_light2": 24.02,
+       "gray_mid": 28.0,
+       "red": 49.57,
+       "red_orange": 44.84,
+       "orange": 40.85,
+       "yellow": 27.51,
+       "green": 5.84,
+       "cyan": 26.89,
+       "blue": 33.99,
+       "magenta": 54.61
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 906,
+      "t": 2143.5075,
+      "range_m": 2.0403,
+      "speed_ms": 0.0078,
+      "tags": 4,
+      "samples": {
+       "u80a": {
+        "px": 46.06,
+        "box": [
+         926.2,
+         330.3,
+         971.6,
+         376.3
+        ]
+       },
+       "u80b": {
+        "px": 52.2,
+        "box": [
+         1239.3,
+         335.0,
+         1289.1,
+         382.3
+        ]
+       },
+       "u50a": {
+        "px": 27.57,
+        "box": [
+         933.1,
+         423.3,
+         960.7,
+         450.1
+        ]
+       },
+       "u50b": {
+        "px": 30.61,
+        "box": [
+         1236.7,
+         430.5,
+         1266.5,
+         458.0
+        ]
+       }
+      },
+      "mtf50_lpmm": 0.8141,
+      "de00": {
+       "gray_black": 38.08,
+       "gray_light": 25.19,
+       "gray_light2": 23.97,
+       "gray_mid": 27.12,
+       "red": 51.91,
+       "red_orange": 46.44,
+       "orange": 41.22,
+       "yellow": 28.36,
+       "green": 5.78,
+       "cyan": 26.9,
+       "blue": 34.41,
+       "magenta": 34.32
+      },
+      "f10": false
+     }
+    ],
+    "2.5": null,
+    "3.0": null,
+    "3.5": null,
+    "4.0": null
+   }
+  },
+  "openmv_n6": {
+   "w1_pass": "pass1",
+   "why": "pass 1 measured 420 = part-B 420 (pass 2 measured None)",
+   "first_bin": 1.0,
+   "bins": {
+    "0.5": null,
+    "1.0": null,
+    "1.5": null,
+    "2.0": null,
+    "2.5": null,
+    "3.0": null,
+    "3.5": null,
+    "4.0": null
+   }
+  },
+  "openmv_ae3": {
+   "w1_pass": "pass1",
+   "why": "pass 1 measured 444 = part-B 444 (pass 2 measured None)",
+   "first_bin": 1.0,
+   "bins": {
+    "0.5": null,
+    "1.0": null,
+    "1.5": null,
+    "2.0": [
+     {
+      "clip": "video/clip100",
+      "index": 15,
+      "t": 2113.3007,
+      "range_m": 2.0925,
+      "speed_ms": 0.0678,
+      "tags": 2,
+      "samples": {
+       "u80a": {
+        "px": 27.26,
+        "box": [
+         340.8,
+         57.9,
+         367.6,
+         83.1
+        ]
+       },
+       "u80b": {
+        "px": 32.23,
+        "box": [
+         533.5,
+         54.5,
+         565.6,
+         81.6
+        ]
+       },
+       "u50a": {
+        "px": 17.2,
+        "box": [
+         341.9,
+         110.1,
+         358.9,
+         126.2
+        ]
+       },
+       "u50b": {
+        "px": 20.32,
+        "box": [
+         538.0,
+         110.8,
+         558.3,
+         128.2
+        ]
+       }
+      },
+      "mtf50_lpmm": null,
+      "de00": {
+       "gray_black": 24.68,
+       "gray_light": 13.1,
+       "gray_light2": 6.24,
+       "gray_mid": 1.42,
+       "red": 20.97,
+       "red_orange": 20.18,
+       "orange": 20.52,
+       "yellow": 26.29,
+       "green": 20.78,
+       "cyan": 15.17,
+       "blue": 14.41,
+       "magenta": 20.65
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 107,
+      "t": 2123.1887,
+      "range_m": 2.074,
+      "speed_ms": 0.1011,
+      "tags": 2,
+      "samples": {
+       "u80a": {
+        "px": 27.52,
+        "box": [
+         333.0,
+         57.4,
+         360.0,
+         82.4
+        ]
+       },
+       "u80b": {
+        "px": 32.71,
+        "box": [
+         527.2,
+         57.0,
+         559.7,
+         84.1
+        ]
+       },
+       "u50a": {
+        "px": 17.42,
+        "box": [
+         332.3,
+         109.2,
+         349.5,
+         125.3
+        ]
+       },
+       "u50b": {
+        "px": 20.66,
+        "box": [
+         530.3,
+         113.3,
+         551.0,
+         130.7
+        ]
+       }
+      },
+      "mtf50_lpmm": null,
+      "de00": {
+       "gray_black": 22.46,
+       "gray_light": 15.3,
+       "gray_light2": 10.54,
+       "gray_mid": 4.32,
+       "red": 21.34,
+       "red_orange": 22.31,
+       "orange": 22.42,
+       "yellow": 30.56,
+       "green": 22.8,
+       "cyan": 16.48,
+       "blue": 12.41,
+       "magenta": 20.69
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 189,
+      "t": 2131.9867,
+      "range_m": 2.088,
+      "speed_ms": 0.2905,
+      "tags": 2,
+      "samples": {
+       "u80a": {
+        "px": 27.18,
+        "box": [
+         327.6,
+         58.5,
+         354.1,
+         83.6
+        ]
+       },
+       "u80b": {
+        "px": 32.34,
+        "box": [
+         518.6,
+         54.3,
+         550.7,
+         81.6
+        ]
+       },
+       "u50a": {
+        "px": 17.14,
+        "box": [
+         327.7,
+         110.5,
+         344.4,
+         126.5
+        ]
+       },
+       "u50b": {
+        "px": 20.32,
+        "box": [
+         522.0,
+         110.9,
+         542.2,
+         128.4
+        ]
+       }
+      },
+      "mtf50_lpmm": null,
+      "de00": {
+       "gray_black": 20.67,
+       "gray_light": 23.02,
+       "gray_light2": 16.8,
+       "gray_mid": 6.42,
+       "red": 23.64,
+       "red_orange": 27.73,
+       "orange": 30.4,
+       "yellow": 33.21,
+       "green": 24.84,
+       "cyan": 22.04,
+       "blue": 14.72,
+       "magenta": 22.32
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 192,
+      "t": 2132.3087,
+      "range_m": 2.1207,
+      "speed_ms": 0.0156,
+      "tags": 2,
+      "samples": {
+       "u80a": {
+        "px": 26.81,
+        "box": [
+         328.5,
+         63.9,
+         354.9,
+         86.6
+        ]
+       },
+       "u80b": {
+        "px": 31.51,
+        "box": [
+         517.4,
+         60.7,
+         548.8,
+         85.3
+        ]
+       },
+       "u50a": {
+        "px": 17.13,
+        "box": [
+         327.5,
+         111.4,
+         344.4,
+         126.2
+        ]
+       },
+       "u50b": {
+        "px": 20.14,
+        "box": [
+         521.8,
+         112.1,
+         541.9,
+         128.2
+        ]
+       }
+      },
+      "mtf50_lpmm": null,
+      "de00": {
+       "gray_black": 20.76,
+       "gray_light": 23.88,
+       "gray_light2": 16.92,
+       "gray_mid": 6.77,
+       "red": 24.94,
+       "red_orange": 28.77,
+       "orange": 31.62,
+       "yellow": 35.65,
+       "green": 25.49,
+       "cyan": 22.4,
+       "blue": 13.93,
+       "magenta": 22.99
+      },
+      "f10": false
+     },
+     {
+      "clip": "video/clip100",
+      "index": 219,
+      "t": 2135.1977,
+      "range_m": 2.0975,
+      "speed_ms": 0.0593,
+      "tags": 2,
+      "samples": {
+       "u80a": {
+        "px": 26.92,
+        "box": [
+         326.2,
+         62.4,
+         352.9,
+         85.7
+        ]
+       },
+       "u80b": {
+        "px": 30.9,
+        "box": [
+         515.3,
+         59.6,
+         546.2,
+         84.4
+        ]
+       },
+       "u50a": {
+        "px": 17.19,
+        "box": [
+         327.1,
+         111.0,
+         344.1,
+         126.2
+        ]
+       },
+       "u50b": {
+        "px": 19.78,
+        "box": [
+         521.2,
+         111.3,
+         541.0,
+         127.5
+        ]
+       }
+      },
+      "mtf50_lpmm": null,
+      "de00": {
+       "gray_black": 19.89,
+       "gray_light": 24.33,
+       "gray_light2": 16.85,
+       "gray_mid": 6.83,
+       "red": 25.12,
+       "red_orange": 28.04,
+       "orange": 31.33,
+       "yellow": 36.47,
+       "green": 25.01,
+       "cyan": 22.87,
+       "blue": 14.73,
+       "magenta": 23.21
+      },
+      "f10": false
+     }
+    ],
+    "2.5": null,
+    "3.0": null,
+    "3.5": null,
+    "4.0": null
+   }
+  }
+ }
+}
