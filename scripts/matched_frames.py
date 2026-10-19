@@ -52,6 +52,22 @@ def imx_frames(clip: Path) -> list[dict]:
             if f.get("SensorTimestamp")]
 
 
+def usable_cameras(clip: Path, sync: dict) -> list[str]:
+    """Cameras this clip can match: a fire time and their frame files. Pure but for exists()."""
+    out = []
+    for cam, rec in (sync.get("cameras") or {}).items():
+        if rec.get("fire_host_mono") is None:
+            continue
+        if cam == "imx708":
+            ok = (clip / "imx708.meta.json").exists()
+        else:
+            bs = rec.get("board_sync") or (rec.get("board_done") or {}).get("sync") or {}
+            ok = bs.get("fire_rx_ms") is not None and (clip / f"{cam}_frames.csv").exists()
+        if ok:
+            out.append(cam)
+    return out
+
+
 def nearest(frames: list[dict], t: float) -> dict:
     return min(frames, key=lambda f: abs(f["t"] - t))
 
@@ -65,9 +81,16 @@ def main() -> int:
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     sync = json.loads((a.clip / "video_sync.json").read_text())
-    fire = min(r["fire_host_mono"] for r in sync["cameras"].values())
-    cams = {c: board_frames(a.clip, c, sync) for c in BOARDS if c in sync["cameras"]}
-    imx = imx_frames(a.clip) if "imx708" in sync["cameras"] else []
+    usable = usable_cameras(a.clip, sync)
+    skipped = sorted(set(sync["cameras"]) - set(usable))
+    if skipped:  # an error-only record (arm/fire failed) has no fire time or frames (QE 005 nit)
+        print(f"skipping {skipped}: no fire time or frame files in this clip")
+    if not usable:
+        print("no camera with frames in this clip")
+        return 1
+    fire = min(sync["cameras"][c]["fire_host_mono"] for c in usable)
+    cams = {c: board_frames(a.clip, c, sync) for c in BOARDS if c in usable}
+    imx = imx_frames(a.clip) if "imx708" in usable else []
     log = a.out / "matched_frames.csv"
     new = not log.exists()
     dropped = 0

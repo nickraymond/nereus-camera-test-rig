@@ -61,12 +61,16 @@ def _safe_basename(name):
 
 
 def _resolve_framesize(board_config, settings, default=None):
+    """Allowlisted wire name -> what ``sensor.set_framesize`` takes: a ``sensor`` constant, or a
+    (w, h) tuple for a board's custom size (the N6's ISP-scaled 960x600, n6/board_config.py)."""
     fs = settings.get("framesize", default or board_config.DEFAULT_FRAMESIZE)
     attr = board_config.FRAMESIZES.get(fs)
     if attr is None:
         raise cp.ProtocolError(
             cp.ERR_CAPTURE_FAILED, "unsupported framesize: " + repr(fs)
         )
+    if isinstance(attr, tuple):
+        return attr, fs
     return getattr(sensor, attr), fs
 
 
