@@ -28,4 +28,13 @@ How to read it:
 - **Tiled, RF-DETR finds the most purple-urchin stills** (53/59). It also raises the most alarms on stills with no purple urchin (12/29).
 - **OWLv2 separates best here** because its prompt says "purple".
 
-Files: `rfdetr_dets.json` (detections ≥ 0.05, whole + tiled), `compare.json`, `run_rfdetr.py`, `score_compare.py`, `run.log`.
+Files in the run folder: `rfdetr_dets.json` (detections ≥ 0.05, whole + tiled), `rfdetr_dets_rerun.json`, `compare.json`, `run.log`.
+
+## Provenance
+
+- **Rule file first:** `MANIFEST.md` in the run folder was written at 7:29:41 PM PT. The run started at 7:29:47 PM, and `rfdetr_dets.json` was written at 7:31:11 PM (file times).
+- **Code:** `edge_ml/urchin/compare_rfdetr.py` @ `20b726b` (`run` / `score`).
+  - The first run used the data-folder copy of the same logic.
+  - A rerun from the committed code at 7:35 PM gave identical detections (top score and count on all 100 stills, whole and tiled).
+  - `score` reproduces `compare.json` byte for byte.
+- **Request:** Nick's own line in the urchin session's chat, Sun 10/18 evening: "I want to know how my model does relative to your results."
