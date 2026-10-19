@@ -38,6 +38,7 @@ def test_copy_verify_unpack_roundtrip(tmp_path, capsys):
         [
             "MANIFEST.md",
             "plan.tsv",
+            "zip_dir.txt",
             "unpack_ledger.tsv",
             "South Wreck",
             "c1.MP4",
@@ -132,7 +133,11 @@ def test_unpack_rejects_zip_slip_and_symlinks_and_writes_nothing(tmp_path, capsy
     assert az.cmd_unpack(dest, run, ["z.zip"], on_volume=False) == 1
     out = capsys.readouterr().out
     assert f"({reason})" in out and "REJECT z.zip" in out
-    assert sorted(p.name for p in run.iterdir()) == ["MANIFEST.md", "plan.tsv"]  # no video
+    assert sorted(p.name for p in run.iterdir()) == [
+        "MANIFEST.md",
+        "plan.tsv",
+        "zip_dir.txt",
+    ]  # no video
     assert not (tmp_path / "evil.MP4").exists() and not (tmp_path.parent / "evil.MP4").exists()
     plan = az._read_tsv(run / "plan.tsv")
     assert [r["decision"] for r in plan].count("reject") == 1
@@ -161,6 +166,7 @@ def test_unpack_member_filter_and_flat_sanitised_names(tmp_path):
             "MANIFEST.md",
             "plan.tsv",
             "unpack_ledger.tsv",
+            "zip_dir.txt",
             "South Wreck/a.MP4",
             "South Wreck/b.mov",
             "South Wreck/c.Mp4",
@@ -291,5 +297,99 @@ def test_unpack_dry_run_writes_only_the_plan(tmp_path):
     dest = _recorded(tmp_path, {"SW/a.MP4": b"a" * 7})
     run = tmp_path / "run"
     assert az.cmd_unpack(dest, run, ["z.zip"], dry_run=True, on_volume=False) == 0
-    assert sorted(p.name for p in run.iterdir()) == ["MANIFEST.md", "plan.tsv"]
+    assert sorted(p.name for p in run.iterdir()) == ["MANIFEST.md", "plan.tsv", "zip_dir.txt"]
     assert "1 videos, 7 B" in (run / "MANIFEST.md").read_text()
+
+
+# ------------------------------------------------- copy-file (SPEC_e6_unpack_tierb rev 3)
+
+
+def _download(tmp_path, data=b"m" * 300, folder="Mendocino Headlands", name="Mendo-c2.MP4"):
+    """A 10/15-style download: video/<folder>/<name>, its AppleDouble twin, the ledger."""
+    import hashlib
+
+    root = tmp_path / "2026-10-15_reefcheck"
+    (root / "video" / folder).mkdir(parents=True)
+    (root / "video" / folder / name).write_bytes(data)
+    (root / "video" / folder / f"._{name}").write_bytes(b"\x00\x05\x16\x07apple")
+    led = root / "download_ledger.tsv"
+    sha = hashlib.sha256(data).hexdigest()
+    led.write_text("drive_folder\tfile\tbytes\tsha256\tdrive_id\tmoved_utc\n"
+                   f"{folder}\t{name}\t{len(data)}\t{sha}\tid1\tt\n"
+                   "Other\tx.MP4\t1\tabc\tid2\tt\n")  # fmt: skip
+    return root / "video" / folder / name, led, sha
+
+
+def _snapshot(root):
+    return {p: p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def test_copy_file_exact_name_copied_and_recorded(tmp_path):
+    src, led, sha = _download(tmp_path)
+    before = _snapshot(led.parent)
+    run = tmp_path / "ssd" / "unpack"
+    assert az.cmd_copy_file(src, led, run, on_volume=False) == 0
+    target = run / "Mendocino Headlands" / "Mendo-c2.MP4"
+    assert target.read_bytes() == b"m" * 300 and not list(run.rglob("*.part"))
+    assert not (run / "Mendocino Headlands" / "._Mendo-c2.MP4").exists()
+    assert _snapshot(led.parent) == before  # the 10/15 folder is never written
+    row = az._read_tsv(run / "unpack_ledger.tsv")[-1]
+    assert (row["status"], row["sha256"], row["member"]) == ("copied", sha, str(src))
+    man = (run / "MANIFEST.md").read_text()
+    assert "copied files" in man and f"`{sha}` | copied" in man
+    assert az.cmd_copy_file(src, led, run, on_volume=False) == 0  # resume
+    assert az._read_tsv(run / "unpack_ledger.tsv")[-1]["status"] == "skipped_identical"
+
+
+def test_copy_file_refuses_the_appledouble_twin_and_non_videos(tmp_path, capsys):
+    src, led, _ = _download(tmp_path)
+    run = tmp_path / "run"
+    assert az.cmd_copy_file(src.with_name("._Mendo-c2.MP4"), led, run, on_volume=False) == 1
+    assert "REFUSE" in capsys.readouterr().out and not run.exists()
+    (src.parent / "notes.txt").write_text("n")
+    assert az.cmd_copy_file(src.parent / "notes.txt", led, run, on_volume=False) == 1
+    link = src.parent / "link.MP4"
+    link.symlink_to(src)
+    assert az.cmd_copy_file(link, led, run, on_volume=False) == 1
+    assert not run.exists()
+
+
+@pytest.mark.parametrize(
+    "change, msg",
+    [("size", "not 300 B (download ledger)"), ("sha", "!= ledger"), ("not_in_ledger", "0 rows")],
+)
+def test_copy_file_mismatch_stops_and_copies_nothing(tmp_path, capsys, change, msg):
+    src, led, _ = _download(tmp_path)
+    if change == "size":
+        src.write_bytes(b"m" * 299)
+    elif change == "sha":
+        src.write_bytes(b"M" * 300)  # same size, other bytes
+    else:
+        led.write_text(led.read_text().replace("Mendo-c2.MP4", "other.MP4"))
+    run = tmp_path / "run"
+    assert az.cmd_copy_file(src, led, run, on_volume=False) == 1
+    out = capsys.readouterr().out
+    assert "STOP" in out and msg in out and not run.exists()
+
+
+def test_copy_file_target_with_other_bytes_is_never_overwritten(tmp_path, capsys):
+    src, led, _ = _download(tmp_path)
+    run = tmp_path / "run"
+    (run / "Mendocino Headlands").mkdir(parents=True)
+    (run / "Mendocino Headlands" / "Mendo-c2.MP4").write_bytes(b"x" * 300)
+    assert az.cmd_copy_file(src, led, run, on_volume=False) == 1
+    assert "different SHA-256" in capsys.readouterr().out
+    assert (run / "Mendocino Headlands" / "Mendo-c2.MP4").read_bytes() == b"x" * 300
+
+
+def test_copy_file_after_unpack_runs_last_and_keeps_the_plan(tmp_path):
+    from edge_ml.urchin import fullrun as fr
+
+    dest = _recorded(tmp_path, {"SW/a.MP4": b"a" * 5})
+    run = tmp_path / "run"
+    assert az.cmd_unpack(dest, run, ["z.zip"], on_volume=False) == 0
+    src, led, _ = _download(tmp_path)
+    assert az.cmd_copy_file(src, led, run, on_volume=False) == 0
+    assert [v["file"] for v in fr.unpacked_videos(run)] == ["a.MP4", "Mendo-c2.MP4"]
+    man = (run / "MANIFEST.md").read_text()
+    assert "| SW | a.MP4 |" in man and "Mendo-c2.MP4" in man and str(dest) in man

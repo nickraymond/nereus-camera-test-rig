@@ -5,6 +5,8 @@
                                                                   # zip present + re-hashed
     python3 -I archive_zips.py unpack  <dest_zip_dir> <run_dir> <zip> ... [--dry-run]
                                          # video members -> <run_dir>/<group>/<file>
+    python3 -I archive_zips.py copy-file <video> <download_ledger.tsv> <run_dir>
+                                         # spec rev 3: one non-zip video, exact name, sha checked
 
 Sources are only read (never moved or deleted). Records go to <dest_zip_dir>/zips.tsv. The
 `sha256_dest` column is hashed right after the write and may come from the page cache: only a
@@ -240,6 +242,17 @@ def _listing(path: Path) -> set[str]:
     return set(os.listdir(path)) if path.is_dir() else set()
 
 
+def u6_extra(run_dir: Path, before: dict[Path, set[str]]) -> set[str]:
+    """New names in the watched folders (run dir's parent, volume root) other than the run dir."""
+    ours = {run_dir.name, f"._{run_dir.name}"}
+    return {
+        str(p / n)
+        for p in before
+        for n in _listing(p) - before[p]
+        if not (p == run_dir.parent and n in ours)
+    }
+
+
 def tool_sha() -> str:
     here = Path(__file__).resolve().parent
     sha = (
@@ -296,6 +309,20 @@ def write_manifest(run_dir: Path, zip_dir: Path, plan: list[dict], ledger: list[
         lines.append(
             f"| {r['group']} | {r['file']} | {int(r['bytes']):,} | {cell} | {status} | {r['zip']} |"
         )
+    planned = {(r["group"], r["file"]) for r in todo}
+    if other := [r for k, r in latest.items() if k not in planned]:
+        lines += [
+            "",
+            "## Videos not from this plan (spec rev 3: copied files)",
+            "",
+            "| Group | File | Bytes | SHA-256 | Status | Source |",
+            "|---|---|---|---|---|---|",
+        ]
+        lines += [
+            f"| {r['group']} | {r['file']} | {int(r['bytes']):,} | `{r['sha256']}` | {r['status']} "
+            f"| {r['member']} |"
+            for r in other
+        ]
     if odd := [r for r in plan if r["decision"] != "unpack"]:
         lines += [
             "",
@@ -329,6 +356,7 @@ def cmd_unpack(
     rows, problems = plan_unpack(zip_dir, zip_names)
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_tsv(run_dir / "plan.tsv", rows, PLAN_FIELDS)
+    (run_dir / "zip_dir.txt").write_text(f"{zip_dir}\n")
     ledger_path = run_dir / "unpack_ledger.tsv"
     write_manifest(run_dir, zip_dir, rows, _read_tsv(ledger_path))
     todo = [r for r in rows if r["decision"] == "unpack"]
@@ -398,14 +426,7 @@ def cmd_unpack(
             f.write("\t".join(str(row[k]) for k in LEDGER_FIELDS) + "\n")
         print(f"{status} {r['group']}/{r['file']} {r['bytes']} {h[:12]}", flush=True)
     write_manifest(run_dir, zip_dir, rows, _read_tsv(ledger_path))
-    ours = {run_dir.name, f"._{run_dir.name}"}
-    extra = {
-        str(p / n)
-        for p in watch
-        for n in _listing(p) - before[p]
-        if not (p == run_dir.parent and n in ours)
-    }
-    if extra:  # U6: any new path outside the run folder fails the run
+    if extra := u6_extra(run_dir, before):  # U6: any new path outside the run folder fails
         print(f"U6 FAIL: new paths outside {run_dir}: {sorted(extra)}", flush=True)
         return 1
     print(
@@ -415,12 +436,84 @@ def cmd_unpack(
     return rc
 
 
+def cmd_copy_file(src: Path, src_ledger: Path, run_dir: Path, *, on_volume: bool = True) -> int:
+    """Spec rev 3: one video that no zip holds (Mendocino, the 10/15 Drive download), by its exact
+    name. Size + SHA-256 against its download ledger before the copy; copied into
+    <run_dir>/<drive_folder>/ with a `copied` ledger + MANIFEST row; re-hashed after the copy.
+    0 = copied or already identical; 1 = refused or a mismatch (stop and report)."""
+    if on_volume:
+        for p in (src, run_dir):
+            if mounted_volume(p) is None:
+                raise SystemExit(f"{p} is not on a mounted /Volumes volume; refusing")
+    name = src.name
+    if name.startswith(".") or src.suffix.lower() not in VIDEO_SUFFIXES or src.is_symlink():
+        print(f"REFUSE {src}: not a video file by exact name (hidden/AppleDouble, suffix or link)")
+        return 1
+    rows = [r for r in _read_tsv(src_ledger)
+            if r["file"] == name and r["drive_folder"] == src.parent.name]  # fmt: skip
+    if len(rows) != 1:
+        print(f"STOP: {len(rows)} rows for {src.parent.name}/{name} in {src_ledger}", flush=True)
+        return 1
+    want_bytes, want_sha, group = int(rows[0]["bytes"]), rows[0]["sha256"], rows[0]["drive_folder"]
+    if not src.is_file() or src.stat().st_size != want_bytes:
+        print(f"STOP: {src} is missing or not {want_bytes} B (download ledger)", flush=True)
+        return 1
+    if (got := sha256(src)) != want_sha:
+        print(
+            f"STOP: {src} sha256 {got[:12]} != ledger {want_sha[:12]}; nothing copied", flush=True
+        )
+        return 1
+    before = {p: _listing(p) for p in [run_dir.parent, *([mounted_volume(run_dir)] if on_volume
+                                                          else [])]}  # fmt: skip
+    room = next(q for q in (run_dir, *run_dir.parents) if q.exists())
+    if shutil.disk_usage(room).free < want_bytes + UNPACK_MARGIN:
+        print(f"STOP: not enough free space for {name} + 5 GiB", flush=True)
+        return 1
+    target = run_dir / sanitise(group) / sanitise(name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if sha256(target) != want_sha:
+            print(
+                f"STOP: {target} exists with a different SHA-256; nothing overwritten", flush=True
+            )
+            return 1
+        status = "skipped_identical"
+    else:
+        part = target.with_name(target.name + ".part")
+        shutil.copyfile(src, part)
+        with part.open("rb+") as f:
+            os.fsync(f.fileno())
+        if sha256(part) != want_sha or part.stat().st_size != want_bytes:  # re-check after copy
+            print(f"STOP: the copy {part} does not match the ledger (left for inspection)")
+            return 1
+        part.rename(target)
+        status = "copied"
+    row = {"zip": src_ledger.name, "member": str(src), "group": target.parent.name,
+           "file": target.name, "bytes": want_bytes, "sha256": want_sha, "status": status,
+           "utc": now()}  # fmt: skip
+    ledger_path = run_dir / "unpack_ledger.tsv"
+    if not ledger_path.exists():
+        ledger_path.write_text("\t".join(LEDGER_FIELDS) + "\n")
+    with ledger_path.open("a") as f:
+        f.write("\t".join(str(row[k]) for k in LEDGER_FIELDS) + "\n")
+    zd = run_dir / "zip_dir.txt"
+    zip_dir = Path(zd.read_text().strip()) if zd.exists() else Path("(no unpack yet)")
+    write_manifest(run_dir, zip_dir, _read_tsv(run_dir / "plan.tsv"), _read_tsv(ledger_path))
+    if extra := u6_extra(run_dir, before):
+        print(f"U6 FAIL: new paths outside {run_dir}: {sorted(extra)}", flush=True)
+        return 1
+    print(f"{status} {target.parent.name}/{target.name} {want_bytes} {want_sha[:12]}", flush=True)
+    return 0
+
+
 def main() -> int:
     cmd, dest = sys.argv[1], Path(sys.argv[2])
     if cmd == "copy":
         return cmd_copy(dest, [Path(a) for a in sys.argv[3:]])
     if cmd == "verify":
         return cmd_verify(dest, [Path(a).name for a in sys.argv[3:]])
+    if cmd == "copy-file":
+        return cmd_copy_file(dest, Path(sys.argv[3]), Path(sys.argv[4]))
     if cmd == "unpack":
         args = [a for a in sys.argv[4:] if a != "--dry-run"]
         return cmd_unpack(dest, Path(sys.argv[3]), args, dry_run="--dry-run" in sys.argv[4:])

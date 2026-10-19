@@ -39,17 +39,19 @@ def _unpack_dir(tmp_path, specs, status="unpacked"):
     return ud
 
 
-def test_video_list_is_the_ledger_latest_row_per_target_sorted(tmp_path):
+def test_video_list_is_the_ledger_latest_row_per_target_in_unpack_order(tmp_path):
     rows = [
         {"group": "SW", "file": "b.MP4", "status": "crc_fail: x"},
         {"group": "SW", "file": "b.MP4", "status": "unpacked"},  # later row wins
         {"group": "Oct", "file": "z.MP4", "status": "skipped_identical"},
         {"group": "SW", "file": "a.MP4", "status": "crc_fail: y"},
+        {"group": "Added", "file": "c.MP4", "status": "unpacked"},  # unpacked last: runs last
+        {"group": "SW", "file": "b.MP4", "status": "skipped_identical"},  # resume: no reorder
     ]
     full = [{"zip": "z", "member": "m", "bytes": 1, "sha256": "s", "utc": "t"} | r for r in rows]
     az._write_tsv(tmp_path / "unpack_ledger.tsv", full, az.LEDGER_FIELDS)
     got = [(v["group"], v["file"]) for v in fr.unpacked_videos(tmp_path)]
-    assert got == [("Oct", "z.MP4"), ("SW", "b.MP4")]
+    assert got == [("SW", "b.MP4"), ("Oct", "z.MP4"), ("Added", "c.MP4")]
 
 
 def test_first_two_rule_uses_ten_stills_per_min():
@@ -83,9 +85,9 @@ def test_extract_end_to_end_one_video_per_call(tmp_path):
     assert fr.cmd_extract(ud, run, sys.executable, ROOT) == 0
     state = fr.read_json(run / "run.json")
     assert [(e["nn"], e["video"]) for e in state["extract"].values()] == [
-        ("01", "a.MP4"),
-        ("02", "b.mp4"),
-    ]  # sorted by group, then file
+        ("01", "b.mp4"),
+        ("02", "a.MP4"),
+    ]  # ledger (unpack) order
     assert state["events"][-1]["u6_extra"] == []
     for nn in ("01", "02"):  # stills and per-video records live on the "SSD"
         assert (ud / "extract" / nn / "extract_run.json").exists()
@@ -94,7 +96,7 @@ def test_extract_end_to_end_one_video_per_call(tmp_path):
     assert stills and all(not s.is_symlink() for s in stills)
     assert [p for p in run.rglob("*.jpg") if not p.is_symlink()] == []  # no still on the Mac
     q = list(csv.DictReader((run / "quality.csv").open()))
-    assert [r["video"] for r in q] == ["a.MP4", "b.mp4"]
+    assert [r["video"] for r in q] == ["b.mp4", "a.MP4"]
     assert all(float(r["stills_per_min"]) > 0 and r["failed"] == "" for r in q)
     merged = list(csv.DictReader((run / "stills.csv").open()))
     assert {r["video"] for r in merged} == {"a.MP4", "b.mp4"}

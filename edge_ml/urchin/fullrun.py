@@ -4,6 +4,7 @@
 
 `unpack_dir` is the SSD folder written by `archive_zips.py unpack` (plan.tsv, unpack_ledger.tsv,
 <group>/<video>). The video list comes from its ledger, never from a glob (exFAT `._` files).
+Videos run in unpack order (rev 2: the 4 added videos after the 25).
 `run_dir` is the Mac control folder (~/NereusData/nereus-camera-test-rig/<date>_e6_fullrun/):
 run.json, extract.log, quality.csv, the merged stills.csv / inventory.csv, and links. exFAT has no
 symlinks, so the links live here: inputs/NN/<video> → the SSD video (extract_stills takes a folder,
@@ -47,7 +48,7 @@ from edge_ml.urchin.pilot import _now as now
 log = logging.getLogger("urchin.fullrun")
 
 MIN_STILLS_PER_MIN = 10.0  # spec stop-early: the first 2 full videos
-DONE = ("unpacked", "skipped_identical")
+DONE = ("unpacked", "skipped_identical", "copied")
 QUALITY_FIELDS = [
     "nn", "group", "video", "duration_s", "candidates", "window_best", "kept", "stills_per_min",
     "blur_share", "dup_share", "median_sharpness", "wall_s", "failed",
@@ -55,10 +56,13 @@ QUALITY_FIELDS = [
 
 
 def unpacked_videos(unpack_dir: Path) -> list[dict]:
-    """Ledger rows of the videos on the SSD (latest row per target), sorted by group, file."""
-    latest = {(r["group"], r["file"]): r for r in _read_tsv(unpack_dir / "unpack_ledger.tsv")}
-    return sorted((r for r in latest.values() if r["status"] in DONE),
-                  key=lambda r: (r["group"], r["file"]))  # fmt: skip
+    """Ledger rows of the videos on the SSD: the latest row per target, in the order targets
+    first appear in the ledger, i.e. the unpack order (spec rev 2: the 4 added videos are
+    unpacked, so extracted, after the 25). A resume re-appends rows without reordering."""
+    latest: dict[tuple[str, str], dict] = {}
+    for r in _read_tsv(unpack_dir / "unpack_ledger.tsv"):
+        latest[(r["group"], r["file"])] = r  # an existing key keeps its first position
+    return [r for r in latest.values() if r["status"] in DONE]
 
 
 def problem(unpack_dir: Path, run_dir: Path, mount: Path) -> str | None:
