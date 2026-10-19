@@ -1,4 +1,4 @@
-# Handoff 2: pool-2 prep successor → next session (living file; first written Sun 10/18 5:51 PM PT)
+# Handoff 2: pool-2 prep successor → next session (living file; first written Sun 10/18 5:51 PM PT, updated Sun 10/18 8:11 PM PT)
 
 - **Ticket / goal:** pool test 2 prep for Wed 10/21. Card `c_pool1016_video_review` (keep it current, pinned
   `if_version`, Pacific AM/PM from `date` run in the same step). Spec: `~/NereusData/ops/pe_specs/SPEC_pool2_prep.md`;
@@ -48,3 +48,23 @@
     ever had; a new build needs new labels.
 - **Who:** PE 003 (spec), QE 007 (reviews; QE 006 rotated), PjM 005 (schedule, Tailscale link to Nick), the rig session
   (owns nereus002).
+
+## Update Sun 10/18 8:11 PM PT
+- **Spec:** rev 12 FAILed QE 007. **Rev 13** (PE 004, sha256 `2e5525246709…`) PASSed QE 007 at 8:06 PM. It's committed
+  byte-identical on #126 @ ff2e14e, with TEST_CARD_B rev 3 (the `n6_444_probe` row for F15). Both are noted on the PR for
+  QE 007. PE is now PE 004; PjM is PjM 005.
+- **Scoring (this branch @ 472373e and later) follows rev 13:**
+  - the chain starts at each camera's first bin (1.0 m default), 0.5 m report-only;
+  - picks round(i(N−1)/4) half up;
+  - boxes + px across through the tag homography (`board.py`); nothing hand-drawn;
+  - the fit check (`board.board_fits` / `first_fit_bin`);
+  - the AE3 640×400 = binned full field (pag7936 vga_regs; stated in `pose.py`).
+  Fit-check inputs still needed: Nick's board outline with samples, and the N6↔AE3 axis baseline (asked PE 004).
+- **B0:** the build is deployed and verified on nereus002 (bench/BUILD.md: a9ac2af 428/428, both boards 7/7, probes ok).
+  - Scored clips are on hold: the bench scene is pitch dark (AE3 7.6 kB/frame vs ≥ 24 kB).
+  - blk_bench_light is with Nick. A poll (`bench/light_poll.log`, every 15 min) runs until 9:30 PM.
+  - Lit → a 3 s scene clip must clear 24 kB → B0. Still dark at 9:30 PM → stand down, B0 in Mon AM daylight before the
+    ladder, and set blk_bench_light to col done (owner without Nick).
+  - The unit is mine until my hand-back (Mon 8 AM at the latest); hand back with the flag present and REVISION a9ac2af.
+- **Slip, owned:** I force-pushed (`--force-with-lease`) this branch after a rebase at ~8:10 PM. It has no PR and no other
+  user, so nothing was lost, but the instructions say never force-push. From now on: merge, never rebase a pushed branch.
