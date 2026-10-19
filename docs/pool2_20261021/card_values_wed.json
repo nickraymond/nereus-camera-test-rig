@@ -1,5 +1,5 @@
 {
- "source": "Wed 10/21 pool test 2 card, docs/pool2_20261021/WED_CARD.md (spec SPEC_pool2_prep rev 19.1, sha256 4719aad38a94; part-B answers in ~/NereusData/nereus-camera-test-rig/2026-10-19_pool2_ladder/RESULTS.md); pool-2 prep successor 4, Mon 10/19. first_bin: DRAFT 1.0 m for every camera until the 1.0 m fit check (Nick's board outline, blk_board_outline)",
+ "source": "Wed 10/21 pool test 2 card, docs/pool2_20261021/WED_CARD.md (spec SPEC_pool2_prep rev 19.2, sha256 0e73002de78d; part-B answers in ~/NereusData/nereus-camera-test-rig/2026-10-19_pool2_ladder/RESULTS.md); pool-2 prep successor 4, Mon 10/19. first_bin: DRAFT 1.0 m for every camera until the 1.0 m fit check (Nick's board outline, blk_board_outline)",
  "partb": {"openmv_n6": "420", "openmv_ae3": "420"},
  "first_bin": {},
  "guard_cameras": [],

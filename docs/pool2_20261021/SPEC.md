@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -618,3 +618,9 @@ ae3_hd FAILS 3.17 fps so the AE3 stays 640×400 4:2:0, md19_buf4 PASS).
   that HD and VGA both map to the fit's K; QE checks it in the code); `first_bin` waits on Nick's board outline (blk_board_outline).
 - **SD:** the estimate is now ≈ 1.36 GB (measured 64.8 MB per 30 s) (was ~0.6 GB in the cost line); the SD rules stand: ≥ 2 GB free at every reading, and before
   the dive SD free ≥ 2 GB + 2 × 1.36 GB (≈ 4.72 GB).
+
+## Amendment rev 19.2 (PE 006, Mon 10/19 10:01 AM PT): d57's "most clips usable" for Wed's 6 `best` clips. Binding, before any Wed data.
+- Asked by pool-2 successor 4 (rig #135 WED_CARD.md §6). d57 (Nick's "Approved.", thread 8b58f7d2, Sat 3:26 PM) says the N6 runs
+  the setting "where most clips are usable" (each ≥ 95 % of frames, d52); rev 7 pinned "most" as a strict majority (≥ 2 of 3).
+  Same rule on Wed: the N6's `best` phase is usable when **≥ 4 of its 6 clips** are usable, scored per clip (rev 19 item 1).
+  The AE3 keeps its own bars (rev 7: d57 names the N6 only).

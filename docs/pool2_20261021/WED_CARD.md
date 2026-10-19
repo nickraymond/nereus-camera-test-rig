@@ -1,6 +1,7 @@
 # nereus002 Wed dive card: pool test 2 (Wed 2026-10-21)
 
-**DRAFT** (part C of `SPEC_pool2_prep` rev 19.1, sha256 `4719aad38a94…`, QE 009 PASS-with-nits; it is committed as
+**DRAFT** (part C of `SPEC_pool2_prep` rev 19.2, sha256 `0e73002de78d…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
+19.2 = "most clips" on Wed; it is committed as
 [SPEC.md](SPEC.md) when this PR lands). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
 before Wed. Open items are marked **OPEN**, with who closes them.
 
@@ -33,7 +34,7 @@ ran on it). Boards: firmware 1.28.0 (OpenMV v5.0.1), board scripts 7/7 hashes as
   (the 120 s and 60 s ones too) on must do 19's bars (rev 19 item 2): **OPEN**. If a long clip fails, that phase splits
   into 30 s clips, PE 006 re-pins the string, and the bench run repeats.
 
-## 3. The program (pinned, spec rev 19.1; one line, copy it whole)
+## 3. The program (pinned, spec rev 19 / 19.1; one line, copy it whole)
 
 ```
 video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:1x60[--n6-framesize HD --ae3-subsampling 420]
@@ -100,8 +101,8 @@ Before the dive, **OPEN** (Nick, card blk_board_outline):
 **N6 vs AE3, the 6 `best` clips** (spec pass/fail block + rev 7 d57 + rev 8 R3 + rev 9 d55; rev 19 item 1: scored per clip,
 median and range across the 6, never one clip):
 - fps delivered ≥ 9.5 over the clip, per board;
-- AE3: 0 frames lost. N6: usable = ≥ 95 % of its 300 expected frames; most clips usable (**reading, PE 006 to pin: ≥ 4 of
-  6**), and the usable clips meet every other bar;
+- AE3: 0 frames lost. N6: usable = ≥ 95 % of its 300 expected frames; **≥ 4 of the 6 clips usable** (spec rev 19.2), and the
+  usable clips meet every other bar;
 - 0 wedges or ladder USB resets (F2; the normal per-clip board reset doesn't count);
 - N6 ↔ AE3 start skew ≤ 25 ms per clip (video_sync.json first frames, d55 a);
 - IMX708 ≥ 26.0 fps with max gap ≤ 100 ms (F8);
