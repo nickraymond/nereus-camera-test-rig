@@ -108,3 +108,7 @@
      - the print-sheet PDF sha256;
      - PE condition 1's bench run of the exact program before Tue 6 PM.
   5. W1–W5 scoring: open its PR (this branch) for QE 008 once frame extraction, the detector run and W3 colour exist.
+- **Rig owner (8:53 PM):** the hand-back was verified live. REC: start Monday's ladder with one cold boot (flag present,
+  `ups_power_cycle.sh`): idle CmaFree is 24 MB now vs 83 MB after ~1 h up on 10/15, so a fragmented CMA pool. That's a
+  call within the ladder hand-over. `recorder_web.py --review-only` (:8093) runs from boot; it holds no camera, and the gate's
+  program-name matching doesn't count it.
