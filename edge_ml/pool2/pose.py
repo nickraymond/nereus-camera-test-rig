@@ -3,9 +3,13 @@ the board's tag pose, using bm #184's centre focal lengths ... and Nick's measur
 
 The intrinsics are bm #184's pool049 ChArUco fit (NOT VALIDATED as a lens model, but centre-stable),
 from ~/NereusData/bm_cam_legacy/2026-10-17_pool049_calib/2026101715*/summary.json, intrinsics_full.
-They're scaled to each recorded mode: the OpenMV video sizes are the full sensor field scaled
-(VGA, 960x600 = the HD field, openmv/n6/board_config.py), and the IMX708 video's field is its
-ScalerCrop (imx708.meta.json) on the full 4608x2592 sensor. No distortion model is applied (the
+Rev 13: they are scaled to a Wed mode only if that mode shows the calibrated (HD) field:
+  - N6 960x600: the ISP scales the HD field (openmv/n6/board_config.py; OpenMV v5.0.1 source);
+  - 640x400 (AE3, and the N6 at VGA): **binned, full field**. OpenMV v5.0.1
+    drivers/sensors/pag7936.c: vga_regs set AVERAGE_MODE 1 with a 648x408 array (hd_regs:
+    AVERAGE_MODE 0, 1296x816) and an ISP window of 640x400 at offset (4, 4), i.e. HD's 1280x800 at
+    (8, 8) at half scale. So fx, fy, cx and cy all halve; there is no window shift;
+  - the IMX708 video's field is its ScalerCrop (imx708.meta.json) on the full 4608x2592 sensor. No distortion model is applied (the
 fit is not validated as one); the board is held near the image centre, where it matters least.
 """
 

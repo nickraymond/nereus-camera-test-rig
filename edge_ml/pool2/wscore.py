@@ -9,7 +9,14 @@ detector output, sharpness); nothing here reads files. One frame record:
    "samples": {"u80a" | "u80b" | "u50a" | "u50b": {"px": px across (reference box), "hit": the
                detector's IoU >= 0.5 hit, "human": the blind yes/no (fallback only)}}}
 
-Readings pinned in spec rev 12 by PE 003 (Sun 10/18, sha256 760aab8783dc):
+Spec rev 13 (PE 004, Sun 10/18 8:04 PM, sha256 2e5525246709; QE 007's rev 12 fixes):
+  - the W1 chain starts at each camera's first bin (1.0 m unless the Wed card says a later one,
+    where the whole board first fits); the 0.5 m bin is report-only;
+  - frame pick: over the N candidates in time order, indices round(i (N - 1) / 4), i = 0..4, with
+    round = half up (floor(x + 0.5)), not Python's half-to-even;
+  - the tie-break MTF50 is the median over the 1.0 m bin's 5 W1 frames;
+  - the detector fallback looks at each camera's first bin.
+Readings pinned since rev 12 (PE 003):
   - "both 80 mm samples are >= 30 px across" holds in each of the bin's 5 frames;
   - hold frames = speed < 0.1 m/s from the tag pose; a bin with >= 5 of them picks its 5 evenly in
     time from them, otherwise from all its whole-board frames, in time order (F17);
@@ -20,9 +27,11 @@ Readings pinned in spec rev 12 by PE 003 (Sun 10/18, sha256 760aab8783dc):
 
 from __future__ import annotations
 
+import math
 import statistics
 
 BIN_CENTRES = tuple(round(0.5 * k, 1) for k in range(1, 9))  # 0.5 ... 4.0 m
+FIRST_BIN = 1.0        # rev 13 R2: the chain's first bin unless the Wed card names a later one
 BIN_HALF_M = 0.25
 N_PER_BIN = 5
 PX_MIN = 30.0          # Nick, 10:45 AM: "30px for the 8cm target"; can only tighten after data
@@ -72,7 +81,7 @@ def select_bin(frames: list[dict], centre: float, n: int = N_PER_BIN) -> list[di
     pool = sorted((held if len(held) >= n else cand), key=lambda fs: fs[0]["t"])
     if len(pool) < n:
         return None
-    idx = [round(k * (len(pool) - 1) / (n - 1)) for k in range(n)] if n > 1 else [0]
+    idx = [math.floor(k * (len(pool) - 1) / (n - 1) + 0.5) for k in range(n)] if n > 1 else [0]
     return [pool[i][0] for i in idx]
 
 
@@ -91,12 +100,19 @@ def bin_sees(sel: list[dict], size: str = "80", key: str = "hit") -> dict:
     return {"ok": not why, "why": why}
 
 
-def detectable_range(frames: list[dict], size: str = "80", key: str = "hit") -> dict:
-    """The largest bin d where bin_sees holds and holds in every closer bin (chain from 0.5 m).
-    Reports where and why the chain ended: px / hits / frames / tag-limited (F16: the chain held
-    through the farthest bin that has tag-decoded frames, so the tags, not the samples, set it)."""
+def detectable_range(frames: list[dict], size: str = "80", key: str = "hit",
+                     first_bin: float = FIRST_BIN) -> dict:
+    """The largest bin d where bin_sees holds and holds in every closer bin from ``first_bin``
+    (rev 13: 1.0 m, or the camera's first whole-board bin on the Wed card). Bins before it are
+    scored and reported only. Reports where and why the chain ended: px / hits / frames /
+    tag-limited (F16: the chain held through the farthest bin with tag-decoded frames)."""
     bins, last, end = {}, None, None
-    for c in BIN_CENTRES:
+    for c in [b for b in BIN_CENTRES if b < first_bin]:  # report-only
+        sel = select_bin(frames, c)
+        bins[c] = ({**bin_sees(sel, size, key), "report_only": True,
+                    "mtf50_lpmm": _median([f.get("mtf50_lpmm") for f in sel])} if sel
+                   else {"ok": False, "why": ["frames<5"], "report_only": True})
+    for c in [b for b in BIN_CENTRES if b >= first_bin]:
         sel = select_bin(frames, c)
         if sel is None:
             bins[c] = {"ok": False, "why": ["frames<5"]}
@@ -115,14 +131,14 @@ def detectable_range(frames: list[dict], size: str = "80", key: str = "hit") -> 
     if tag_limited:
         end = (end[0], "tag-limited")
     return {"range_m": last, "tag_limited": tag_limited, "end_bin": end[0] if end else None,
-            "end_reason": end[1] if end else None, "bins": bins}
+            "end_reason": end[1] if end else None, "first_bin": first_bin, "bins": bins}
 
 
 def detector_fallback(per_camera: dict[str, dict]) -> bool:
-    """Rev 12: the detector is replaced by the blind yes/no when it hits < 4 of 5 in the 0.5 m bin
-    on every camera (per_camera: detectable_range results)."""
+    """Rev 13: the detector is replaced by the blind yes/no when it hits < 4 of 5 in the chain's
+    first bin on every camera (per_camera: detectable_range results)."""
     def weak(res):
-        b = res["bins"].get(BIN_CENTRES[0]) or {}
+        b = res["bins"].get(res.get("first_bin", FIRST_BIN)) or {}
         return any(":hits" in w for w in b.get("why", [])) or "frames<5" in b.get("why", [])
     return bool(per_camera) and all(weak(r) for r in per_camera.values())
 

@@ -92,3 +92,26 @@ def test_w2_f10_f12():
     assert w.f10_flags({"imx708": 2.0, "openmv_n6": 2.25}) and not w.f10_flags({"a": 2.0, "b": 2.1})
     assert w.f10_pass_unmeasured([True, False, False])
     assert not w.f10_pass_unmeasured([True] + [False] * 3)
+
+
+def test_rev13_chain_starts_at_the_first_bin_and_05_is_report_only():
+    fr = _frames(w.BIN_CENTRES, px80=240.0)
+    for f in fr:                                     # the 0.5 m bin fails (board cut, misses)
+        if w.bin_of(f["range_m"]) == 0.5:
+            f["samples"]["u80a"]["hit"] = False
+    res = w.detectable_range(fr)
+    assert res["first_bin"] == 1.0 and res["range_m"] == 4.0
+    assert res["bins"][0.5]["report_only"] and not res["bins"][0.5]["ok"]
+    late = w.detectable_range(fr, first_bin=1.5)     # the Wed card says the board fits from 1.5 m
+    assert late["range_m"] == 4.0 and late["bins"][1.0]["report_only"]
+    weak = {c: w.detectable_range(fr, first_bin=1.5) for c in ("openmv_n6", "openmv_ae3")}
+    assert not w.detector_fallback(weak)             # judged at each camera's first bin
+
+
+def test_rev13_frame_pick_rounds_half_up():
+    fr = [{"t": float(k), "range_m": 1.0, "board_whole": True} for k in range(7)]
+    for f in fr:                                      # all moving (no hold frames): speed 0 ...
+        f["range_m"] = 1.0 + 0.2 * f["t"] / 6         # ... 0.2 m over 6 s = 0.033 m/s -> hold
+    sel = w.select_bin(fr, 1.0)
+    # N = 7: i (N-1)/4 = 0, 1.5, 3, 4.5, 6 -> half up 0, 2, 3, 5, 6 (Python round: 0, 2, 3, 4, 6)
+    assert [f["t"] for f in sel] == [0.0, 2.0, 3.0, 5.0, 6.0]
