@@ -77,7 +77,7 @@ N6_USABLE_OF_3 = 2  # an N6 setting holds when >= 2 of 3 clips are usable + ever
 PROBE_TAIL_S = 0.5  # N9 probe: the stream ran the clip when its last frame is this close to the end
 EXIT_HOLDS, EXIT_FAILS, EXIT_USAGE, EXIT_REFUSED, EXIT_THROTTLED = 0, 1, 2, 3, 4
 # setting.json must match these to resume a label (QE 005 R4)
-SAME_ARGS = ("under", "n", "seconds", "ae3_floor", "sync_args", "probe")
+SAME_ARGS = ("under", "n", "seconds", "ae3_floor", "sync_args", "probe", "probe_min_fps")
 OWNED = ("--seconds", "--out", "--cameras")  # the bench's own; refused after `--` (QE 006 nit)
 # PAG7936 frame size per board framesize name (openmv/*/board_config.py); "WxH" names are literal
 FRAMESIZE_DIMS = {"QVGA": "320x200", "VGA": "640x400", "HD": "1280x800"}
@@ -103,12 +103,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                     help="AE3 relative bar: its own ctl 640x400 rate - 0.2 (card §5), if B0 failed")
     ap.add_argument("--probe", default=None, metavar="WxH",
                     help="N9 probe: one clip, PROBE PASS/FAIL on WxH frames for the whole clip")
+    ap.add_argument("--probe-min-fps", type=float, default=None,
+                    help="probe also needs fps_clip >= this (spec rev 12 F15: N6 4:4:4, 5 fps)")
     ap.add_argument("--no-fail-fast", action="store_true", help="keep going after a miss")
     a = ap.parse_args(argv[:i])
     a.sync_args = list(argv[i + 1:])
     owned = [t for t in a.sync_args if t.split("=", 1)[0] in OWNED]
     if owned:
         ap.error(f"{owned} after -- : this script sets --seconds / --out / --cameras itself")
+    try:  # a typo would otherwise cost a clip, and under R4 fail the label for good
+        _load("sync_video").check_extra_args(a.sync_args)
+    except ValueError as exc:
+        ap.error(f"sync_video args after --: {exc}")
     if a.probe:
         a.n, a.no_fail_fast = 1, True
     return a
@@ -230,11 +236,15 @@ def decode_check(clip: Path, cam: str, dims: str) -> dict:
 
 
 def probe_result(rows: list[dict], under: str, dims: str, seconds: float = 30.0,
-                 decode: dict | None = None) -> dict:
-    """N9 probe verdict (not a setting verdict): every frame of the board under test decodes at
-    ``dims`` (``decode``, from decode_check) and its stream ran the whole clip. Pure."""
+                 decode: dict | None = None, min_fps: float | None = None) -> dict:
+    """Probe verdict (not a setting verdict): every frame of the board under test decodes at
+    ``dims`` (``decode``, from decode_check), its stream ran the whole clip, its frames carry the
+    asked chroma (format_misses; spec rev 12 F15: the N6 asked for 4:4:4) and, with ``min_fps``,
+    its fps_clip reaches it (F15: 5 fps). Pure."""
     r = next((x for x in rows if x.get("camera") == under), {})
-    why = []
+    why = [f for f in format_misses(r) if f.startswith("chroma:")]
+    if min_fps is not None and (r.get("fps_clip") or 0) < min_fps:
+        why.append(f"fps_clip:{r.get('fps_clip')}<{min_fps:g}")
     if r.get("resolution_measured") != dims:
         why.append(f"dims:{r.get('resolution_measured')}")
     if r.get("bad_frames") != 0:
@@ -340,7 +350,7 @@ def write_setting(out: Path, rec: dict, a: argparse.Namespace) -> None:
     if a.probe:
         last = scored[-1] if scored else {}
         rec.update(probe_result(last.get("rows") or [], a.under, a.probe, a.seconds,
-                                last.get("decode"))
+                                last.get("decode"), a.probe_min_fps)
                    if last else {"probe_ok": False, "probe_why": ["no_clip"]})
         rec["holds"] = None  # N9: a probe never decides a setting
     else:

@@ -131,6 +131,20 @@ def jpeg_sof(data: bytes) -> dict | None:
     return None
 
 
+def first_frame_format(clip: Path, cam: str) -> dict | None:
+    """The first frame's size and chroma format from its JPEG header (cheap: one frame), so a
+    caller can record what a board really sent, not only what was asked. None if unreadable."""
+    try:
+        with (clip / f"{cam}_frames.csv").open() as f:
+            row = next(csv.DictReader(f))
+        with (clip / f"{cam}.mjpeg").open("rb") as f:
+            sof = jpeg_sof(f.read(min(int(row["bytes"]), 4096)))
+    except (OSError, StopIteration, KeyError, ValueError):
+        return None
+    return {"dims": f"{sof['width']}x{sof['height']}", "subsampling": sof["subsampling"]} \
+        if sof else None
+
+
 def mjpeg_frames(clip: Path, cam: str, sizes: list[int]) -> dict:
     """Every frame of <cam>.mjpeg, split by frames.csv's byte counts: the measured size and
     chroma format, and frames that aren't whole JPEGs (no FF D8 start, no FF D9 end, no SOF)."""

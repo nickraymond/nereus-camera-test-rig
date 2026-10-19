@@ -240,3 +240,108 @@ def test_dive_program_phases_are_cumulative_and_video_counts_its_clips():
 def test_dive_program_rejects_unknown_phase():
     with pytest.raises(ValueError):
         pool_capture.parse_program("cal_a:5,warp:3")
+
+
+# -- pool 2 (Wed 10/21): per-phase labels + sync_video args (PE 003 conditions 2-4) -------------
+WED = "video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420]"
+
+
+def test_program_phase_args_and_labels():
+    ctl, best = pool_capture.parse_program(WED)
+    assert (ctl["label"], ctl["start_min"], ctl["end_min"], "args" in ctl) == ("ctl", 0, 1, False)
+    assert best["label"] == "best" and best["args"] == ["--n6-framesize", "HD",
+                                                        "--ae3-subsampling", "420"]
+    assert (best["start_min"], best["end_min"], best["clips"]) == (1, 7, 6)
+
+
+def test_program_without_brackets_is_unchanged():
+    assert pool_capture.parse_program("cal_a:12,cal_b:10,stills:10,video:6x30") == [
+        {"name": "cal_a", "start_min": 0, "end_min": 12},
+        {"name": "cal_b", "start_min": 12, "end_min": 22},
+        {"name": "stills", "start_min": 22, "end_min": 32},
+        {"name": "video", "clips": 6, "clip_s": 30.0, "period_s": 60.0, "start_min": 32,
+         "end_min": 38}]
+
+
+@pytest.mark.parametrize("bad", [
+    "video:6x30[--n6-framesize HD",            # unclosed
+    "video:6x30[[--timing]]",                  # nested
+    "video:6x30[--timing]x",                   # text after the bracket
+    "video:6x30]",                             # stray close
+    "video:6x30[]",                            # empty: leave the brackets out
+    "stills:5[--timing]",                      # args only on video phases
+    "video:6x30[--bogus 1]",                   # sync_video would refuse it
+    "video:6x30[--n6-framesize]",              # missing value
+    "video:6x30[--seconds 5]",                 # owned by pool_capture
+    "video:6x30[--out /tmp/x]",
+    "video@Best:6x30",                         # labels are lower case
+    "video:6x30[--sec 5]",                     # QE 007 nit 1: an abbreviation of --seconds
+    "video:6x30[--ou /tmp/x]",                 # ... and of --out
+    "video@a:1x30,video@a:1x30",               # QE 007 nit 4: a label names one phase
+])
+def test_malformed_program_is_refused_before_any_recording(bad):
+    with pytest.raises(ValueError):
+        pool_capture.parse_program(bad)
+
+
+def test_check_only_prints_the_program_and_its_sha_and_touches_nothing(monkeypatch, capsys):
+    import hashlib
+    import sys as _sys
+    monkeypatch.setattr(pool_capture, "run", lambda a: pytest.fail("run() must not be called"))
+    monkeypatch.setattr(_sys, "argv", ["pool_capture.py", "run", "--check-only", "--program", WED])
+    assert pool_capture.main() == 0
+    out = capsys.readouterr().out
+    assert hashlib.sha256(WED.encode()).hexdigest() in out
+    assert "video@best 1-7 min --n6-framesize HD --ae3-subsampling 420" in out
+    monkeypatch.setattr(_sys, "argv", ["pool_capture.py", "run", "--check-only", "--program",
+                                       "video:6x30[--bogus 1]"])
+    with pytest.raises(SystemExit) as e:
+        pool_capture.main()
+    assert e.value.code == 2
+
+
+def test_video_clip_passes_the_phase_args_and_records_what_the_boards_sent(tmp_path, monkeypatch):
+    """PE 003 condition 2: each clip records its args, the boards' requested settings and the
+    format of their first frame, so a wrong-setting clip shows at the pool pull."""
+    def jpeg(w, h, y_hv):
+        body = bytes([8]) + h.to_bytes(2, "big") + w.to_bytes(2, "big") + bytes(
+            [3, 1, y_hv, 0, 2, 0x11, 1, 3, 0x11, 1])
+        return b"\xff\xd8\xff\xc0" + (len(body) + 2).to_bytes(2, "big") + body + b"\xff\xd9"
+
+    seen = {}
+
+    class FakeProc:
+        pid = 999_999_999
+
+        def __init__(self, cmd, **kw):
+            seen["cmd"] = cmd
+            out = Path(cmd[cmd.index("--out") + 1])
+            out.mkdir(parents=True)
+            cams = {}
+            for cam, fr in (("openmv_n6", jpeg(1280, 800, 0x22)),
+                            ("openmv_ae3", jpeg(640, 400, 0x22))):
+                (out / f"{cam}.mjpeg").write_bytes(fr)
+                (out / f"{cam}_frames.csv").write_text(
+                    f"seq,ticks_ms,host_rx_mono,bytes,width,height\n0,1,0,{len(fr)},1,1\n")
+                cams[cam] = {"ok": True, "frames": 1, "fps": 10.0, "fps_clip": 9.9,
+                             "frames_lost": 0, "settings": {"framesize": "X"}}
+            (out / "video_sync.json").write_text(json.dumps({"ok": True, "cameras": cams}))
+
+        def communicate(self, timeout=None):
+            return "", None
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(pool_capture.subprocess, "Popen", FakeProc)
+    monkeypatch.setattr(pool_capture, "_killpg_quiet", lambda pgid: None)
+    args = ["--n6-framesize", "HD", "--ae3-subsampling", "420"]
+    v = pool_capture.run_video_clip(tmp_path, 7, 30.0, args)
+    assert seen["cmd"][-4:] == args and v["args"] == args and v["ok"]
+    assert v["measured"] == {"openmv_n6": {"dims": "1280x800", "subsampling": "420"},
+                             "openmv_ae3": {"dims": "640x400", "subsampling": "420"}}
+    assert v["settings"]["openmv_n6"] == {"framesize": "X"}
+    assert "n6 1280x800 420" in pool_capture.health_text({"set": 7, "video": v})
+    # a phase without args runs the same command as before
+    pool_capture.run_video_clip(tmp_path, 8, 30.0)
+    assert seen["cmd"][-4:] == ["--seconds", "30.0", "--out", str(tmp_path / "video" / "clip008")]

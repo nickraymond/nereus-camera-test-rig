@@ -153,8 +153,10 @@ def test_r1_the_cards_command_lines_parse(argv, under, sync_args):
 
 
 def test_r1_options_after_dashdash_belong_to_sync_video_and_usage_is_exit_2():
-    a = pb.parse_args("x --under openmv_n6 -- --under openmv_ae3".split())
-    assert a.under == "openmv_n6" and a.sync_args == ["--under", "openmv_ae3"]
+    a = pb.parse_args("x --under openmv_n6 -- --n6-quality 80 --timing".split())
+    assert a.under == "openmv_n6" and a.sync_args == ["--n6-quality", "80", "--timing"]
+    with pytest.raises(SystemExit):   # not a sync_video option: refused before any clip
+        pb.parse_args("x --under openmv_n6 -- --under openmv_ae3".split())
     assert pb.parse_args("p --under openmv_n6 --probe 960x600".split()).n == 1
     with pytest.raises(SystemExit) as e:
         pb.parse_args("x -- --under openmv_n6".split())   # --under only after --: usage error
@@ -396,3 +398,28 @@ def test_probe_decodes_every_frame_with_pillow(tmp_path):
         "decode:1 of 3")
     assert pb.probe_result([row], "openmv_n6", "64x40",
                            decode={"frames": 3, "failed": 0})["probe_ok"]
+
+
+def test_sync_args_are_checked_before_any_clip():
+    with pytest.raises(SystemExit) as e:
+        pb.parse_args("n6_hd --under openmv_n6 -- --n6-framesize hd".split())
+    assert e.value.code == pb.EXIT_USAGE
+    with pytest.raises(SystemExit):
+        pb.parse_args("x --under openmv_ae3 -- --ae3-framesize 960x600".split())
+
+
+
+def test_rev12_f15_n6_444_probe_checks_chroma_and_5_fps():
+    row = {"camera": "openmv_n6", "resolution_measured": "640x400", "bad_frames": 0,
+           "last_frame_s": 29.9, "error": None, "frames": 150, "fps_clip": 5.0,
+           "subsampling": "444", "subsampling_measured": "444", "framesize_asked": "VGA"}
+    dec = {"frames": 150, "failed": 0}
+    assert pb.probe_result([row], "openmv_n6", "640x400", decode=dec, min_fps=5)["probe_ok"]
+    # the hardware encoder ignored 4:4:4
+    assert pb.probe_result([{**row, "subsampling_measured": "420"}], "openmv_n6", "640x400",
+                           decode=dec, min_fps=5)["probe_why"] == ["chroma:420!=444"]
+    assert pb.probe_result([{**row, "fps_clip": 4.9}], "openmv_n6", "640x400", decode=dec,
+                           min_fps=5)["probe_why"] == ["fps_clip:4.9<5"]
+    a = pb.parse_args("n6_444_probe --under openmv_n6 --probe 640x400 --probe-min-fps 5 -- "
+                      "--n6-subsampling 444 --timing".split())
+    assert (a.n, a.probe_min_fps, a.sync_args[:2]) == (1, 5.0, ["--n6-subsampling", "444"])

@@ -6,6 +6,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 _SPEC = importlib.util.spec_from_file_location("sync_video", ROOT / "scripts" / "sync_video.py")
 sv = importlib.util.module_from_spec(_SPEC)
@@ -163,3 +165,14 @@ def test_clip_rate_counts_frames_in_the_clip_window():
     assert sv.clip_rate(early, fire, 30.0) == {"fps_clip": 6.7, "last_frame_s": 20.0}
     assert sv.clip_rate([], fire, 30.0) == {"fps_clip": 0.0, "last_frame_s": None}
     assert sv.clip_rate(full, None, 30.0)["fps_clip"] is None
+
+
+def test_extra_args_are_checked_against_the_boards_own_framesizes():
+    # pool 2 dive program (pool_capture --program "video:6x30[...]"): refused at arm, not underwater
+    sv.check_extra_args(["--n6-framesize", "960x600", "--ae3-subsampling", "420", "--timing"])
+    for bad in (["--ae3-framesize", "960x600"],       # the AE3 has no ISP scaler
+                ["--n6-framesize", "hd"], ["--board-framesize", "960x600"],
+                ["--ae3-subsampling", "411"], ["--seconds", "5"], ["--out=/tmp/x"],
+                ["--sec", "5"], ["--ou", "/tmp/x"], ["--n6-frame", "HD"]):   # no abbreviations
+        with pytest.raises(ValueError):
+            sv.check_extra_args(bad)

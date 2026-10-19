@@ -433,3 +433,12 @@ def test_ram_flag_is_relative_to_the_boots_idle_cma_rev7():
     assert not gate.ram_flag({"cma_free_mb": 23, "mem_avail_mb": 190}, idle)   # 19 MB below
     assert gate.ram_flag({"cma_free_mb": 21, "mem_avail_mb": 190}, idle)       # 21 MB below
     assert gate.ram_flag({"cma_free_mb": 40, "mem_avail_mb": 149}, idle)       # avail < 150
+
+
+def test_arm_refuses_bad_video_args_before_arming(monkeypatch):
+    monkeypatch.setattr(gate, "cmd_arm", lambda a: pytest.fail("must not arm"))
+    monkeypatch.setattr(sys, "argv", ["gate_cycle.py", "arm", "--video-only",
+                                      "--video-args=--n6-framesize hd"])
+    with pytest.raises(SystemExit) as e:
+        gate.main()
+    assert e.value.code == 2

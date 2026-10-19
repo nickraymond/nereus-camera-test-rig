@@ -58,6 +58,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -1230,6 +1231,15 @@ def main() -> int:
     m = sub.add_parser("mode")
     m.add_argument("mode", choices=("auto", "switch"))
     a = ap.parse_args()
+    if a.cmd == "arm" and a.video_args:  # checked before arming, not at the first boot's clip
+        spec = importlib.util.spec_from_file_location("sync_video",
+                                                      ROOT / "scripts" / "sync_video.py")
+        sv = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sv)
+        try:
+            sv.check_extra_args(a.video_args)
+        except ValueError as exc:
+            ap.error(f"--video-args: {exc}")
     return {"arm": cmd_arm, "disarm": cmd_disarm, "status": cmd_status, "stop": cmd_stop,
             "mode": cmd_mode, "boot": cmd_cycle, "once": cmd_cycle, "seal": cmd_seal,
             "sd": cmd_sd}[a.cmd](a)
