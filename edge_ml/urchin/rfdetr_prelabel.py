@@ -5,8 +5,8 @@
 
 stills.txt lists still paths relative to stills_root, one per line. The output has the same format
 as owl.py ({"model", "query", "min_score", "detections": {still: [{"box", "score"}, ...]}}), so
-`review.py candidate-sheets` works unchanged. Tiling is the PREREG's: squares of
-min(short side, 1080) px with >= 20 % overlap, detections merged by NMS at IoU 0.5.
+`review.py candidate-sheets` works unchanged. Tiling: squares of min(short side, 560) px,
+the model's own input size (tiles fed about 1:1), >= 20 % overlap, NMS at IoU 0.5.
 
 Needs the `rfdetr` package (Apache-2.0) from Nick's environment (~/nereus_ml/venvs/rfdetr); the
 model, its training code (ADIN_SPI_OpenMV ml/rfdetr_gate/) and data live outside this repo.
@@ -30,7 +30,7 @@ CHECKPOINT = Path.home() / "nereus_ml/runs/rfdetr_gate/checkpoint_best_total.pth
 # SPEC_e6_prelabel_rfdetr rev 3 must do 1 / F3: the only checkpoint the full run may use.
 CHECKPOINT_BYTES = 127_700_271
 CHECKPOINT_SHA256 = "ae9aa853d9d73354f318e03e710f517d032408791721f206f55c01f3ca0c915f"
-TILE_MAX = 1080
+TILE_MAX = 560  # Nick, Sun 10/18: the model's own input size, tiles fed ~1:1 (rig #131)
 NMS_IOU = 0.5
 MAX_PER_STILL = 300
 
