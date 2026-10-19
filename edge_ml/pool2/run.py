@@ -8,9 +8,9 @@ Stages, in order; each reads the previous stage's saved output under OUT (a run 
   select  W1's pass per camera (the one that ran its part-B chroma), F10 flags across cameras,
           the 5 frames per bin, and the reference-box file                     -> BOXES (json)
   (commit BOXES to git: rev 13 "the box file is written and committed before the detector runs")
-  detect  refuses unless BOXES is committed and unchanged; OWLv2 "purple sea urchin" on the
-          picked frames; a sample is hit when a detection >= the threshold has IoU >= 0.5 with
-          its reference box                                                     -> OUT/detect/
+  detect  refuses unless BOXES and CARD are committed and unchanged; OWLv2 "purple sea urchin"
+          at the rev 17 pin, every box >= 0.05 kept; a sample is hit at threshold T when a
+          detection >= T has IoU >= 0.5 with its reference box (T = 0.05, 0.3, 0.5) -> OUT/detect/
   crops   (only if the fallback triggers) shuffled sample crops under neutral names for the blind
           viewer + a separate key                                               -> OUT/crops/
   score   W1 per camera (80 + 50 mm), N6 vs AE3, fallback, W2 + F12, F10, W3, W4, W5 tables, and
@@ -18,15 +18,17 @@ Stages, in order; each reads the previous stage's saved output under OUT (a run 
 
 Phases: --phase NAME=SPEC, NAME in pass1 | pass2 | check | w5_slow | w5_fast; SPEC = @label
 (the clips whose sets.jsonl phase is "video@label") or comma-separated clip dirs relative to
-RUN_DIR. Usage:
+RUN_DIR. A clip is named by its path relative to RUN_DIR (QE 008 R5), so clips of two run folders
+never collide; a clip that failed (no video_sync.json) is listed as lost, not scanned (N1).
 
-  python -m edge_ml.pool2.run scan   RUN_DIR OUT --layout L.yaml --phase pass1=@swim1 ...
-  python -m edge_ml.pool2.run select OUT --partb openmv_n6=420 --partb openmv_ae3=420 \
-                                         --boxes results/pool2_20261021/w1_boxes.json
-  python -m edge_ml.pool2.run detect OUT --boxes ... --model-id M --model-revision R --min-score S
-  python -m edge_ml.pool2.run score  OUT --boxes ... [--blind answers.json]
+CARD = the Wed card's values (card_values.py: part-B chroma, first bins, guard cameras, detector
+pin), committed in the rig repo before the dive (QE 008 R4). Every stage checks it. The card and
+box files live in docs/pool2_20261021/ (results/ is git-ignored). Usage:
 
---first-bin CAM=D (from the Wed card's fit check) moves a camera's chain start; default 1.0 m.
+  python -m edge_ml.pool2.run scan   RUN_DIR OUT --card CARD --layout L.yaml --phase pass1=@swim1 ..
+  python -m edge_ml.pool2.run select OUT --card CARD --boxes docs/pool2_20261021/w1_boxes.json
+  python -m edge_ml.pool2.run detect OUT --card CARD --boxes ...
+  python -m edge_ml.pool2.run score  OUT --card CARD --boxes ... [--blind answers.json]
 """
 
 from __future__ import annotations
@@ -45,11 +47,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from edge_ml.pool2 import board, frames, pose, wscore
+from edge_ml.pool2 import board, card_values, frames, pose, wscore
 from edge_ml.pool2.layout import load_layout
 
 log = logging.getLogger("pool2.run")
 ROOT = Path(__file__).resolve().parents[2]
+REPO = ROOT                # the repo the box and card files must be committed in (tests: tmp)
 PHASES = ("pass1", "pass2", "check", "w5_slow", "w5_fast")
 MATCH_WINDOW_S = 0.050     # spec rev 5: three frames within 50 ms are "the same instant"
 W4_HOLDS_M = (3.0, 2.0, 1.0)
@@ -83,22 +86,40 @@ def _read(path: Path):
 
 # -- phases -> clips -----------------------------------------------------------------------------
 
-def phase_clips(run_dir: Path, spec: str) -> list[Path]:
-    """@label -> the clips sets.jsonl recorded under phase 'video@label'; else clip dirs."""
+def phase_clips(run_dir: Path, spec: str, lost: list | None = None) -> list[Path]:
+    """@label -> the clips sets.jsonl recorded under phase 'video@label'; else clip dirs. A clip
+    whose sync_video failed (sets.jsonl ok false, or no video_sync.json) goes to ``lost`` as
+    {"clip", "why"} instead (QE 008 N1: F19's "that pass is lost")."""
     if spec.startswith("@"):
         want = f"video@{spec[1:]}"
-        out = []
+        cand = []
         for raw in (run_dir / "sets.jsonl").read_text(errors="replace").splitlines():
             try:
                 line = json.loads(raw)
             except ValueError:
                 continue
-            if line.get("phase") == want and (line.get("video") or {}).get("dir"):
-                out.append(run_dir / line["video"]["dir"])
-        if not out:
+            v = line.get("video") or {}
+            if line.get("phase") == want and v.get("dir"):
+                cand.append((run_dir / v["dir"], None if v.get("ok", True) else
+                             f"sets.jsonl ok false: {str(v.get('error'))[:120]}"))
+        if not cand:
             raise SystemExit(f"no clip in {run_dir / 'sets.jsonl'} has phase {want!r}")
-        return out
-    return [run_dir / c for c in spec.split(",") if c]
+    else:
+        cand = [(run_dir / c, None) for c in spec.split(",") if c]
+    out = []
+    for clip, why in cand:
+        if why is None and not (clip / "video_sync.json").exists():
+            why = "no video_sync.json"
+        if why is None:
+            out.append(clip)
+        elif lost is not None:
+            lost.append({"clip": clip_id(run_dir, clip), "why": why})
+    return out
+
+
+def clip_id(run_dir: Path, clip: Path) -> str:
+    """A clip's name everywhere downstream: its path relative to RUN_DIR (QE 008 R5)."""
+    return os.path.relpath(clip, run_dir)
 
 
 def _kv(items: list[str], conv=str) -> dict:
@@ -113,10 +134,14 @@ def _kv(items: list[str], conv=str) -> dict:
 
 # -- scan ----------------------------------------------------------------------------------------
 
-def scan_clip(clip: Path, cam: str, lay, colour: bool = True, raw_corners: bool = False) -> dict:
+def scan_clip(clip: Path, cam: str, lay, colour: bool = True, guard: bool | None = None,
+              cid: str | None = None) -> dict:
+    """``guard``: the Wed card says this camera is on the rev 16 guard (raw corners); the clip's
+    mode must agree, else SystemExit (QE 008 R4). ``cid``: the clip's id (clip_id)."""
+    cid = cid or clip.name
     sync = frames.load_sync(clip)
     fr = frames.camera_frames(clip, cam, sync)
-    out = {"clip": clip.name, "camera": cam, "frames": [], "chroma": None,
+    out = {"clip": cid, "camera": cam, "frames": [], "chroma": None,
            "files_sha256": {}}
     if not fr:
         return out
@@ -132,17 +157,22 @@ def scan_clip(clip: Path, cam: str, lay, colour: bool = True, raw_corners: bool 
     t0 = time.monotonic()
     for f, img in frames.iter_images(clip, cam, fr):
         if img is None:
-            out["frames"].append({"clip": clip.name, "index": f["index"], "t": f["t"],
+            out["frames"].append({"clip": cid, "index": f["index"], "t": f["t"],
                                   "decode_error": True, "range_m": None, "tags": 0})
             continue
         if lens is None:
             h, w = img.shape[:2]
-            lens = pose.lens_for(cam, w, h, crop, force_raw=raw_corners)
+            lens = pose.lens_for(cam, w, h, crop)
+            if guard is not None and guard == lens.mapped:
+                raise SystemExit(
+                    f"{cid} {cam} {w}x{h}: the Wed card says guard={guard}, but this mode "
+                    f"{'maps' if lens.mapped else 'does not map'} ({lens.why}). Rev 16: raw "
+                    "corners only for a mode that can't be mapped; fix the card before scoring")
             out.update(width=w, height=h, scaler_crop=crop, lens=lens.record())
-        rec = {"clip": clip.name, "index": f["index"], "t": round(f["t"], 4)}
+        rec = {"clip": cid, "index": f["index"], "t": round(f["t"], 4)}
         rec.update(measure_frame(img, lens, lay, colour))
         out["frames"].append(rec)
-    log.info("%s %s: %d frames scanned in %.0f s", clip.name, cam, len(out["frames"]),
+    log.info("%s %s: %d frames scanned in %.0f s", cid, cam, len(out["frames"]),
              time.monotonic() - t0)
     return out
 
@@ -152,25 +182,40 @@ def measure_frame(img, lens, lay, colour):  # indirection so tests can stub the 
     return measure.measure_frame(img, lens, lay, colour)
 
 
+def load_card(path: str | Path) -> tuple[card_values.CardValues, str]:
+    """The Wed card's values, committed and unchanged in REPO (R4); (values, commit)."""
+    commit = committed_unchanged(Path(path))
+    return card_values.load(path), commit
+
+
 def cmd_scan(a) -> int:
+    card, card_commit = load_card(a.card)
     lay = load_layout(a.layout, allow_template=a.allow_template)
     phases = _kv(a.phase)
     bad = sorted(set(phases) - set(PHASES))
     if bad:
         raise SystemExit(f"unknown phase(s) {bad}; use {PHASES}")
-    out = Path(a.out)
+    out, run_dir = Path(a.out), Path(a.run_dir)
     man = {"stage": "scan", "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-           "code": code_state(), "run_dir": str(a.run_dir), "layout": str(lay.path),
+           "code": code_state(), "run_dir": str(run_dir), "layout": str(lay.path),
            "layout_sha256": lay.sha256, "layout_measured": lay.measured,
            "card": lay.card.card_id, "card_truth": lay.card.truth_source,
-           "tag_edge_mm": lay.tag_edge_mm, "phases": {}}
+           "tag_edge_mm": lay.tag_edge_mm,
+           "card_values": {**card.record(), "commit": card_commit}, "phases": {}, "lenses": {}}
     for name, spec in phases.items():
-        clips = phase_clips(Path(a.run_dir), spec)
-        man["phases"][name] = {"spec": spec, "clips": [c.name for c in clips],
-                               "dirs": [str(c) for c in clips]}
+        lost: list = []
+        clips = phase_clips(run_dir, spec, lost)
+        ids = [clip_id(run_dir, c) for c in clips]
+        man["phases"][name] = {"spec": spec, "clips": ids, "dirs": [str(c) for c in clips],
+                               "lost": lost}
+        for k in lost:
+            log.warning("%s: clip %s lost (%s), not scanned", name, k["clip"], k["why"])
         for cam in a.cameras.split(","):
             res = [scan_clip(c, cam, lay, colour=not a.no_colour,
-                             raw_corners=cam in (a.raw_corners or [])) for c in clips]
+                             guard=cam in card.guard_cameras, cid=i) for c, i in zip(clips, ids)]
+            for r in res:
+                if r.get("lens"):
+                    man["lenses"].setdefault(cam, {})[f"{r['width']}x{r['height']}"] = r["lens"]
             _write(out / "scan" / name / f"{cam}.json", res)
     _write(out / "scan" / "manifest.json", man)
     print(f"scan: {out / 'scan'} ({', '.join(phases)})")
@@ -203,7 +248,9 @@ def phase_chroma(out: Path, phase: str, cam: str) -> str | None:
 def f10_instants(per_cam: dict[str, list[dict]], key: str = "range_m"
                  ) -> tuple[list[dict], set]:
     """Matched instants: each frame of the slowest stream (AE3, else N6, else IMX708) with a range,
-    with every other camera's nearest ranged frame within MATCH_WINDOW_S. Returns the instants
+    with every other camera's nearest ranged frame within MATCH_WINDOW_S; the instant's frames span
+    <= MATCH_WINDOW_S in all (rev 5; QE 008 reading 5: the farthest pick is dropped until they do).
+    Reading (listed for PE 005): an instant with 2 cameras is judged too. Returns the instants
     with >= 2 ranges and the (camera, clip, index) keys of the frames flagged (> 10 %). ``key``:
     range_m (rev 16, undistorted corners: decisions) or range_raw_m (raw corners: report)."""
     ranged = {c: [f for f in fr if f.get(key)] for c, fr in per_cam.items()}
@@ -220,6 +267,10 @@ def f10_instants(per_cam: dict[str, list[dict]], key: str = "range_m"
             k = int(np.argmin(np.abs(ts - f["t"])))
             if abs(ts[k] - f["t"]) <= MATCH_WINDOW_S:
                 picks[c] = ranged[c][k]
+        while len(picks) > 2 and (max(p["t"] for p in picks.values())
+                                  - min(p["t"] for p in picks.values())) > MATCH_WINDOW_S + 1e-9:
+            far = max((c for c in picks if c != ref_cam), key=lambda c: abs(picks[c]["t"] - f["t"]))
+            del picks[far]
         if len(picks) < 2:
             continue
         flag = wscore.f10_flags({c: p[key] for c, p in picks.items()})
@@ -252,27 +303,38 @@ def _f10_summary(instants: list[dict]) -> dict:
 # -- select --------------------------------------------------------------------------------------
 
 def w1_pass(out: Path, cam: str, partb: dict) -> tuple[str | None, str]:
-    """Rev 13: W1 runs on the pass that ran the camera's part-B chroma; pass 1 when both did
-    (always the IMX708)."""
+    """Rev 13: W1 runs on the pass that ran the camera's part-B chroma. "If both passes ran the
+    same setting for that camera (always the IMX708; the N6 under F15; any camera under F18), W1
+    uses pass 1" (QE 008 R3: even when that setting isn't part-B's, e.g. a failed F18 switch)."""
     if cam == "imx708":
         return "pass1", "IMX708: same setting on both passes -> pass 1"
     want = partb.get(cam)
     if want is None:
-        raise SystemExit(f"--partb {cam}=420|444 is required (the Wed card's part-B chroma)")
+        raise SystemExit(f"the card's partb has no {cam} (the Wed card's part-B chroma)")
     c1, c2 = phase_chroma(out, "pass1", cam), phase_chroma(out, "pass2", cam)
+    if c1 is not None and c1 == c2 and c1 != "mixed":
+        return "pass1", f"both passes measured {c1} -> pass 1" + (
+            "" if c1 == want else f" (not part-B {want}: F15 / F18)")
     if c1 == want:
-        return "pass1", f"pass 1 measured {c1} = part-B {want}" + (
-            "; pass 2 too -> pass 1" if c2 == want else "")
+        return "pass1", f"pass 1 measured {c1} = part-B {want} (pass 2 measured {c2})"
     if c2 == want:
         return "pass2", f"pass 2 measured {c2} = part-B {want} (pass 1 measured {c1})"
     return None, f"no pass ran part-B {want} (pass 1 {c1}, pass 2 {c2}): W1 not measured"
 
 
+def _same_card(card: card_values.CardValues, rec: dict | None, where: str) -> None:
+    if not rec or rec.get("sha256") != card.sha256:
+        raise SystemExit(f"{where} was made with card values {str((rec or {}).get('sha256'))[:12]}"
+                         f", not {card.path} ({card.sha256[:12]}): re-run from scan")
+
+
 def cmd_select(a) -> int:
     out = Path(a.out)
     man = _read(out / "scan" / "manifest.json")
+    card, card_commit = load_card(a.card)
+    _same_card(card, man.get("card_values"), "the scan")
     cams = a.cameras.split(",")
-    partb, first = _kv(a.partb), _kv(a.first_bin, float)
+    partb, first = card.partb, card.first_bin
     flagged_by_pass, f10 = {}, {}
     for ph in ("pass1", "pass2", "check"):
         per = {c: load_scan(out, ph, c) for c in cams}
@@ -283,12 +345,14 @@ def cmd_select(a) -> int:
         f10[ph] = {**_f10_summary(inst),
                    "raw_corners": _f10_summary(f10_instants(per, key="range_raw_m")[0])}
     res = {"stage": "select", "scan_manifest_sha256": sha256_file(out / "scan" / "manifest.json"),
-           "layout_sha256": man["layout_sha256"], "code": code_state(), "f10": f10,
-           "cameras": {}}
+           "layout_sha256": man["layout_sha256"], "layout_measured": man.get("layout_measured"),
+           "card_values": {**card.record(), "commit": card_commit},
+           "lenses": man.get("lenses"), "lost": {k: v.get("lost") for k, v in
+                                                  (man.get("phases") or {}).items()},
+           "code": code_state(), "f10": f10, "cameras": {}}
     for cam in cams:
         ph, why = w1_pass(out, cam, partb)
-        entry = {"w1_pass": ph, "why": why, "first_bin": first.get(cam, wscore.FIRST_BIN),
-                 "bins": {}}
+        entry = {"w1_pass": ph, "why": why, "first_bin": first[cam], "bins": {}}
         if ph:
             fr = load_scan(out, ph, cam)
             for f in fr:
@@ -300,7 +364,7 @@ def cmd_select(a) -> int:
                 sel = wscore.select_bin(fr, c)
                 entry["bins"][str(c)] = None if sel is None else [
                     {k: f.get(k) for k in ("clip", "index", "t", "range_m", "speed_ms", "tags",
-                                           "samples", "mtf50_lpmm", "de00")} for f in sel]
+                                           "samples", "mtf50_lpmm", "de00", "f10")} for f in sel]
         res["cameras"][cam] = entry
     _write(Path(a.boxes), res)
     print(f"select: wrote {a.boxes} (sha256 {sha256_file(Path(a.boxes))[:12]}). Commit it before"
@@ -311,25 +375,37 @@ def cmd_select(a) -> int:
 # -- detect --------------------------------------------------------------------------------------
 
 def committed_unchanged(path: Path) -> str:
-    """The commit holding ``path`` exactly as it is on disk; SystemExit if it isn't committed."""
-    path = Path(path).resolve()
+    """The commit holding ``path`` exactly as it is on disk, in REPO (the rig repo); SystemExit if
+    it's outside REPO, not committed, or differs from HEAD. Compares `git hash-object` of the
+    file with HEAD's blob, so skip-worktree / assume-unchanged can't hide an edit (QE 008 N2)."""
+    path, repo = Path(path).resolve(), Path(REPO).resolve()
+    try:
+        rel = path.relative_to(repo).as_posix()
+    except ValueError:
+        raise SystemExit(f"{path} is outside the rig repo {repo}: commit it there") from None
+
     def git(*a):
-        return subprocess.run(["git", "-C", str(path.parent), *a], capture_output=True, text=True)
-    if git("ls-files", "--error-unmatch", path.name).returncode != 0:
-        raise SystemExit(f"{path} is not committed: rev 13 needs the box file committed before "
-                         "the detector runs")
-    if git("diff", "--quiet", "HEAD", "--", path.name).returncode != 0:
-        raise SystemExit(f"{path} differs from HEAD: commit it before the detector runs")
-    return git("log", "-1", "--format=%H", "--", path.name).stdout.strip()
+        return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True)
+    head = git("rev-parse", "--verify", "--quiet", f"HEAD:{rel}")
+    if head.returncode != 0:
+        raise SystemExit(f"{path} is not committed: rev 13 needs it committed before this stage")
+    disk = git("hash-object", "--", rel).stdout.strip()
+    if disk != head.stdout.strip():
+        raise SystemExit(f"{path} differs from HEAD: commit it before this stage")
+    return git("log", "-1", "--format=%H", "--", rel).stdout.strip()
 
 
 def clip_dirs(out: Path) -> dict[str, Path]:
-    """Clip name -> its folder, as scan read it (the scan manifest)."""
+    """Clip id (path relative to RUN_DIR) -> its folder, as scan read it (the scan manifest)."""
     man = _read(out / "scan" / "manifest.json")
-    dirs = {}
+    run_dir, dirs = Path(man["run_dir"]), {}
     for ph in man["phases"].values():
-        paths = ph.get("dirs") or phase_clips(Path(man["run_dir"]), ph["spec"])  # older scans
-        dirs.update({Path(d).name: Path(d) for d in paths})
+        paths = [Path(d) for d in ph["dirs"]]
+        ids = ph.get("clips") or [clip_id(run_dir, d) for d in paths]
+        for i, d in zip(ids, paths):
+            if dirs.get(i, d) != d:
+                raise SystemExit(f"clip id {i} names two folders: {dirs[i]} and {d}")
+            dirs[i] = d
     return dirs
 
 
@@ -354,33 +430,66 @@ def hits_for(sample_boxes: dict, dets: list[dict], min_score: float, iou_min: fl
     return out
 
 
-def cached_revision(model_id: str) -> str | None:
-    """The commit the offline loader will use: the cached snapshot that 'main' points to. detect
-    runs with HF_HUB_OFFLINE=1, so nothing newer can be fetched behind the pin (transformers 5.19
-    leaves config._commit_hash unset, so the loaded model can't be asked)."""
+def cached_snapshot(model_id: str, revision: str) -> str | None:
+    """The cached snapshot folder of ``revision`` (offline; None if it isn't cached)."""
     os.environ["HF_HUB_OFFLINE"] = "1"
     from huggingface_hub import try_to_load_from_cache
-    path = try_to_load_from_cache(model_id, "config.json")
+    path = try_to_load_from_cache(model_id, "config.json", revision=revision)
     if not isinstance(path, str):
         return None
     parts = Path(path).parts
     return parts[parts.index("snapshots") + 1] if "snapshots" in parts else None
 
 
+def load_detector(device: str | None):
+    """OWLv2 at the rev 17 pin, loaded with ``revision=`` (QE 008 R1). edge_ml/urchin/owl.py's
+    OwlDetector has no revision argument (E6's merged code, not changed here), so its fields are
+    filled the same way, with the pinned revision; its detect() (tiling + NMS) is used as is."""
+    pin = card_values.DETECTOR
+    snap = cached_snapshot(pin["model_id"], pin["revision"])
+    if snap != pin["revision"]:
+        raise SystemExit(f"{pin['model_id']} @ {pin['revision']} is not in the HF cache "
+                         f"(found {snap}); rev 17 refuses any other revision")
+    import torch
+    from transformers import Owlv2ForObjectDetection, Owlv2Processor
+
+    from edge_ml.urchin.owl import QUERY, OwlDetector
+    det = OwlDetector.__new__(OwlDetector)
+    det.torch = torch
+    det.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+    det.processor = Owlv2Processor.from_pretrained(pin["model_id"], revision=pin["revision"])
+    det.model = Owlv2ForObjectDetection.from_pretrained(
+        pin["model_id"], revision=pin["revision"]).to(det.device).eval()
+    det.query = QUERY
+    return det, snap
+
+
+def frame_hits(sample_boxes: dict, dets: list[dict]) -> dict[str, dict]:
+    """Hits at each rev 17 threshold, from one detection list kept down to DETECT_FLOOR. Greedy
+    NMS keeps a box only on higher-scored boxes, so the boxes >= T after NMS at the floor are the
+    boxes NMS at T would keep: one detection pass serves every threshold (owl.py's cap of 300
+    boxes per still drops only the lowest scores, so only the 0.05 chain could lose any)."""
+    return {card_values.tkey(t): hits_for(sample_boxes, dets, t) for t in card_values.THRESHOLDS}
+
+
 def cmd_detect(a) -> int:
     out, bpath = Path(a.out), Path(a.boxes)
+    card, _ = load_card(a.card)
     commit = committed_unchanged(bpath)
     boxes = _read(bpath)
+    _same_card(card, boxes.get("card_values"), "the box file")
+    dpath = out / "detect" / "detections.json"
+    if dpath.exists() and _read(dpath).get("boxes_sha256") != sha256_file(bpath):
+        raise SystemExit(f"{dpath} holds detections from another box file: rev 13 commits one box "
+                         "file before the detector runs; move that run aside, don't overwrite it")
     dirs = clip_dirs(out)
-    rev = cached_revision(a.model_id)
-    if rev != a.model_revision:  # the Wed card pins the checkpoint (rev 13)
-        raise SystemExit(f"{a.model_id}: the cache's main is {rev}, the card pins "
-                         f"{a.model_revision}")
-    from edge_ml.urchin.owl import OwlDetector
-    det = OwlDetector(a.device, model_id=a.model_id)
+    det, rev = load_detector(a.device)
+    pin = card_values.DETECTOR
     res = {"stage": "detect", "boxes": str(bpath), "boxes_sha256": sha256_file(bpath),
-           "boxes_commit": commit, "model_id": a.model_id, "model_revision": rev,
-           "query": det.query, "min_score": a.min_score, "iou_min": 0.5, "code": code_state(),
+           "boxes_commit": commit, "card_values_sha256": card.sha256,
+           "model_id": pin["model_id"], "model_revision": rev, "query": det.query,
+           "detect_floor": card_values.DETECT_FLOOR, "threshold": pin["threshold"],
+           "thresholds": list(card_values.THRESHOLDS), "iou_min": 0.5, "code": code_state(),
            "frames": {}}
     for (cam, _ph, clip), picks in picked_frames(boxes).items():
         cdir = dirs[clip]
@@ -388,13 +497,13 @@ def cmd_detect(a) -> int:
         want = [fr[p["index"]] for p in picks]
         for f, img in frames.iter_images(cdir, cam, want):
             p = next(p for p in picks if p["index"] == f["index"])
-            b, s = det.detect(img, min_score=a.min_score)
+            b, s = det.detect(img, min_score=card_values.DETECT_FLOOR)
             dets = [{"box": [round(float(v), 1) for v in bb], "score": round(float(ss), 4)}
                     for bb, ss in zip(b, s)]
             res["frames"][f"{cam}/{clip}/{f['index']}"] = {
-                "dets": dets, "hits": hits_for(p["samples"], dets, a.min_score)}
-    _write(out / "detect" / "detections.json", res)
-    print(f"detect: {len(res['frames'])} frames -> {out / 'detect' / 'detections.json'}")
+                "dets": dets, "hits": frame_hits(p["samples"], dets)}
+    _write(dpath, res)
+    print(f"detect: {len(res['frames'])} frames -> {dpath}")
     return 0
 
 
@@ -435,14 +544,21 @@ def cmd_crops(a) -> int:
 
 # -- score ---------------------------------------------------------------------------------------
 
-def _attach(boxes: dict, detections: dict | None, blind: dict | None
+def _attach(boxes: dict, detections: dict | None, blind: dict | None,
+            threshold: float = card_values.DETECTOR["threshold"]
             ) -> dict[str, dict[float, list | None]]:
     """Per camera, bin centre -> its picked frames (None = fewer than 5 scorable) as wscore frame
-    records, each sample's detector ``hit`` and blind ``human`` answer filled in."""
+    records, each sample's detector ``hit`` at ``threshold`` and blind ``human`` answer filled in.
+    A blind file must answer every crop in its key (QE 008 N5: a missing answer is not a "no")."""
     key = (blind or {}).get("key") or {}
     answers = (blind or {}).get("answers") or {}
+    missing = sorted(c for c in key if c not in answers)
+    if blind and missing:
+        raise SystemExit(f"the blind answers miss {len(missing)} crop(s), e.g. {missing[:3]}: "
+                         "every crop needs a yes or no")
     human = {(m["camera"], m["clip"], m["index"], m["sample"]): bool(answers[c])
-             for c, m in key.items() if c in answers}
+             for c, m in key.items()}
+    tk = card_values.tkey(threshold)
     out: dict = {}
     for cam, e in boxes["cameras"].items():
         out[cam] = {}
@@ -454,7 +570,7 @@ def _attach(boxes: dict, detections: dict | None, blind: dict | None
             for p in picks:
                 d = ((detections or {}).get("frames") or {}).get(f"{cam}/{p['clip']}/{p['index']}")
                 samples = {name: {"px": s["px"],
-                                  "hit": bool(d and d["hits"].get(name, {}).get("hit")),
+                                  "hit": bool(d and d["hits"][tk].get(name, {}).get("hit")),
                                   "human": human.get((cam, p["clip"], p["index"], name))}
                            for name, s in (p.get("samples") or {}).items()}
                 recs.append({**p, "samples": samples})
@@ -495,7 +611,7 @@ def w4_pairs(out: Path, cam: str) -> list[dict]:
 
 
 def _frame_image(out: Path, cam: str, ref: str):
-    clip, idx = ref.split("/")
+    clip, idx = ref.rsplit("/", 1)
     cdir = clip_dirs(out)[clip]
     fr = [f for f in frames.camera_frames(cdir, cam) if f["index"] == int(idx)]
     return next(frames.iter_images(cdir, cam, fr))[1] if fr else None
@@ -589,21 +705,32 @@ def w5_table(out: Path, cam: str) -> list[dict]:
 
 def cmd_score(a) -> int:
     out, bpath = Path(a.out), Path(a.boxes)
+    card, card_commit = load_card(a.card)
     boxes = _read(bpath)
+    _same_card(card, boxes.get("card_values"), "the box file")
     dpath = out / "detect" / "detections.json"
     if not dpath.exists():
         raise SystemExit(f"no {dpath}: run `detect` first (W1 needs the detector's hits)")
     detections = _read(dpath)
     if detections["boxes_sha256"] != sha256_file(bpath):
         raise SystemExit("detections.json was made from a different box file")
+    pin = card_values.DETECTOR
+    got = {"model_id": detections.get("model_id"), "revision": detections.get("model_revision"),
+           "threshold": detections.get("threshold")}
+    if got != pin or detections.get("detect_floor") != card_values.DETECT_FLOOR:
+        raise SystemExit(f"detections.json used {got} (floor {detections.get('detect_floor')}), "
+                         f"not the rev 17 pin {pin} (floor {card_values.DETECT_FLOOR})")
     blind = _read(Path(a.blind)) if a.blind else None
     picks = _attach(boxes, detections, blind)
     res = {"stage": "score", "code": code_state(), "boxes_sha256": sha256_file(bpath),
            "boxes_commit": (detections or {}).get("boxes_commit"),
            "detections_sha256": sha256_file(dpath) if detections else None,
-           "detector": {k: (detections or {}).get(k) for k in
-                        ("model_id", "model_revision", "query", "min_score")},
-           "f10": boxes.get("f10"), "w1": {}, "w2": {}, "w4": {}, "w5": {}}
+           "card_values": {**card.record(), "commit": card_commit},
+           "layout_measured": boxes.get("layout_measured"), "lenses": boxes.get("lenses"),
+           "lost": boxes.get("lost"),
+           "detector": {k: detections.get(k) for k in ("model_id", "model_revision", "query",
+                                                       "detect_floor", "threshold")},
+           "f10": boxes.get("f10"), "w1": {}, "w1_report": {}, "w2": {}, "w4": {}, "w5": {}}
     det_w1 = {}
     for cam, e in boxes["cameras"].items():
         if not e["w1_pass"]:
@@ -626,6 +753,13 @@ def cmd_score(a) -> int:
                           **{f"{s}mm": w1_score(out, cam, e, picks[cam], s, key)
                              for s in ("80", "50")}}
     res["w1_fallback"] = fallback
+    for t in card_values.THRESHOLDS:  # rev 17 report-only chains (decisions use the pin)
+        if t == pin["threshold"]:
+            continue
+        pt = _attach(boxes, detections, None, threshold=t)
+        res["w1_report"][card_values.tkey(t)] = {
+            cam: {f"{s}mm": w1_score(out, cam, boxes["cameras"][cam], pt[cam], s, "hit")
+                  for s in ("80", "50")} for cam in det_w1}
     if "openmv_n6" in res["w1"] and "openmv_ae3" in res["w1"] \
             and "80mm" in res["w1"]["openmv_n6"] and "80mm" in res["w1"]["openmv_ae3"]:
         res["n6_vs_ae3"] = wscore.n6_vs_ae3(res["w1"]["openmv_n6"]["80mm"],
@@ -639,12 +773,13 @@ def cmd_score(a) -> int:
         if cam not in boxes["cameras"]:
             continue
         c1, c2 = phase_chroma(out, "pass1", cam), phase_chroma(out, "pass2", cam)
-        if c1 and c2 and c1 != c2:
+        if c1 and c2 and c1 != c2 and "mixed" not in (c1, c2):
             pairs = w4_pairs(out, cam)
             res["w4"][cam] = {"chroma": [c1, c2], "pairs": pairs,
                               "images": w4_images(out, cam, pairs)}
         else:
-            res["w4"][cam] = {"not_run": f"pass 1 {c1}, pass 2 {c2} (F15 / F18)"}
+            res["w4"][cam] = {"not_run": f"pass 1 {c1}, pass 2 {c2} (F15 / F18, or a pass "
+                                         "with mixed chroma)"}
     for cam in boxes["cameras"]:
         rows = w5_table(out, cam)
         res["w5"][cam] = {"rows": rows, "by_speed": w5_summary(rows)}
@@ -659,11 +794,19 @@ def _fmt_range(x: dict) -> str:
 
 
 def results_md(res: dict) -> str:
-    L = ["# Pool test 2 W1-W5 results", "",
-         f"- code {res['code']['sha'][:12]}{' (dirty)' if res['code']['dirty'] else ''}; "
-         f"box file sha256 {res['boxes_sha256'][:12]} (commit {str(res['boxes_commit'])[:12]}); "
-         f"detections sha256 {str(res['detections_sha256'])[:12]}",
-         f"- detector: {res['detector']}",
+    cv_ = res.get("card_values") or {}
+    L = ["# Pool test 2 W1-W5 results", ""]
+    if res.get("layout_measured") is not True:
+        L += ["**TEMPLATE LAYOUT (not measured): the W1 numbers below are meaningless; a dry run "
+              "only (QE 008 N3).**", ""]
+    L += [f"- code {res['code']['sha'][:12]}{' (dirty)' if res['code']['dirty'] else ''}; "
+          f"box file sha256 {res['boxes_sha256'][:12]} (commit {str(res['boxes_commit'])[:12]}); "
+          f"detections sha256 {str(res['detections_sha256'])[:12]}",
+          f"- card values {cv_.get('path')} sha256 {str(cv_.get('sha256'))[:12]} (commit "
+          f"{str(cv_.get('commit'))[:12]}); source: {cv_.get('source')}",
+          f"- part-B chroma {cv_.get('partb')}; first bins {cv_.get('first_bin')}; guard cameras "
+          f"{cv_.get('guard_cameras')}",
+          f"- detector: {res['detector']} (W1 decides at the threshold; 0.05 / 0.5 report-only)",
          "- W1 by: " + ("BLIND FALLBACK (detector < 4/5 in the first bin on every camera)"
                         if res["w1_fallback"] else "detector"),
          "", "## W1: detectable range (80 mm; 50 mm reported)", "",
@@ -678,6 +821,20 @@ def results_md(res: dict) -> str:
                  f"({a['end_reason']}) | {_fmt_range(b)} | {b['end_bin']} ({b['end_reason']}) |")
     if "n6_vs_ae3" in res:
         L += ["", f"**N6 vs AE3 (longer 80 mm range; tie -> MTF50 at 1.0 m): {res['n6_vs_ae3']}**"]
+    L += ["", "Report-only chains at the other rev 17 thresholds (80 mm / 50 mm):", ""]
+    for t, per in (res.get("w1_report") or {}).items():
+        for cam, r in per.items():
+            L.append(f"- {t}: {cam} {_fmt_range(r['80mm'])} / {_fmt_range(r['50mm'])}")
+    L += ["", "## Lenses (rev 16; the guard keeps raw corners)", ""]
+    for cam, modes in (res.get("lenses") or {}).items():
+        for mode, ln in modes.items():
+            L.append(f"- {cam} {mode}: {'mapped' if ln.get('mapped') else 'GUARD'}, fx "
+                     f"{round(ln['K'][0][0], 1)}, fy {round(ln['K'][1][1], 1)}: {ln.get('why')}")
+    lost = {ph: v for ph, v in (res.get("lost") or {}).items() if v}
+    if lost:
+        L += ["", "## Lost clips (not scanned)", ""]
+        for ph, v in lost.items():
+            L += [f"- {ph}: {k['clip']} ({k['why']})" for k in v]
     L += ["", "## F10 (cross-camera range check, > 10 % at one instant; rev 16)", "",
           "Decisions use the undistorted corners; raw corners are reported beside them.", "",
           "| pass | corners | instants | flagged | share | W1 not measured | median ratios |",
@@ -725,26 +882,22 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("scan")
     s.add_argument("run_dir")
     s.add_argument("out")
+    s.add_argument("--card", required=True, help="the committed Wed card-values file (R4)")
     s.add_argument("--layout", required=True)
     s.add_argument("--phase", action="append", required=True)
     s.add_argument("--cameras", default=",".join(frames.CAMERAS))
     s.add_argument("--allow-template", action="store_true",
                    help="dry runs only: an unmeasured layout (W1 numbers are then meaningless)")
     s.add_argument("--no-colour", action="store_true")
-    s.add_argument("--raw-corners", action="append", default=[],
-                   help="camera kept on raw corners by the Wed card (rev 16 guard)")
     s = sub.add_parser("select")
     s.add_argument("out")
+    s.add_argument("--card", required=True)
     s.add_argument("--boxes", required=True)
-    s.add_argument("--partb", action="append", default=[])
-    s.add_argument("--first-bin", action="append", default=[])
     s.add_argument("--cameras", default=",".join(frames.CAMERAS))
     s = sub.add_parser("detect")
     s.add_argument("out")
+    s.add_argument("--card", required=True)
     s.add_argument("--boxes", required=True)
-    s.add_argument("--model-id", required=True)
-    s.add_argument("--model-revision", required=True, help="the Wed card's pinned HF commit")
-    s.add_argument("--min-score", type=float, required=True)
     s.add_argument("--device", default=None)
     s = sub.add_parser("crops")
     s.add_argument("out")
@@ -752,6 +905,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--seed", type=int, default=20261021)
     s = sub.add_parser("score")
     s.add_argument("out")
+    s.add_argument("--card", required=True)
     s.add_argument("--boxes", required=True)
     s.add_argument("--blind", default=None)
     a = ap.parse_args(argv)

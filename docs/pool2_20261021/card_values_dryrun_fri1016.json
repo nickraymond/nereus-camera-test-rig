@@ -1,0 +1,8 @@
+{
+ "source": "DRY RUN ONLY, not Wed card values: Fri 10/16 pool049 clips 099-103 (~/NereusPool/20261016/nereus002/pool049_20261016T212527Z), part-B chroma = what those clips measured (N6 4:2:0, AE3 4:4:4, 640x400 both, mapped); pool-2 prep successor 4, Sun 10/18",
+ "partb": {"openmv_n6": "420", "openmv_ae3": "444"},
+ "first_bin": {},
+ "guard_cameras": [],
+ "detector": {"model_id": "google/owlv2-base-patch16-ensemble",
+              "revision": "cfd3195ba4ea9592eec887ded089f4c08eff231d", "threshold": 0.3}
+}

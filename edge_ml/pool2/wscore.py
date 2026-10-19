@@ -82,11 +82,12 @@ def speeds(frames: list[dict]) -> list[float | None]:
 
 def select_bin(frames: list[dict], centre: float, n: int = N_PER_BIN) -> list[dict] | None:
     """n frames evenly spaced in time among the bin's scorable frames (a range in the bin, the
-    whole board in view, not F10-flagged); hold frames only when there are >= n of them (F17).
-    None when fewer than n are scorable (the chain break)."""
+    whole board in view); hold frames only when there are >= n of them (F17). F10-flagged frames
+    stay candidates: F10 acts only through its 25 % pass rule (QE 008 R2 on #133). None when fewer
+    than n are scorable (the chain break)."""
     sp = speeds(frames)
     cand = [(f, s) for f, s in zip(frames, sp)
-            if bin_of(f.get("range_m")) == centre and f.get("board_whole") and not f.get("f10")]
+            if bin_of(f.get("range_m")) == centre and f.get("board_whole")]
     held = [(f, s) for f, s in cand if s is not None and s < HOLD_SPEED_MS]
     pool = sorted((held if len(held) >= n else cand), key=lambda fs: fs[0]["t"])
     if len(pool) < n:
@@ -161,8 +162,13 @@ def detector_fallback(per_camera: dict[str, dict]) -> bool:
 
 
 def n6_vs_ae3(n6: dict, ae3: dict) -> str:
-    """The longer detectable range wins; a tie goes to the higher MTF50 (lp/mm) in the 1.0 m bin."""
+    """The longer detectable range wins; a tie goes to the higher MTF50 (lp/mm) in the 1.0 m bin.
+    Reading (QE 008 N6 on #133, listed for PE 005): a tag-limited range is a lower bound ("≥"), so
+    a tag-limited camera that is not longer can't be said to lose: "undecided (tag-limited)"."""
     r6, r3 = n6["range_m"] or 0.0, ae3["range_m"] or 0.0
+    lim6, lim3 = bool(n6.get("tag_limited")), bool(ae3.get("tag_limited"))
+    if (lim6 and r6 <= r3) or (lim3 and r3 <= r6):
+        return "undecided (tag-limited)"
     if r6 != r3:
         return "openmv_n6" if r6 > r3 else "openmv_ae3"
     m6 = (n6["bins"].get(1.0) or {}).get("mtf50_lpmm")

@@ -17,6 +17,12 @@ speed, W2, F10 and the board pose use them. The coefficients are in normalised c
 K is mapped to the frame size. The image itself is never undistorted (measure.py projects board
 points back into raw pixels with the same K + coefficients). Guard: a mode not in MAPPED_MODES (or
 an IMX708 clip with no ScalerCrop) keeps raw corners and says why (Lens.why).
+
+Guard K (QE 008 R6 on #133): rev 16 names the guard case "a windowed mode with an unknown offset",
+and rev 13 says a windowed mode is not scaled. So a board's guard K keeps the 1280x800 fx / fy
+unscaled; its principal point is unknown and is put at the frame centre (Lens.why says so). Reading
+(listed for PE 005): an IMX708 clip with no ScalerCrop keeps the full-sensor scale (its field is
+unknown; the IMX708 records ScalerCrop on every clip so far).
 """
 
 from __future__ import annotations
@@ -79,10 +85,8 @@ class Lens:
 
 
 def lens_for(cam: str, width: int, height: int,
-             scaler_crop: tuple[int, int, int, int] | None = None,
-             force_raw: bool = False) -> Lens:
-    """The rev 16 lens for a frame size; ``force_raw`` = the Wed card put this camera on raw
-    corners."""
+             scaler_crop: tuple[int, int, int, int] | None = None) -> Lens:
+    """The rev 16 lens for a frame size (the Wed card's guard_cameras must agree, run.py)."""
     if cam == "imx708":
         ok, why = scaler_crop is not None, (
             f"ScalerCrop {scaler_crop} -> K scaled" if scaler_crop else
@@ -91,10 +95,9 @@ def lens_for(cam: str, width: int, height: int,
     else:
         ok = (width, height) in MAPPED_MODES[cam]
         why = (f"{width}x{height} shows the calibrated 1280x800 field -> K scaled" if ok else
-               f"{width}x{height} is not a known full-field mode: raw corners (rev 16 guard)")
-        K = camera_matrix(cam, width, height)
-    if force_raw:
-        ok, why = False, "raw corners by the Wed card (rev 16 guard)"
+               f"{width}x{height} is not a known full-field mode: windowed assumed, fx/fy "
+               "unscaled, principal point unknown (frame centre used), raw corners (rev 16 guard)")
+        K = camera_matrix(cam, width, height) if ok else guard_matrix(cam, width, height)
     return Lens(cam, K, np.array(DIST[cam], dtype=float) if ok else None, ok, why)
 
 
@@ -115,6 +118,14 @@ def camera_matrix(cam: str, width: int, height: int,
     sx, sy = width / w, height / h
     return np.array([[fx * sx, 0, (cx - x0) * sx], [0, fy * sy, (cy - y0) * sy], [0, 0, 1]],
                     dtype=float)
+
+
+def guard_matrix(cam: str, width: int, height: int) -> np.ndarray:
+    """Guard K for a board mode that can't be mapped (QE 008 R6): a window of the calibrated
+    sensor at the same pixel pitch, so fx / fy unscaled; the window's offset is unknown, so the
+    principal point is the frame centre."""
+    _cw, _ch, fx, fy, _cx, _cy = CALIB[cam]
+    return np.array([[fx, 0, width / 2.0], [0, fy, height / 2.0], [0, 0, 1]], dtype=float)
 
 
 def parse_scaler_crop(text: str) -> tuple[int, int, int, int] | None:

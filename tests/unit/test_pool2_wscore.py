@@ -122,3 +122,24 @@ def test_rev13_frame_pick_rounds_half_up():
     sel = w.select_bin(fr, 1.0)
     # N = 7: i (N-1)/4 = 0, 1.5, 3, 4.5, 6 -> half up 0, 2, 3, 5, 6 (Python round: 0, 2, 3, 4, 6)
     assert [f["t"] for f in sel] == [0.0, 2.0, 3.0, 5.0, 6.0]
+
+
+def test_f10_flagged_frames_stay_w1_candidates():
+    """QE 008 R2 on #133: F10 acts only through its 25 % rule; a flagged hold frame is still a
+    candidate (6 hold frames, 2 flagged -> the 5 come from the holds, not from moving frames)."""
+    fr = [{"t": k * 0.1, "range_m": 1.0, "pos_m": [0.0, 0.0, 1.0], "board_whole": True,
+           "f10": k in (1, 3)} for k in range(6)]
+    fr += [{"t": 5.0 + k * 0.1, "range_m": 1.0, "pos_m": [0.05 * k, 0.0, 1.0],
+            "board_whole": True} for k in range(1, 4)]   # moving at 0.5 m/s
+    sel = w.select_bin(fr, 1.0)
+    assert len(sel) == 5 and all(f["t"] < 1.0 for f in sel)
+    assert any(f.get("f10") for f in sel)
+
+
+def test_n6_vs_ae3_tag_limited_range_is_a_lower_bound():
+    """QE 008 N6 reading: a tag-limited range that isn't longer can't lose."""
+    a = {"range_m": 2.0, "tag_limited": True, "bins": {}}
+    b = {"range_m": 2.5, "tag_limited": False, "bins": {}}
+    assert w.n6_vs_ae3(a, b) == "undecided (tag-limited)"
+    assert w.n6_vs_ae3(b, a) == "undecided (tag-limited)"
+    assert w.n6_vs_ae3({**a, "range_m": 3.0}, b) == "openmv_n6"   # longer and tag-limited: wins

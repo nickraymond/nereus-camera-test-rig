@@ -244,8 +244,33 @@ def test_rev16_guard_keeps_raw_corners_and_says_why():
     assert np.array_equal(pose.undistort_corners(raw, lens)[0], raw[0])
     assert lens.record()["mapped"] is False and "guard" in lens.record()["why"]
     assert pose.lens_for("imx708", 1920, 1080, None).mapped is False   # no ScalerCrop recorded
-    assert pose.lens_for("openmv_n6", 640, 400, force_raw=True).why.startswith("raw corners by")
     assert pose.lens_for("openmv_ae3", 640, 400).mapped is True        # binned full field
+
+
+def test_guard_k_is_unscaled_with_the_principal_point_at_the_centre():
+    """QE 008 R6 on #133: a guard mode is windowed (rev 13: no scale), so fx / fy stay at the
+    1280x800 fit; the window offset is unknown, so the principal point is the frame centre."""
+    lens = pose.lens_for("openmv_ae3", 800, 600)
+    fx, fy = pose.CALIB["openmv_ae3"][2:4]
+    assert lens.K[0, 0] == pytest.approx(fx) and lens.K[1, 1] == pytest.approx(fy)  # not x0.625
+    assert (lens.K[0, 2], lens.K[1, 2]) == (400.0, 300.0)
+    assert "unscaled" in lens.why and "principal point unknown" in lens.why
+
+
+@pytest.mark.parametrize("cam,w,h", [("openmv_n6", 960, 600), ("openmv_ae3", 640, 400),
+                                     ("openmv_n6", 640, 400)])
+def test_rev16_offcentre_range_at_a_scaled_wed_mode(cam, w, h):
+    """QE 008 N7: rev 16 test (1) at a scaled Wed mode (K mapped by the scale rule, coefficients
+    unchanged): within 1 % undistorted."""
+    lens = pose.lens_for(cam, w, h)
+    assert lens.mapped and lens.K[0, 0] == pytest.approx(pose.CALIB[cam][2] * w / 1280)
+    from edge_ml.pool2 import board as b
+    obj = np.c_[b.tag_corners_mm(300.0, 130.0, 63.0), np.full(4, 1000.0)]
+    raw, _ = cv2.projectPoints(obj, np.zeros(3), np.zeros(3), lens.K, lens.dist)
+    raw = {7: raw.reshape(4, 2)}
+    assert (raw[7][:, 0] > 0).all() and (raw[7][:, 0] < w).all() and (raw[7][:, 1] < h).all()
+    r_und = pose.board_range(pose.undistort_corners(raw, lens), (7,), 63.0, lens.K)["range_m"]
+    assert r_und == pytest.approx(1.0, rel=0.01)
 
 
 def test_pinned_lens_matches_the_bm184_files():
