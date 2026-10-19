@@ -1,7 +1,8 @@
 # nereus002 Wed dive card: pool test 2 (Wed 2026-10-21)
 
-**DRAFT** (part C of `SPEC_pool2_prep` rev 19.2, sha256 `0e73002de78d…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
-19.2 = "most clips" on Wed; committed byte-identical on this PR as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
+**DRAFT** (part C of `SPEC_pool2_prep` rev 19.5, sha256 `85e377466f0f…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
+19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60; committed byte-identical on this PR
+as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
 before Wed. Open items are marked **OPEN**, with who closes them.
 
 Rig: Pi Zero 2 W + IMX708 + OpenMV N6 + OpenMV AE3 in one housing, LiFePO4wered/Pi+ UPS, the physical switch (= the UPS
@@ -28,37 +29,48 @@ ran on it). Boards: firmware 1.28.0 (OpenMV v5.0.1), board scripts 7/7 hashes as
   pool's own number (F4).
 - No N6 H.264: no OpenMV build has it (spec rev 6; openmv#3247 is a draft).
 - Lens corrections: none on the rig. Wed records uncorrected video on all three cameras (spec rev 9, c_charuco).
-- **25× ready gate:** **OPEN** (running Mon 10/19 from 9:49 AM, run `gate009_20261019T164921Z_pool2`; result goes here).
-- **PE condition 1, one bench run of the exact program** below on 920e58f, before the Tue 6 PM freeze, judging every clip
-  (the 120 s and 60 s ones too) on must do 19's bars (rev 19 item 2): **OPEN**. If a long clip fails, that phase splits
-  into 30 s clips, PE 006 re-pins the string, and the bench run repeats.
+- **25× ready gate: PASSED** Mon 10/19, 9:51–11:14 AM (run `gate009_20261019T164921Z_pool2`, build 920e58f, Wed's settings
+  `--n6-framesize HD --ae3-subsampling 420`): 25 PASS in a row, 0 FAIL; every camera recorded in every cycle; video
+  completeness 74 / 75 clips (cycle 19: N6 lost 1 of 300); G-b PASS (run growth 27.3 MB ≤ 250, max cycle 8.5 MB ≤ 100).
+  Pulled and verified (261 / 261 files): `~/NereusData/nereus-camera-test-rig/2026-10-19_gate25/`. The Pi copy is not
+  yet cleared (deleting it is Nick's to do; SD free 30.5 GB).
+- **PE condition 1, bench run of the exact program: PASS** (Mon 10/19 2:34–2:56 PM, run `pool053_20261019T213448Z`,
+  920e58f, armed with §8's line, program sha256 `87ee096f158a…`): all 11 clips at the times in §3; every clip 0 CMA alloc
+  errors, 0 kernel failure lines, no reset, 0 frames lost; boards at 4:2:0 ≥ 10.0 fps; 4:4:4 phases N6 7.03 fps (≥ 5) and
+  AE3 9.52 (≥ 9.27, rev 19.3–19.4); IMX708 26.4–27.8 fps, max gap 66.7 ms. IMX708 start ≤ 34 ms (report-only): 10 / 11
+  (w_check 64.7 ms). The first run (pool052, rev 19 program) dropped W5, hence rev 19.5.
+  `~/NereusData/nereus-camera-test-rig/2026-10-19_wed_program_bench/RESULTS.md`.
 
-## 3. The program (pinned, spec rev 19 / 19.1; one line, copy it whole)
+## 3. The program (pinned, spec rev 19.5; one line, copy it whole)
 
 ```
-video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:1x60[--n6-framesize HD --ae3-subsampling 420]
+video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]
 ```
 
-sha256 of the string (no trailing newline): `a605ebf1a8be748a68310a5a941f13d39dd416584d1ee4ffabb1c396e9bf9cdc`.
-`pool_capture.parse_program` @ 920e58f gives the minutes below (a video phase's clips sit on a whole-minute grid: period
-= clip + 30 s rounded up; each clip starts ~10 s after its minute, as on Friday).
+sha256 of the string (no trailing newline): `87ee096f158ad85d99e851fc56216fe3190174afd5eb783291cd52af8ec34966`.
+**Clip times are the measured ones** (bench run pool052, Mon 10/19; each clip starts within ~1 s of its minute). A video
+phase's first clip lands one period after the phase starts, never at its start (`pool_capture.py:860–866`; post-Wed card
+c_pool_grid_late_start). That is why W5 is `2x60`: it records one 60 s clip, at T+20. Times count from switch-on; on
+Friday the first set began at 44 s uptime, so the control clip still lands at T+1.
 
 | T+ min (switch-on) | Phase | You (diver) | The rig (all three cameras, one fire per clip) |
 |---|---|---|---|
-| 0–1 | **ctl**, 1 × 30 s | Getting in; nothing needed | 640×400 control at sync_video's defaults (N6 4:2:0, AE3 4:4:4), F4 |
-| 1–7 | **best**, 6 × 30 s | The N6-vs-AE3 scene: same scene, distance and light for all 6 clips (must do 12) | N6 HD 4:2:0, AE3 640×400 4:2:0, IMX708 1080p30 |
-| 7–10 | **w_pass1**, 1 × 120 s | Swim pass 1 (full colour), below | N6 HD **4:4:4**, AE3 640×400 **4:4:4** |
-| 10–13 | **w_pass2**, 1 × 120 s | Swim pass 2 (half colour), the same swim | N6 HD 4:2:0, AE3 640×400 4:2:0 (part-B; **W1 is scored on this pass**) |
-| 13–16 | **w_check**, 1 × 120 s | Check pass: the same swim again (F12 drift check) | pass 1's settings |
-| 16–18 | **w5**, 1 × 60 s | Two crossings at ~1 m, board face-on: slow, then swimming speed | N6 HD 4:2:0, AE3 4:2:0 |
-| 18 → | stills | Anything | Synchronized stills until switch-off or low battery (3.10 V) |
+| Clip runs (T+ min:s) | Phase | You (diver) | The rig (all three cameras, one fire per clip) |
+|---|---|---|---|
+| 1:00–1:30 | **ctl**, 1 × 30 s | Getting in; nothing needed | 640×400 control at sync_video's defaults (N6 4:2:0, AE3 4:4:4), F4 |
+| 2:00–2:30, 3:00, 4:00, 5:00, 6:00, 7:00 (each 30 s) | **best**, 6 × 30 s | The N6-vs-AE3 scene: same scene, distance and light for all 6 clips (must do 12) | N6 HD 4:2:0, AE3 640×400 4:2:0, IMX708 1080p30 |
+| 10:00–12:00 | **w_pass1**, 120 s | Swim pass 1 (full colour), below | N6 HD **4:4:4**, AE3 640×400 **4:4:4** |
+| 13:00–15:00 | **w_pass2**, 120 s | Swim pass 2 (half colour), the same swim | N6 HD 4:2:0, AE3 640×400 4:2:0 (part-B; **W1 is scored on this pass**) |
+| 16:00–18:00 | **w_check**, 120 s | Check pass: the same swim again (F12 drift check) | pass 1's settings |
+| 20:00–21:00 | **w5**, 60 s | Two crossings at ~1 m, board face-on: slow, then swimming speed | N6 HD 4:2:0, AE3 4:2:0 |
+| ~21:30 → | stills | Anything | Synchronized stills until switch-off or low battery (3.10 V) |
 
 **Each swim pass (spec rev 12 must do 17):** hold the board face-on to the rig, centred between the N6 and AE3 axes,
-mid-water, never touching the floor or walls. Start ~4 m out (or past where the tags vanish) when the clip starts (~10 s
-after the minute). Swim slowly straight in to ~0.5 m, holding still ~5 s at about 3, 2 and 1 m (by eye off the floor
+mid-water, never touching the floor or walls. Start ~4 m out (or past where the tags vanish) when the clip starts (on
+the minute in the table). Swim slowly straight in to ~0.5 m, holding still ~5 s at about 3, 2 and 1 m (by eye off the floor
 tape; the tags give the true range). The clip is 120 s.
 
-Pool time: the program is ~18 min; the block is boxed at 30 min (F14). At the box, stop and keep what's recorded; pass 1
+Pool time: the program is ~21.5 min; the block is boxed at 30 min (F14). At the box, stop and keep what's recorded; pass 1
 comes first.
 
 ## 4. The board (spec rev 12 must do 16)
@@ -133,10 +145,10 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && ~/nereus-camera-test-rig/.venv/bin/
 The gate and the pool loop must never both be armed.
 
 ```bash
-ssh pi@nereus002 "bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program 'video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:1x60[--n6-framesize HD --ae3-subsampling 420]' --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --hours 6 --self-check"
+ssh pi@nereus002 "bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program 'video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]' --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --hours 6 --self-check"
 ```
-**OPEN:** this arm line is checked in the PE condition 1 bench run (the run manifest's `program_sha256` must equal
-`a605ebf1a8be…`). Add `--depth-bus N` if the Bar30 has moved to its own I²C bus (as on Friday's card).
+This line ran the PE condition 1 bench run (pool053's manifest `program_sha256` = `87ee096f158a…`). At that arm the Bar30
+depth sensor did not answer on bus 1 (Errno 121; fail-soft, the loop then uses its run start). Add `--depth-bus N` if the Bar30 has moved to its own I²C bus (as on Friday's card).
 
 ```bash
 ssh pi@nereus002 'bash ~/nereus-rig-poolcam/scripts/pool_mode.sh status'
@@ -155,7 +167,7 @@ for ~1 min; seal and dive; follow §3; switch OFF to stop; **pull everything bef
 - **Units:** nereus002 only (no field units, no Spotters).
 - **Verbs:** `gate_cycle.py disarm`; `pool_mode.sh arm` (the line in §8) / `status`; switch ON / OFF; `host_tools.pool_pull`.
   Recording only; no new verbs (spec rev 12).
-- **Scripts:** `scripts/pool_mode.sh`, `scripts/pool_capture.py` (program above, sha256 `a605ebf1a8be…`),
+- **Scripts:** `scripts/pool_mode.sh`, `scripts/pool_capture.py` (program above, sha256 `87ee096f158a…`),
   `scripts/sync_video.py`, `host_tools/pool_pull.py`, all at rig main 920e58f.
 - **Stop rules:** §7.
 - **Freeze:** Tue 10/20 6 PM (§10).

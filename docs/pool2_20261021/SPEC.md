@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -624,3 +624,29 @@ ae3_hd FAILS 3.17 fps so the AE3 stays 640×400 4:2:0, md19_buf4 PASS).
   the setting "where most clips are usable" (each ≥ 95 % of frames, d52); rev 7 pinned "most" as a strict majority (≥ 2 of 3).
   Same rule on Wed: the N6's `best` phase is usable when **≥ 4 of its 6 clips** are usable, scored per clip (rev 19 item 1).
   The AE3 keeps its own bars (rev 7: d57 names the N6 only).
+
+## Amendment rev 19.3 (PE 006, Mon 10/19 2:18 PM PT): which fps bar rev 19 item 2 applies to the full-colour (4:4:4) phases. No bar changes.
+- Asked by pool-2 successor 4 before scoring the exact-program bench run (pool052, build 920e58f, program a605ebf1a8be). Rev 19
+  item 2 says "the rev 9 fps / max_gap bars" for every clip. For `w_pass1` and `w_check` (the W4 full-colour passes) the spec
+  already set other fps bars before any of this data: W4 passes "may run below 9.5 fps: allowed here only, with fps logged"
+  (W4 line above); the N6 4:4:4 bar is **≥ 5 fps** over 30 s (F15); the AE3's fallback is **≤ 0.2 fps below its own 640×400
+  rate** (the part-B fps bar), here its B0 640×400 4:4:4 rate, quoted from the B0 results file with its path. Those bars apply
+  to those two phases. Item 2's other bars stay for every clip: 0 CMA alloc errors, AE3 0 frames lost, N6 usable (d52/d57),
+  IMX708 ≥ 26 fps and max_gap ≤ 100 ms, no reset. Every other phase keeps ≥ 9.5 fps.
+- This picks between bars already written before the run; it loosens no number. If QE reads it as a loosening, it goes to Nick.
+- **Rev 19.4 (PE 006, Mon 10/19 2:19 PM PT; QE 009's 19.3 nit, before pool052 is scored): the AE3 4:4:4 bar is ≥ 9.27 fps**, measured
+  as `fps_clip`. Source: the B0 4:4:4 rate 9.47 fps (`fps_clip`, rows 4 and 16, subsampling_measured 444, of
+  ~/NereusData/nereus-camera-test-rig/2026-10-17_pool2_prep/bench/B0_clip_table.csv; also rig #135 WED_CARD.md:25) − 0.2.
+
+## Amendment rev 19.5 (PE 006, Mon 10/19 2:29 PM PT): program re-pinned after the bench run (pool052). Binding, before any Wed data.
+- Pool-2 successor 4 found on pool052 (920e58f, program a605ebf1a8be) that every video phase starts one period late:
+  scripts/pool_capture.py:861–864 @ 920e58f puts the first clip at k = ceil(elapsed / period), so a set that begins even 1 s
+  after the phase start lands on k = 1 (PE 006 read the code). W5's only slot then fell on the program end and was lost.
+- **Fix, program only (no code change, so no gate re-run; rev 3 rule 4):** W5 becomes `w5:2x60`, whose k = 2 slot falls inside
+  its own phase: one 60 s clip. Every other phase is unchanged. The Wed card's table uses the measured clip start times. The
+  exact program is re-run once on the bench and judged on rev 19 item 2 / 19.3 / 19.4's bars before the card is final.
+- **Program (pinned; one line; sha256 of the string without a trailing newline = 87ee096f158a…):**
+
+  `video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]`
+
+  It replaces rev 19's a605ebf1a8be string. The late-start behaviour goes on a post-Wed card for pool_capture (not fixed now).
