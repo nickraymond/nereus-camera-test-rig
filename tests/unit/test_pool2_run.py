@@ -211,3 +211,10 @@ def test_w4_images_are_lossless_side_by_side_crops(tmp_path):
     assert imgs == ["score/w4/openmv_ae3_1m_pass1_vs_pass2.png"]
     im = cv2.imread(str(out / imgs[0]))
     assert im.shape[:2] == (20, 64) and np.abs(im[:, :32].mean() - 0) < 3
+
+
+def test_score_refuses_without_detections(tmp_path):
+    _, out = _scored(tmp_path, hit_until_m=2.0)
+    (out / "detect" / "detections.json").unlink()
+    with pytest.raises(SystemExit, match="run `detect` first"):
+        run.main(["score", str(out), "--boxes", str(tmp_path / "w1_boxes.json")])

@@ -149,11 +149,15 @@ def detectable_range(frames: list[dict], size: str = "80", key: str = "hit",
 
 def detector_fallback(per_camera: dict[str, dict]) -> bool:
     """Rev 13: the detector is replaced by the blind yes/no when it hits < 4 of 5 in the chain's
-    first bin on every camera (per_camera: detectable_range results)."""
-    def weak(res):
-        b = res["bins"].get(res.get("first_bin", FIRST_BIN)) or {}
-        return any(":hits" in w for w in b.get("why", [])) or "frames<5" in b.get("why", [])
-    return bool(per_camera) and all(weak(r) for r in per_camera.values())
+    first bin on every camera (per_camera: detectable_range results). Reading (successor 3): a
+    camera whose first bin has < 5 scorable frames can't show "hits in < 4 of 5", so it is left
+    out; the fallback needs >= 1 camera with 5 first-bin frames and every such camera weak."""
+    judged = []
+    for res in per_camera.values():
+        why = (res["bins"].get(res.get("first_bin", FIRST_BIN)) or {}).get("why", ["frames<5"])
+        if "frames<5" not in why:
+            judged.append(any(":hits" in w for w in why))
+    return bool(judged) and all(judged)
 
 
 def n6_vs_ae3(n6: dict, ae3: dict) -> str:

@@ -35,6 +35,7 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import random
 import subprocess
 import sys
@@ -325,7 +326,11 @@ def committed_unchanged(path: Path) -> str:
 def clip_dirs(out: Path) -> dict[str, Path]:
     """Clip name -> its folder, as scan read it (the scan manifest)."""
     man = _read(out / "scan" / "manifest.json")
-    return {Path(d).name: Path(d) for ph in man["phases"].values() for d in ph.get("dirs", [])}
+    dirs = {}
+    for ph in man["phases"].values():
+        paths = ph.get("dirs") or phase_clips(Path(man["run_dir"]), ph["spec"])  # older scans
+        dirs.update({Path(d).name: Path(d) for d in paths})
+    return dirs
 
 
 def picked_frames(boxes: dict) -> dict[tuple[str, str, str], list[dict]]:
@@ -349,16 +354,30 @@ def hits_for(sample_boxes: dict, dets: list[dict], min_score: float, iou_min: fl
     return out
 
 
+def cached_revision(model_id: str) -> str | None:
+    """The commit the offline loader will use: the cached snapshot that 'main' points to. detect
+    runs with HF_HUB_OFFLINE=1, so nothing newer can be fetched behind the pin (transformers 5.19
+    leaves config._commit_hash unset, so the loaded model can't be asked)."""
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    from huggingface_hub import try_to_load_from_cache
+    path = try_to_load_from_cache(model_id, "config.json")
+    if not isinstance(path, str):
+        return None
+    parts = Path(path).parts
+    return parts[parts.index("snapshots") + 1] if "snapshots" in parts else None
+
+
 def cmd_detect(a) -> int:
     out, bpath = Path(a.out), Path(a.boxes)
     commit = committed_unchanged(bpath)
     boxes = _read(bpath)
     dirs = clip_dirs(out)
+    rev = cached_revision(a.model_id)
+    if rev != a.model_revision:  # the Wed card pins the checkpoint (rev 13)
+        raise SystemExit(f"{a.model_id}: the cache's main is {rev}, the card pins "
+                         f"{a.model_revision}")
     from edge_ml.urchin.owl import OwlDetector
     det = OwlDetector(a.device, model_id=a.model_id)
-    rev = getattr(det.model.config, "_commit_hash", None)
-    if rev != a.model_revision:  # the Wed card pins the checkpoint (rev 13)
-        raise SystemExit(f"{a.model_id} loaded revision {rev}, the card pins {a.model_revision}")
     res = {"stage": "detect", "boxes": str(bpath), "boxes_sha256": sha256_file(bpath),
            "boxes_commit": commit, "model_id": a.model_id, "model_revision": rev,
            "query": det.query, "min_score": a.min_score, "iou_min": 0.5, "code": code_state(),
@@ -572,8 +591,10 @@ def cmd_score(a) -> int:
     out, bpath = Path(a.out), Path(a.boxes)
     boxes = _read(bpath)
     dpath = out / "detect" / "detections.json"
-    detections = _read(dpath) if dpath.exists() else None
-    if detections and detections["boxes_sha256"] != sha256_file(bpath):
+    if not dpath.exists():
+        raise SystemExit(f"no {dpath}: run `detect` first (W1 needs the detector's hits)")
+    detections = _read(dpath)
+    if detections["boxes_sha256"] != sha256_file(bpath):
         raise SystemExit("detections.json was made from a different box file")
     blind = _read(Path(a.blind)) if a.blind else None
     picks = _attach(boxes, detections, blind)

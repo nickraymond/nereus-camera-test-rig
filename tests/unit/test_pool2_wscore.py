@@ -108,6 +108,13 @@ def test_rev13_chain_starts_at_the_first_bin_and_05_is_report_only():
     assert not w.detector_fallback(weak)             # judged at each camera's first bin
 
 
+def test_fallback_leaves_out_cameras_without_five_first_bin_frames():
+    miss = _frames(w.BIN_CENTRES, px80=240.0, hit=False)
+    empty = w.detectable_range([])                    # no frames: can't judge the detector
+    assert w.detector_fallback({"openmv_n6": w.detectable_range(miss), "imx708": empty})
+    assert not w.detector_fallback({"imx708": empty, "openmv_ae3": empty})
+
+
 def test_rev13_frame_pick_rounds_half_up():
     fr = [{"t": float(k), "range_m": 1.0, "board_whole": True} for k in range(7)]
     for f in fr:                                      # all moving (no hold frames): speed 0 ...
