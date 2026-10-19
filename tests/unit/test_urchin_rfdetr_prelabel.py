@@ -76,3 +76,49 @@ def test_the_pin_is_spec_rev3_must_do_1():
     assert rp.CHECKPOINT_SHA256 == (
         "ae9aa853d9d73354f318e03e710f517d032408791721f206f55c01f3ca0c915f"
     )
+
+
+def test_tiling_is_spec_rev4_must_do_2():
+    """SPEC_e6_prelabel_rfdetr rev 4 must do 2: 560-px tiles, model A's tile-start algorithm,
+    NMS 0.5, <= 300 per still; model A (OWLv2) keeps 1080."""
+    from edge_ml.urchin import compare_rfdetr, owl
+
+    assert rp.TILE_MAX == 560 and owl.TILE_MAX == 1080
+    assert rp.NMS_IOU == 0.5 and rp.MAX_PER_STILL == 300
+    for length in (480, 560, 561, 960, 1080, 1280, 1920, 2160, 2704, 3840, 5312):
+        for side in (480, 560, 960, 1080):
+            assert compare_rfdetr.tile_starts(length, side) == owl.tile_starts(length, side)
+
+
+class GridModel:
+    """Records crop sizes; returns 40 small boxes per crop at fixed spots, distinct scores."""
+
+    def __init__(self):
+        self.sizes = []
+        self.k = 0
+
+    def predict(self, crop, threshold):
+        self.sizes.append(crop.size)
+        boxes, scores = [], []
+        for j in range(40):
+            x, y = 10 + (j % 8) * 60, 10 + (j // 8) * 60
+            boxes.append([x, y, x + 20, y + 20])
+            self.k += 1
+            scores.append(0.05 + (self.k % 9000) / 10000)
+        return SimpleNamespace(xyxy=np.array(boxes, float), confidence=np.array(scores))
+
+
+def test_560_tiles_cap_and_schema_on_a_4k_still():
+    from edge_ml.urchin import owl
+
+    im = Image.new("RGB", (3840, 2160))
+    model = GridModel()
+    dets = rp.detect_tiled(model, im, 0.05)
+    n_tiles = len(owl.tile_starts(3840, 560)) * len(owl.tile_starts(2160, 560))
+    assert len(model.sizes) == n_tiles and set(model.sizes) == {(560, 560)}
+    assert len(dets) == 300  # the per-still cap
+    assert all(set(d) == {"box", "score"} and len(d["box"]) == 4 for d in dets)
+    assert [d["score"] for d in dets] == sorted((d["score"] for d in dets), reverse=True)
+    m2 = GridModel()
+    assert rp.detect_tiled(m2, Image.new("RGB", (640, 480)), 0.05)
+    assert set(m2.sizes) == {(480, 480)}  # short side 480 < 560: tiles of the short side
