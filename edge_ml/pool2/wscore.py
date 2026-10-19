@@ -56,17 +56,27 @@ def bin_of(range_m: float | None) -> float | None:
 SPEED_MAX_DT_S = 1.0   # neighbours further apart in time (e.g. across a clip gap) aren't used
 
 
+def _where(f: dict) -> list[float] | None:
+    """A frame's board position for speed: the 3-D board centre (pos_m, m) when measured, else
+    the range alone as a 1-D position."""
+    if f.get("pos_m") is not None:
+        return list(f["pos_m"])
+    return [f["range_m"]] if f.get("range_m") is not None else None
+
+
 def speeds(frames: list[dict]) -> list[float | None]:
-    """|d range / dt| per frame (m/s) from its time neighbours with a range, on the capture clock;
-    a neighbour more than SPEED_MAX_DT_S away (a gap between clips) is not used."""
-    pts = sorted(((f["t"], i, f["range_m"]) for i, f in enumerate(frames)
-                  if f.get("range_m") is not None))
+    """Board speed per frame (m/s) from the pose change to its time neighbours (rev 13: "speed
+    comes from the pose change between frames on the capture clock"): |d pos / dt| with pos the
+    3-D board centre (measure.py pos_m), else |d range / dt|. A neighbour more than
+    SPEED_MAX_DT_S away (a gap between clips) is not used; nor is one measured the other way."""
+    pts = sorted(((f["t"], i, _where(f)) for i, f in enumerate(frames)
+                  if _where(f) is not None), key=lambda p: (p[0], p[1]))
     out: list[float | None] = [None] * len(frames)
-    for k, (t, i, r) in enumerate(pts):
+    for k, (t, i, p) in enumerate(pts):
         a = pts[k - 1] if k > 0 and t - pts[k - 1][0] <= SPEED_MAX_DT_S else pts[k]
         b = pts[k + 1] if k + 1 < len(pts) and pts[k + 1][0] - t <= SPEED_MAX_DT_S else pts[k]
-        if b[0] > a[0]:
-            out[i] = abs(b[2] - a[2]) / (b[0] - a[0])
+        if b[0] > a[0] and len(a[2]) == len(b[2]):
+            out[i] = math.dist(a[2], b[2]) / (b[0] - a[0])
     return out
 
 
@@ -101,19 +111,22 @@ def bin_sees(sel: list[dict], size: str = "80", key: str = "hit") -> dict:
 
 
 def detectable_range(frames: list[dict], size: str = "80", key: str = "hit",
-                     first_bin: float = FIRST_BIN) -> dict:
+                     first_bin: float = FIRST_BIN, select=None) -> dict:
     """The largest bin d where bin_sees holds and holds in every closer bin from ``first_bin``
     (rev 13: 1.0 m, or the camera's first whole-board bin on the Wed card). Bins before it are
     scored and reported only. Reports where and why the chain ended: px / hits / frames /
-    tag-limited (F16: the chain held through the farthest bin with tag-decoded frames)."""
+    tag-limited (F16: the chain held through the farthest bin with tag-decoded frames).
+    ``select(frames, centre)`` picks a bin's frames (default select_bin); the scoring driver
+    passes the picks it committed in the box file, with the detector's hits on them."""
+    select = select or select_bin
     bins, last, end = {}, None, None
     for c in [b for b in BIN_CENTRES if b < first_bin]:  # report-only
-        sel = select_bin(frames, c)
+        sel = select(frames, c)
         bins[c] = ({**bin_sees(sel, size, key), "report_only": True,
                     "mtf50_lpmm": _median([f.get("mtf50_lpmm") for f in sel])} if sel
                    else {"ok": False, "why": ["frames<5"], "report_only": True})
     for c in [b for b in BIN_CENTRES if b >= first_bin]:
-        sel = select_bin(frames, c)
+        sel = select(frames, c)
         if sel is None:
             bins[c] = {"ok": False, "why": ["frames<5"]}
             end = (c, "frames")
