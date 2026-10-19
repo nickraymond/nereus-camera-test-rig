@@ -68,3 +68,43 @@
   - The unit is mine until my hand-back (Mon 8 AM at the latest); hand back with the flag present and REVISION a9ac2af.
 - **Slip, owned:** I force-pushed (`--force-with-lease`) this branch after a rebase at ~8:10 PM. It has no PR and no other
   user, so nothing was lost, but the instructions say never force-push. From now on: merge, never rebase a pushed branch.
+
+## Update Sun 10/18 8:50 PM PT: B0 done, unit handed back, rotating
+- **B0 (Sun 8:40–8:50 PM, bench lit at 8:39 PM, build a9ac2af; data in
+  `~/NereusData/nereus-camera-test-rig/2026-10-17_pool2_prep/bench/`, every setting pulled with its SHA256SUMS verified):**
+  - `ctl_1` (AE3 4:4:4, N6 control): AE3 9.47 fps (fails fast at 9.5; n=1), 23.1 kB/frame, JPEG 93 ms + snapshot 11 ms;
+    N6 10.03 fps, 0 lost.
+  - `ae3_420`: AE3 10.0 fps 3/3, 0 lost, 16.8 kB, JPEG 63 ms → HOLDS. Rule → 4:2:0 for the AE3 ladder (d56).
+  - `explore_n6_hd` (E1, never counted): N6 HD 10.0 fps, 0 lost, 93 kB/frame, PROBE PASS.
+  - Resync check passed (first 4:2:0 + first HD clip: short 0, bad 0).
+  - The bench is lighter than the pool (23.1 vs ~26 kB): every AE3 row is flagged.
+  - Table: `bench/B0_clip_table.csv`. Crop box chosen first (`bench/B0_CROP_BOX.txt`). Crop pair in `bench/B0_chroma/`.
+    The first try overwrote one crop with the other (both clips are `clip01`): fixed in `chroma_pair.py` on this branch.
+  - d56 `evidence` is written on the board.
+  - **CmaFree hit 0 MB in every clip** (report-only; sent to PE 004 = "PE" in ListAgents).
+- **nereus002 was handed back to the rig session at 8:48 PM** (flag present 0 B; REVISION a9ac2af; boards on a9ac2af's scripts
+  7/7; no recorders; SD 32.8 GB free; no cold boot, no USB reset).
+- **PRs:** #125 QE 006 PASS @ a9ac2af and #126 QE 007 PASS @ 227425c, both "no more pushes". PjM 005 merges #125, then #126,
+  Mon AM; retarget #126 to main if needed.
+- **Next (successor):**
+  1. Nick's in-air AE3 4:4:4/4:2:0 viewing pair (QuickTime copies labelled "re-encoded for viewing" + a page with the crop
+     pair) under `~/NereusData/nereus-camera-test-rig/<date>_ae3_chroma/`, only after PjM 005's compute all-clear. Add the
+     link to d56's evidence.
+  2. Ladder on the final build (#125 + #126 merged) under the rig session's next written hand-over:
+     - `ctl_2` (N10 controls after the deploy);
+     - `n6_hd` n=3, with the AE3 at its 4:2:0 control;
+     - `ae3_hd` in 4:2:0;
+     - the 960×600 probe only if `n6_hd` fails;
+     - `n6_444_probe` (TEST_CARD_B rev 3; `--probe-min-fps 5`);
+     - per-cycle MB at Wed's settings for `--cycle-mb`.
+  3. The 25× gate Tue PM: `--video-args="..."`, `seal`, pull, verify, clear, `sd --wed-mb`.
+  4. The Wed card by Tue 3 PM:
+     - part-B winners + chroma;
+     - the program string + sha256: one long clip per swim pass (QE 007 nit 3); rev 13 pass 1 full colour, pass 2 half,
+       a check pass with pass 1's settings;
+     - must-dos 16–18;
+     - fx/fy values (AE3 640×400 binned full field);
+     - the 1.0 m fit check (needs Nick's board outline + the N6↔AE3 baseline);
+     - the print-sheet PDF sha256;
+     - PE condition 1's bench run of the exact program before Tue 6 PM.
+  5. W1–W5 scoring: open its PR (this branch) for QE 008 once frame extraction, the detector run and W3 colour exist.
