@@ -7,10 +7,13 @@ at the FAIL sha, so **rig main 9ff4ab5 is never deployed as is**: the bench buil
 FAIL on the fix PR @ 9ec4bfe (R1, R2 + nits) is fixed on the same PR.
 **Rev 3 (Sun 10/18 8:08 PM, on rig #126):** the spec is rev 13 (W1–W5 binding), and part B gains one pre-registered
 probe: the N6 in full colour (F15, §4 step 4).
+**Rev 4 (Sun 10/18 9:53 PM PT by `date`, pool-2 prep successor 3):** must do 19 (spec rev 15, QE 008 PASS-with-nits N1–N3, Sun 8:57 PM)
+is pre-registered as §4 step 4b, with its own bars (§5b) and stop rules (§8 rules 9–10). Its checker is
+`scripts/md19_check.py`. No must do 19 clip exists yet.
 
 | | |
 |---|---|
-| **Spec** | [SPEC.md](SPEC.md) rev 13 (sha256 `2e5525246709…`, QE 007 PASS Sun 10/18 8:06 PM; rev 12 replaced the conditional revs 10–11, rev 13 fixed it). Part B's bars are rev 9's, unchanged |
+| **Spec** | [SPEC.md](SPEC.md) rev 13 (sha256 `2e5525246709…`, QE 007 PASS Sun 10/18 8:06 PM; rev 12 replaced the conditional revs 10–11, rev 13 fixed it). Part B's bars are rev 9's, unchanged. Must do 19 (§4 step 4b, §5b): rev 15 (sha256 `d322d4bac58b…`, QE 008 PASS-with-nits N1–N3, Sun 10/18 8:57 PM) |
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6); QE 005 FAIL @ a938f76: R1, R2, R4–R8 + nits (rev 2 of this card); QE 006 FAIL @ 9ec4bfe: R1, R2 + nits |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
@@ -24,7 +27,7 @@ probe: the N6 in full colour (F15, §4 step 4).
 - The ready gate: "do a cold boot … reboot, take the 30 second videos from all three cameras, and shut down and do that
   25x times in a row".
 
-Spec items checked: must-dos 4–10, F1–F9, the pass/fail block, the rev 3 order, rev 4 G-a/G-b, rev 6 N6 and AE3 rules.
+Spec items checked: must-dos 4–10, F1–F9, the pass/fail block, the rev 3 order, rev 4 G-a/G-b, rev 6 N6 and AE3 rules; rev 15 must do 19 (F19 is a Wed row, on the Wed card).
 
 ## 2. Build: pinned before the first clip, and again before the gate
 
@@ -178,6 +181,22 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
        30 s (`fps_clip`), with the stream running the whole clip. Its frame kB and JPEG ms are reported.
      - It is a probe: never one of any n, never a "holds". If it fails (the hardware encoder may be 4:2:0 only), W4 runs the
        AE3 only, the N6 records half colour on both W passes, and the Wed card says so.
+4b. **Must do 19, CMA headroom (spec rev 15; after the ladder decides Wed's modes, before the Tue 3 PM card, before
+   the gate).** Build: rig main as deployed (the Pi's REVISION). Settings: Wed's exact program, with the N6 and AE3 at
+   their part-B "holds" settings (the N6-vs-AE3 clips: the largest board frames of the program). The W passes' chroma
+   changes only board-side encoding, not the Pi's buffers.
+   - (a) `python scripts/pool2_bench.py md19_buf4 --under openmv_n6 -- <Wed board args> --imx-buffers 4 --timing`, then
+     at once `python scripts/md19_check.py md19_buf4`;
+   - (b) the same with label `md19_buf2` and `--imx-buffers 2`.
+   - Order: (a) first, then (b) (rev 15). n = 3 clips of 30 s each.
+   - Driver-held CMA is **unknown** on nereus002. Kernel 6.18.34+rpt-rpi-v8 has `CONFIG_CMA_DEBUGFS` and
+     `CONFIG_CMA_SYSFS` not set (rig session, read-only, Sun 10/18). The card records "unknown", and the CMA bar is
+     judged on kernel-log errors only (rev 15).
+   - QE 008 N1: the 10/13 reset reading is **not in the logs** (rig session: the journal rotated out). The only datum
+     is CmaFree 16 kB ~3 min after the 3:02 PM reset, under ci-record. So no 10/13-based bar applies; the bar stays
+     ≤ 90 % of the pool, which can't be read here.
+   - pool2_bench's own fail-fast still applies. A label that stops short of 3 clips for a reason outside §5b (e.g. a
+     skew miss) is re-run once under a new label (`md19_buf4_r2`); a second short label → stop (§8 rule 10).
 5. **The 25× ready gate** (Tue afternoon, last, on Wed's exact build and settings; §6).
 
 **Fail fast (§9):** a setting stops at its first clip that misses a bar, because one miss fails the setting. A
@@ -236,6 +255,32 @@ from step 1: a byte loss costs one frame, not the rest of the clip. Its `short_f
 N6's highest setting that holds (d57).
 - N6 "best": HD MJPEG if it holds, else 960×600 if it holds, else 640×400 (rev 6).
 - AE3 "best": the highest resolution that holds in the B0 format (rev 3, rev 6).
+
+## 5b. Must do 19 bars (spec rev 15, set now; checker `scripts/md19_check.py`)
+
+| Bar (every one of the label's 3 non-void clips) | Value |
+|---|---|
+| CMA | 0 CMA / dma-buf allocation errors: no kernel line (`journalctl -k -b -o short-monotonic`) inside [first fire − 5 s, last fire + 30 s + 10 s] that names CMA / DMA / dma-buf / memory **and** a failure. Every CMA / DMA line in the window is listed verbatim in `md19.json`. Driver-held CMA peak ≤ 90 % of the pool: **unknown** (no debugfs) |
+| capture | every board 0 `frames_lost` and `fps_clip` ≥ 9.5; IMX708 `fps_clip` ≥ 26.0 and max gap ≤ 100 ms (its `frames_lost` counts frames under the 30 fps nominal, which rev 9's 26 fps allows); no host reset (this boot's clock is past every clip and its journal starts before the first) |
+| report only | min MemAvailable per clip (rev 4 flag < 150 MB), min CmaFree, the kernel CMA / DMA lines |
+
+**Open reading (asked PE 005 by message, Sun 10/18, before 9:53 PM PT):** B0's `ae3_420` clip03 lost one N6 frame (`short_frames` 1, the d57 resync
+fix). "0 lost frames" read literally fails that, and the card's STOP follows. The other reading is each camera's own
+part-B frame bar (N6 ≥ 285 / 300 usable). The checker implements the literal reading until the PE pins one.
+
+**What happens** (rev 15, by the bar that failed; `md19_check.py` exit 0 pass, 1 capture fails, 5 only CMA fails,
+6 can't judge):
+- Both bars pass at (a) → Wed uses `--imx-buffers 4`; else both pass at (b) → `--imx-buffers 2`.
+- Only the CMA bar fails at both → the CMA pool raise, **only with Nick's own words** (root, Nick's sudo; NEEDED on
+  c_pool1016_video_review). `/boot/firmware/config.txt` line 26 `dtoverlay=vc4-kms-v3d` → `dtoverlay=vc4-kms-v3d,cma-320`.
+  - Backup first: `sudo cp -p /boot/firmware/config.txt /boot/firmware/config.txt.bak-20261019`. Restore:
+    `sudo cp -p /boot/firmware/config.txt.bak-20261019 /boot/firmware/config.txt`.
+  - One cold boot (flag present). Then read back CmaTotal = 327680 kB (QE 008 N3) and re-run (a), then (b), as
+    `md19_buf4_cma320` / `md19_buf2_cma320`, recording MemAvailable and swap too (rig session: mem_avail is already
+    124–137 MB in clips).
+  - The raise must land by the Tue 6 PM freeze and be announced on the board (§10). The overlay's own help lists cma-320
+    as "needs 1GB"; this Pi has 512 MB.
+- The capture bar fails, or the CMA bar still fails after the raise → **stop** (§8 rule 9).
 
 ## 6. The 25× ready gate (spec rev 3 + rev 4 G-a/G-b + rev 5 QE N1–N7)
 
@@ -345,6 +390,9 @@ python scripts/gate_cycle.py arm --video-only --video-s 30 --until-streak 25 --t
 7. The hand-over slot ends: hand back by message with the flag present; resume only under a new written hand-over
    (sequenced by PjM 004).
 8. ci-record or another recorder is found running before a setting: stop and ask the owner.
+9. Must do 19: the capture bar fails, or the CMA bar still fails after the raise. The data goes to the PE and Nick on the
+   card; any change to E1 (N6 at HD) is Nick's call (spec rev 15).
+10. Must do 19: a second label stops short of 3 clips for a reason outside §5b.
 
 ## 9. Cost
 
