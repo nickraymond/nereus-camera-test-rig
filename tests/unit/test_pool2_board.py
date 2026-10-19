@@ -36,6 +36,15 @@ def test_sample_box_and_px_across_follow_the_homography():
     assert board.homography({}, tags_mm) is None
 
 
+def test_px_across_is_the_shortest_projected_diameter():
+    """Spec rev 18 item 10: on a foreshortened (tilted) board px is the shortest diameter; the
+    longest is reported beside it."""
+    H = np.array([[2.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])   # x stretched 2x
+    s = board.sample_box(H, (100.0, 100.0), 80.0)
+    assert s["px_across"] == pytest.approx(80.0, rel=0.01)
+    assert s["px_across_max"] == pytest.approx(160.0, rel=0.01)
+
+
 def test_iou():
     assert board.iou([0, 0, 10, 10], [0, 0, 10, 10]) == 1.0
     assert board.iou([0, 0, 10, 10], [5, 0, 15, 10]) == pytest.approx(1 / 3)

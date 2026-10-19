@@ -99,14 +99,18 @@ def board_position(rvec, tvec, lay: Layout) -> list | None:
 
 def sample_box(proj: Projector, centre_mm, diameter_mm: float, n: int = 72) -> dict:
     """A round sample's outline projected into raw pixels: bounds [x1, y1, x2, y2] (the reference
-    box) and px across = the longest projected diameter."""
+    box) and px across = the
+    SHORTEST projected diameter (spec rev 18 item 10: strict, the 30 px gate), px_across_max the
+    longest (reported beside it)."""
     a = np.linspace(0, 2 * math.pi, n, endpoint=False)
     r = diameter_mm / 2.0
     uv = proj(np.c_[centre_mm[0] + r * np.cos(a), centre_mm[1] + r * np.sin(a)])
     half = n // 2
-    across = float(np.max(np.linalg.norm(uv[:half] - uv[half:], axis=1)))
+    diam = np.linalg.norm(uv[:half] - uv[half:], axis=1)
+    across, across_max = float(np.min(diam)), float(np.max(diam))
     (x1, y1), (x2, y2) = uv.min(axis=0), uv.max(axis=0)
-    return {"box": [float(x1), float(y1), float(x2), float(y2)], "px_across": across}
+    return {"box": [float(x1), float(y1), float(x2), float(y2)], "px_across": across,
+            "px_across_max": across_max}
 
 
 def _densify(poly: np.ndarray, steps: int) -> np.ndarray:
@@ -253,6 +257,7 @@ def measure_frame(img: np.ndarray, lens: pose.Lens, lay: Layout, colour: bool = 
     for name, (centre, diam) in lay.samples.items():
         s = sample_box(proj, centre, diam)
         rec["samples"][name] = {"px": round(s["px_across"], 2),
+                                "px_max": round(s["px_across_max"], 2),
                                 "box": [round(v, 1) for v in s["box"]]}
     rec.update(slanted_edge(gray, proj, lay))
     rec["tag_edge_w_px"] = tag_edge_widths(gray, tags, lay, proj)

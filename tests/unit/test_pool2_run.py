@@ -116,7 +116,8 @@ def test_f10_instants_flag_disagreeing_ranges_only_within_the_window():
     ae3 = [_frame("c", k, k * 0.1, 2.0) for k in range(10)]
     n6 = [_frame("c", k, k * 0.1 + 0.01, 2.0 if k < 5 else 2.4) for k in range(10)]
     imx = [_frame("c", k, k * 0.1 + 0.2, 2.0) for k in range(10)]  # nearest is 0 ms or 100 ms off
-    inst, flagged = run.f10_instants({"openmv_ae3": ae3, "openmv_n6": n6, "imx708": imx})
+    inst, flagged, single = run.f10_instants({"openmv_ae3": ae3, "openmv_n6": n6, "imx708": imx})
+    assert single == 0
     assert len(inst) == 10 and sum(i["flag"] for i in inst) == 5
     assert ("openmv_n6", "c", 7) in flagged and ("openmv_ae3", "c", 7) in flagged
     assert ("openmv_n6", "c", 2) not in flagged
@@ -228,7 +229,7 @@ def test_f10_instant_spans_at_most_50_ms():
     ae3 = [_frame("c", 0, 1.0, 2.0)]
     n6 = [_frame("c", 0, 1.040, 2.0)]
     imx = [_frame("c", 0, 0.955, 2.5)]
-    inst, _ = run.f10_instants({"openmv_ae3": ae3, "openmv_n6": n6, "imx708": imx})
+    inst, _, _ = run.f10_instants({"openmv_ae3": ae3, "openmv_n6": n6, "imx708": imx})
     assert len(inst) == 1 and set(inst[0]["ranges"]) == {"openmv_ae3", "openmv_n6"}  # IMX 45 ms off
 
 
@@ -417,3 +418,25 @@ def test_detect_refuses_when_detections_from_another_box_file_exist(repo, tmp_pa
     (out / "detect" / "detections.json").write_text(json.dumps({"boxes_sha256": "0" * 64}))
     with pytest.raises(SystemExit, match="another box file"):
         run.main(["detect", str(out), "--card", str(card), "--boxes", str(boxes)])
+
+
+def test_one_camera_instants_are_counted_not_judged():
+    """Spec rev 18 item 14: an AE3 frame with no other ranged frame within 50 ms is not an
+    instant; it is counted, and the share is over the judged (>= 2-camera) instants only."""
+    ae3 = [_frame("c", k, k * 1.0, 2.0) for k in range(4)]
+    n6 = [_frame("c", 0, 0.01, 2.5), _frame("c", 1, 1.01, 2.0)]   # frames 2, 3: no partner
+    inst, flagged, single = run.f10_instants({"openmv_ae3": ae3, "openmv_n6": n6})
+    assert len(inst) == 2 and single == 2
+    summ = run._f10_summary(inst, single)
+    assert summ["share"] == 0.5 and summ["single_camera_instants"] == 2
+    assert summ["two_camera_instants"] == 2
+
+
+def test_results_flag_imx708_clips_without_scaler_crop():
+    res = {"code": {"sha": "a" * 40, "dirty": False}, "boxes_sha256": "b" * 64,
+           "boxes_commit": "c" * 40, "detections_sha256": "d" * 64, "layout_measured": True,
+           "detector": {}, "w1_fallback": False, "w1": {}, "w2": {}, "w3": {}, "w4": {},
+           "w5": {}, "imx708_unmapped_clips": [{"phase": "pass1", "clip": "video/clip004",
+                                                "why": "no ScalerCrop recorded"}]}
+    md = run.results_md(res)
+    assert "FLAGGED: IMX708 ranges of pass1 video/clip004" in md

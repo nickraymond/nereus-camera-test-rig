@@ -143,3 +143,14 @@ def test_n6_vs_ae3_tag_limited_range_is_a_lower_bound():
     assert w.n6_vs_ae3(a, b) == "undecided (tag-limited)"
     assert w.n6_vs_ae3(b, a) == "undecided (tag-limited)"
     assert w.n6_vs_ae3({**a, "range_m": 3.0}, b) == "openmv_n6"   # longer and tag-limited: wins
+
+
+def test_tie_break_mtf50_needs_three_of_five():
+    """Spec rev 18 item 12."""
+    def r(n):
+        return {"range_m": 2.0, "tag_limited": False,
+                "bins": {1.0: {"mtf50_lpmm": 1.0, "mtf50_n": n}}}
+    assert w.n6_vs_ae3(r(2), r(5)) == "undecided (MTF50)"
+    assert w.n6_vs_ae3(r(3), r(3)) == "tie"
+    assert w._mtf50([{"mtf50_lpmm": 1.0}, {"mtf50_lpmm": None}, {"mtf50_lpmm": 3.0}]) == \
+        {"mtf50_lpmm": 2.0, "mtf50_n": 2}

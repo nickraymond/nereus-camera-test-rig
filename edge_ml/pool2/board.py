@@ -42,16 +42,20 @@ def project(H: np.ndarray, pts_mm: np.ndarray) -> np.ndarray:
 def sample_box(H: np.ndarray, centre_mm: tuple[float, float], diameter_mm: float,
                n: int = 72) -> dict:
     """A round sample's outline projected: its bounding box [x1, y1, x2, y2] (the detector's
-    reference box) and px across = the longest projected diameter."""
+    reference box) and px across = the
+    SHORTEST projected diameter (spec rev 18 item 10: strict, the 30 px gate), px_across_max the
+    longest (reported beside it)."""
     a = np.linspace(0, 2 * math.pi, n, endpoint=False)
     r = diameter_mm / 2.0
     outline = np.c_[centre_mm[0] + r * np.cos(a), centre_mm[1] + r * np.sin(a)]
     uv = project(H, outline)
     half = n // 2
-    across = float(np.max(np.linalg.norm(uv[:half] - uv[half:], axis=1)))
+    diam = np.linalg.norm(uv[:half] - uv[half:], axis=1)
+    across, across_max = float(np.min(diam)), float(np.max(diam))
     x1, y1 = uv.min(axis=0)
     x2, y2 = uv.max(axis=0)
-    return {"box": [float(x1), float(y1), float(x2), float(y2)], "px_across": across}
+    return {"box": [float(x1), float(y1), float(x2), float(y2)], "px_across": across,
+            "px_across_max": across_max}
 
 
 def iou(a: list[float], b: list[float]) -> float:

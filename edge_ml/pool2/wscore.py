@@ -41,6 +41,7 @@ SIZES = {"80": ("u80a", "u80b"), "50": ("u50a", "u50b")}
 F10_DISAGREE = 0.10    # cross-camera tag ranges at one instant
 F10_PASS_SHARE = 0.25  # > this share flagged -> the pass's W1 range is "not measured"
 F12_CHANGE = 0.20      # W2 check pass vs pass 1
+MTF50_MIN_N = 3        # spec rev 18 item 12: tie-break MTF50 needs >= 3 of the 5 frames
 
 
 def bin_of(range_m: float | None) -> float | None:
@@ -123,8 +124,7 @@ def detectable_range(frames: list[dict], size: str = "80", key: str = "hit",
     bins, last, end = {}, None, None
     for c in [b for b in BIN_CENTRES if b < first_bin]:  # report-only
         sel = select(frames, c)
-        bins[c] = ({**bin_sees(sel, size, key), "report_only": True,
-                    "mtf50_lpmm": _median([f.get("mtf50_lpmm") for f in sel])} if sel
+        bins[c] = ({**bin_sees(sel, size, key), "report_only": True, **_mtf50(sel)} if sel
                    else {"ok": False, "why": ["frames<5"], "report_only": True})
     for c in [b for b in BIN_CENTRES if b >= first_bin]:
         sel = select(frames, c)
@@ -133,7 +133,7 @@ def detectable_range(frames: list[dict], size: str = "80", key: str = "hit",
             end = (c, "frames")
             break
         res = bin_sees(sel, size, key)
-        res["mtf50_lpmm"] = _median([f.get("mtf50_lpmm") for f in sel])
+        res.update(_mtf50(sel))
         bins[c] = res
         if not res["ok"]:
             end = (c, "px" if any(w.endswith(":px") for w in res["why"]) else "hits")
@@ -163,17 +163,21 @@ def detector_fallback(per_camera: dict[str, dict]) -> bool:
 
 def n6_vs_ae3(n6: dict, ae3: dict) -> str:
     """The longer detectable range wins; a tie goes to the higher MTF50 (lp/mm) in the 1.0 m bin.
-    Reading (QE 008 N6 on #133, listed for PE 005): a tag-limited range is a lower bound ("≥"), so
-    a tag-limited camera that is not longer can't be said to lose: "undecided (tag-limited)"."""
+    Spec rev 18: item 13, a tag-limited range is a lower bound, so a tag-limited camera wins only if
+    it is longer, else "undecided (tag-limited)", and a tie with either side tag-limited is never
+    broken by MTF50; item 12, the MTF50 median needs >= 3 of the bin's 5 frames with a value, else
+    "undecided (MTF50)"."""
     r6, r3 = n6["range_m"] or 0.0, ae3["range_m"] or 0.0
     lim6, lim3 = bool(n6.get("tag_limited")), bool(ae3.get("tag_limited"))
     if (lim6 and r6 <= r3) or (lim3 and r3 <= r6):
         return "undecided (tag-limited)"
     if r6 != r3:
         return "openmv_n6" if r6 > r3 else "openmv_ae3"
-    m6 = (n6["bins"].get(1.0) or {}).get("mtf50_lpmm")
-    m3 = (ae3["bins"].get(1.0) or {}).get("mtf50_lpmm")
-    if m6 is None or m3 is None or m6 == m3:
+    b6, b3 = n6["bins"].get(1.0) or {}, ae3["bins"].get(1.0) or {}
+    if b6.get("mtf50_n", 0) < MTF50_MIN_N or b3.get("mtf50_n", 0) < MTF50_MIN_N:
+        return "undecided (MTF50)"
+    m6, m3 = b6["mtf50_lpmm"], b3["mtf50_lpmm"]
+    if m6 == m3:
         return "tie"
     return "openmv_n6" if m6 > m3 else "openmv_ae3"
 
@@ -202,6 +206,12 @@ def f10_flags(ranges: dict[str, float | None]) -> bool:
 def f10_pass_unmeasured(flags: list[bool]) -> bool:
     """F10: > 25 % of a pass's matched instants flagged -> its W1 range is 'not measured'."""
     return bool(flags) and sum(flags) / len(flags) > F10_PASS_SHARE
+
+
+def _mtf50(sel: list[dict]) -> dict:
+    """A bin's tie-break MTF50: the median over its frames with a value, and how many had one."""
+    v = [f.get("mtf50_lpmm") for f in sel if f.get("mtf50_lpmm") is not None]
+    return {"mtf50_lpmm": _median(v), "mtf50_n": len(v)}
 
 
 def _median(vals):

@@ -216,6 +216,9 @@ def cmd_scan(a) -> int:
             for r in res:
                 if r.get("lens"):
                     man["lenses"].setdefault(cam, {})[f"{r['width']}x{r['height']}"] = r["lens"]
+                    if cam == "imx708" and not r["lens"]["mapped"]:  # rev 18 item 15
+                        man.setdefault("imx708_unmapped_clips", []).append(
+                            {"phase": name, "clip": r["clip"], "why": r["lens"]["why"]})
             _write(out / "scan" / name / f"{cam}.json", res)
     _write(out / "scan" / "manifest.json", man)
     print(f"scan: {out / 'scan'} ({', '.join(phases)})")
@@ -250,15 +253,16 @@ def f10_instants(per_cam: dict[str, list[dict]], key: str = "range_m"
     """Matched instants: each frame of the slowest stream (AE3, else N6, else IMX708) with a range,
     with every other camera's nearest ranged frame within MATCH_WINDOW_S; the instant's frames span
     <= MATCH_WINDOW_S in all (rev 5; QE 008 reading 5: the farthest pick is dropped until they do).
-    Reading (listed for PE 005): an instant with 2 cameras is judged too. Returns the instants
-    with >= 2 ranges and the (camera, clip, index) keys of the frames flagged (> 10 %). ``key``:
-    range_m (rev 16, undistorted corners: decisions) or range_raw_m (raw corners: report)."""
+    Spec rev 18 item 14: a 2-camera instant is judged; a 1-camera one isn't, stays out of the 25 %
+    denominator, and is counted. Returns the instants with >= 2 ranges, the (camera, clip, index)
+    keys of the frames flagged (> 10 %), and the count of 1-camera instants. ``key``: range_m
+    (rev 16, undistorted corners: decisions) or range_raw_m (raw corners: report)."""
     ranged = {c: [f for f in fr if f.get(key)] for c, fr in per_cam.items()}
     ref_cam = next((c for c in ("openmv_ae3", "openmv_n6", "imx708") if ranged.get(c)), None)
     if ref_cam is None:
-        return [], set()
+        return [], set(), 0
     times = {c: np.array([f["t"] for f in fr]) for c, fr in ranged.items() if fr}
-    instants, flagged = [], set()
+    instants, flagged, single = [], set(), 0
     for f in ranged[ref_cam]:
         picks = {ref_cam: f}
         for c, ts in times.items():
@@ -272,13 +276,14 @@ def f10_instants(per_cam: dict[str, list[dict]], key: str = "range_m"
             far = max((c for c in picks if c != ref_cam), key=lambda c: abs(picks[c]["t"] - f["t"]))
             del picks[far]
         if len(picks) < 2:
+            single += 1
             continue
         flag = wscore.f10_flags({c: p[key] for c, p in picks.items()})
         instants.append({"t": f["t"], "ranges": {c: p[key] for c, p in picks.items()},
                          "flag": flag})
         if flag:
             flagged |= {(c, p["clip"], p["index"]) for c, p in picks.items()}
-    return instants, flagged
+    return instants, flagged, single
 
 
 def pair_ratios(instants: list[dict]) -> dict[str, float]:
@@ -292,9 +297,10 @@ def pair_ratios(instants: list[dict]) -> dict[str, float]:
     return out
 
 
-def _f10_summary(instants: list[dict]) -> dict:
+def _f10_summary(instants: list[dict], single: int) -> dict:
     flags = [i["flag"] for i in instants]
-    return {"instants": len(instants), "flagged": sum(flags),
+    return {"instants": len(instants), "flagged": sum(flags), "single_camera_instants": single,
+            "two_camera_instants": sum(len(i["ranges"]) == 2 for i in instants),
             "share": round(sum(flags) / len(flags), 3) if flags else None,
             "pass_unmeasured": wscore.f10_pass_unmeasured(flags),
             "pair_ratio_median": pair_ratios(instants)}
@@ -340,14 +346,16 @@ def cmd_select(a) -> int:
         per = {c: load_scan(out, ph, c) for c in cams}
         if not any(per.values()):
             continue
-        inst, flagged = f10_instants(per)
+        inst, flagged, single = f10_instants(per)
         flagged_by_pass[ph] = flagged
-        f10[ph] = {**_f10_summary(inst),
-                   "raw_corners": _f10_summary(f10_instants(per, key="range_raw_m")[0])}
+        raw_inst, _, raw_single = f10_instants(per, key="range_raw_m")
+        f10[ph] = {**_f10_summary(inst, single), "raw_corners": _f10_summary(raw_inst, raw_single)}
     res = {"stage": "select", "scan_manifest_sha256": sha256_file(out / "scan" / "manifest.json"),
            "layout_sha256": man["layout_sha256"], "layout_measured": man.get("layout_measured"),
            "card_values": {**card.record(), "commit": card_commit},
-           "lenses": man.get("lenses"), "lost": {k: v.get("lost") for k, v in
+           "lenses": man.get("lenses"),
+           "imx708_unmapped_clips": man.get("imx708_unmapped_clips") or [],
+           "lost": {k: v.get("lost") for k, v in
                                                   (man.get("phases") or {}).items()},
            "code": code_state(), "f10": f10, "cameras": {}}
     for cam in cams:
@@ -727,6 +735,7 @@ def cmd_score(a) -> int:
            "detections_sha256": sha256_file(dpath) if detections else None,
            "card_values": {**card.record(), "commit": card_commit},
            "layout_measured": boxes.get("layout_measured"), "lenses": boxes.get("lenses"),
+           "imx708_unmapped_clips": boxes.get("imx708_unmapped_clips") or [],
            "lost": boxes.get("lost"),
            "detector": {k: detections.get(k) for k in ("model_id", "model_revision", "query",
                                                        "detect_floor", "threshold")},
@@ -830,6 +839,9 @@ def results_md(res: dict) -> str:
         for mode, ln in modes.items():
             L.append(f"- {cam} {mode}: {'mapped' if ln.get('mapped') else 'GUARD'}, fx "
                      f"{round(ln['K'][0][0], 1)}, fy {round(ln['K'][1][1], 1)}: {ln.get('why')}")
+    for k in res.get("imx708_unmapped_clips") or []:
+        L.append(f"- **FLAGGED: IMX708 ranges of {k['phase']} {k['clip']}**: no ScalerCrop, full-sensor "
+                 f"scale assumed (spec rev 18 item 15): {k['why']}")
     lost = {ph: v for ph, v in (res.get("lost") or {}).items() if v}
     if lost:
         L += ["", "## Lost clips (not scanned)", ""]
@@ -837,13 +849,15 @@ def results_md(res: dict) -> str:
             L += [f"- {ph}: {k['clip']} ({k['why']})" for k in v]
     L += ["", "## F10 (cross-camera range check, > 10 % at one instant; rev 16)", "",
           "Decisions use the undistorted corners; raw corners are reported beside them.", "",
-          "| pass | corners | instants | flagged | share | W1 not measured | median ratios |",
-          "|---|---|---|---|---|---|---|"]
+          "1-camera instants are not judged and stay out of the share (spec rev 18 item 14).", "",
+          "| pass | corners | instants (2-cam) | 1-cam | flagged | share | W1 not measured | "
+          "median ratios |", "|---|---|---|---|---|---|---|---|"]
     for ph, f in (res.get("f10") or {}).items():
         for label, g in (("undistorted", f), ("raw", f.get("raw_corners") or {})):
             ratios = ", ".join(f"{k} {v}" for k, v in (g.get("pair_ratio_median") or {}).items())
-            L.append(f"| {ph} | {label} | {g.get('instants')} | {g.get('flagged')} | "
-                     f"{g.get('share')} | {g.get('pass_unmeasured')} | {ratios} |")
+            L.append(f"| {ph} | {label} | {g.get('instants')} ({g.get('two_camera_instants')}) | "
+                     f"{g.get('single_camera_instants')} | {g.get('flagged')} | {g.get('share')} | "
+                     f"{g.get('pass_unmeasured')} | {ratios} |")
     L += ["", "## W2 camera Secchi + F12", "", "| camera | pass 1 (m) | check (m) | F12 |",
           "|---|---|---|---|"]
     for cam, r in res["w2"].items():
