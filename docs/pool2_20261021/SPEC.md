@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 9, tier (a); rev 2–9 amendments at the end)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 13, tier (a); rev 2–13 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -301,3 +301,215 @@ timeline e_pool1021, card prop_pool2_prep. Author: Principal Engineer, Fri 10/16
   ~20 poses, all three cameras at once; the rig raised ~40 cm, tilted up ~25° or rolled 180° for that block only, then
   restored), part C's Wed card includes it per the recipe on c_charuco. This extends must do 14 to the IMX708. The rig
   change for that block is announced (§10) and written into the envelope's rig section (must do 15).
+
+## Amendment rev 10 (PE 003, Sun 10/18 9:15 AM PT; Nick's ask for detection on Wed). CONDITIONAL: binding only on Nick's yes. Overrides earlier revs where they conflict.
+- **Source (Nick, Sun 10/18 8:50 AM PT, board comment on the Sun 10/18 start-of-day update, thread b37485c5, attributed
+  "the user (owner)", verbatim):** "I'd like to review a report or other doc in more detail with the PE to understand what
+  we found from the Friday test, what did we learn, what needs to be added to the Wednesday testing to evaluate the cameras
+  and being able to detect something underwater. I want a focus session to understand what is going into these decisions."
+- **Status:** proposed in the debrief doc (board card c_pool1_debrief, decisions 1–2). Nothing in this block applies unless
+  Nick says yes to decision 1 in his own words (focus session, PjM chat forward, or his board comment) by **Tue 10/20 noon**.
+  With no yes, Wed runs rev 9 unchanged. Rev 9's d58 conditional block is void (d58 decided NO, Sat 3:39 PM).
+- **Why:** rev 9 measures frame rate, completeness, sync and a by-eye comparison. Nothing measures whether a camera can see a
+  target of known size at a known range in real pool water. Geometry alone (bm #184 fx; centre of frame): an 80 mm urchin
+  at 2 m is 65 px (N6 1280×800), 44 px (IMX708 1080p), 33 px (N6 640×400), 28 px (AE3 640×400). Turbidity, blur and
+  contrast loss are what the pool adds, and only a target shows them.
+- **Must do 16, W1 detection ladder:**
+  1. **Target (rig session makes it; Nick prints it).** A script in the rig code tree writes a print-ready PDF to
+     `~/NereusData/nereus-camera-test-rig/<date>_w1_target/` (MANIFEST: source frames, sha256; the PDF is not committed).
+     At 100 % scale on one 11×17 in (or A3) sheet: two urchin photos at 80 mm test diameter and two at 50 mm, cropped
+     from Reef Check stills in the urchin pilot's run folder (frame names in the MANIFEST); a black square ≥ 100 mm on
+     white, rotated ~5° (slanted edge); a 200 mm black-and-white quartered disk; a 100 mm scale bar. Laminated and
+     weighted (Nick). **Print check:** Nick measures one 80 mm photo with a ruler; within ±2 mm, else reprint; the
+     measured width goes on the Wed card.
+  2. **Placement.** On the floor tape, centred between the N6 and AE3 axes, facing the rig, at 3.0, 2.0, 1.5, 1.0 and
+     0.5 m from the rig port to the target face, in that order, then 1.0 m again at the end (F12). At each stop, one 30 s
+     clip on all three cameras at Wed's settings, with the diver out of the frame for ≥ 20 s of it.
+  3. **Scoring (after the dive, on the Mac; matched frames on the rev 5 capture clock, ±50 ms).** Per camera per stop, 5
+     frames evenly spaced in the diver-free segment:
+     - pixels across each 80 mm and 50 mm photo (the 100 mm scale bar cross-checks px/mm);
+     - detector: the urchin pilot's zero-shot detector (same model, checkpoint and score threshold, recorded), prompt
+       "purple sea urchin"; a hit = a box with IoU ≥ 0.5 against the hand-drawn photo box;
+     - MTF50 from the slanted edge, in cycles/pixel and in line pairs/mm at the target;
+     - Michelson contrast of the quartered disk.
+  4. **Pass/fail (set now, before any data).** A camera *sees an urchin at d* when the 80 mm photo is ≥ 30 px across
+     **and** the detector hits in ≥ 4 of 5 frames. Its **detectable range** is the largest d where that holds and it also
+     holds at every smaller d. Reported for the 50 mm photos too. N6 vs AE3: the longer detectable range wins; a tie goes
+     to the higher MTF50 at 1.0 m.
+     - The 30 px line is the PE's working value (debrief decision 2). Nick may set another number before any Wed data
+       exists; after data it can only tighten (§13).
+     - **Pre-registered fallback:** if the detector hits in < 4 of 5 frames at 0.5 m on every camera, it is the wrong tool
+       for a printed target. The detector criterion is then replaced by a blind person's yes/no on shuffled crops (not
+       told the camera or distance; ≥ 4 of 5 yes), and RESULTS says so.
+- **Must do 17, W2 visibility (report-only):** one dive-log line: the horizontal distance from the rig at which the
+  quartered disk disappears to the diver's eye (nearest 0.25 m), plus a note on the water. Also the disk contrast at each
+  W1 stop.
+- **Must do 18, W3 colour card (report-only):** the v3 card on the tape facing the rig at 1.0 m and 2.0 m, one 30 s clip
+  each, all three cameras. Scored after: CIEDE2000 per patch against the card's reference values on uncorrected camera
+  output; median and worst patch per camera. It feeds the shoot-out's colour pillar; no bar.
+- **New failure modes:**
+  - F10 Target at the wrong distance or angle (diver). Caught by px/mm from the scale bar vs the fx prediction: off by
+    > 15 % → that stop is excluded and listed.
+  - F11 Target cut by a frame edge (the cameras point slightly differently; the AE3 view sits right of the N6's). That stop
+    is scored only for cameras that see the whole target; listed.
+  - F12 Water clears or clouds during the block (silt). The repeat 1.0 m stop at the end: disk contrast differs by > 20 %
+    from the first 1.0 m stop → flagged in RESULTS; ranges stand but carry the flag.
+  - F13 Print scale wrong. Caught by the print check (must do 16.1).
+  - F14 The block eats pool time. W1–W3 come after rev 9's N6-vs-AE3 clips on the card, so they never displace them,
+    and are time-boxed to 25 min; at the box, stop and keep what is recorded.
+- **Card, envelope, code:** part C's Wed card lists W1–W3 after the N6-vs-AE3 clips. The envelope's rig section gains no
+  verbs (recording only, 8 extra 30 s clips). Scoring code goes on the rig PR with QE before any W1 result is reported.
+  The detector runs on the Mac under the PjM's compute all-clear.
+- **Cost:** pool ~20 min (W1 ~15, W2 ~1, W3 ~3); rig session ~2 h desk (target script, scoring); Nick ~20 min (print,
+  laminate, weight). Disk: 8 clips × ~75 MB (IMX708 ~38 + N6 HD ~29 + AE3 ~7) ≈ 0.6 GB, added to Wed's planned SD use in
+  G-b item 4 and the Mac pull.
+- **Out of scope:** detector accuracy on real urchins (E6, Reef Check video); lens correction (d58); any rig change.
+
+## Amendment rev 11 (PE 003, Sun 10/18 9:12 AM PT; QE 006 FAIL on rev 10: R1 + N1–N3). CONDITIONAL with rev 10. Overrides rev 10 where they conflict.
+- **R1, W1 pass/fail (replaces must do 16.4's first paragraph; the 30 px note and the detector fallback stay):**
+  - (a) **Both photos.** Each of the two 80 mm photos is scored on its own. A camera *sees an urchin at d* only when
+    **both** 80 mm photos are ≥ 30 px across **and** each is hit by the detector in ≥ 4 of 5 frames. The 50 mm report uses
+    the same both-photos rule. (Under the fallback, "hit" = the blind person's yes, per photo.)
+  - (b) **First pass only.** The range uses the first 1.0 m stop. The repeat 1.0 m stop is only for F12 drift and never
+    changes a range.
+  - (c) **An excluded stop breaks the chain.** Stops are taken in order of distance (0.5, 1.0, 1.5, 2.0, 3.0 m). The
+    detectable range is the largest d such that every stop from 0.5 m up to d was scored **and** held. A stop excluded
+    by F10 or F11 counts as not held. Example: AE3 1.5 m excluded for F11 → its range is at most 1.0 m, whatever 2.0 m
+    shows. If 0.5 m fails or is excluded, the range is "none at 0.5 m" (reported, not interpolated).
+  - (d) **Tie-break unit.** MTF50 in **line pairs per mm at the target**, at the first 1.0 m stop (comparable across
+    resolutions). Cycles/pixel is reported beside it, never used to rank.
+- **N1:** the Wed card writes the urchin pilot's model checkpoint name and score threshold as **values**, copied from rig
+  #123's pilot config at its merged sha. W1 scoring reads those values, not a live setting.
+- **N2 (F10's prediction):** predicted px/mm = fx × (1 / distance in mm), with fx from bm #184's fit (**NOT VALIDATED**
+  as a lens model, but its centre focal length is stable: JPEG vs DNG fx within 0.03 %). IMX708: 1080p is taken as the
+  full-FOV binned mode scaled to 1920 wide, so fx = 2628.3 × 1920/4608 ≈ 1095 px. If **every** IMX708 stop is off by the
+  same factor (> 15 %, all within ±5 % of each other), the mode assumption is wrong, not the placement: no IMX708 stop is
+  excluded for F10, and RESULTS records the factor. The 30 px test always uses **measured** pixels, never the prediction.
+- **N3 (reference boxes):** the rig session draws the reference box for each photo on the sampled frames **before** the
+  detector runs, without seeing any detector output, and commits the box file (its sha in RESULTS) before the detector
+  run. IoU uses those boxes.
+- **N4 (noted):** the quoted comment is the reason for rev 10, not an approval. Only Nick's yes on debrief decision 1 binds
+  revs 10–11; the executing session verifies it at the source (§6).
+
+## Amendment rev 12 (PE 003, Sun 10/18 5:18 PM PT; Nick's decisions in the pool test 1 debrief doc). Replaces revs 10–11 (W1–W3) in full; binding.
+**Rev 13 (PE 004, Sun 10/18 8:04 PM PT), edited in place, text only: QE 007's rev 12 FAIL (R1 pass choice + tie statistic +
+check-pass setting; R2 W1 chain starts at 1.0 m) and nits N1–N5. No bar is loosened; no data exists yet.**
+- **Source: Nick's own comments in the Claude Doc "Pool test 1 debrief"** (https://claude.ai/artifact/4x3hTr8GsKWesoQs9tXUUg; read by
+  PE 003 with the docs connector `query`, author = the user, Nick; times PT), verbatim:
+  - 10:33 AM, thread 468e59ea, on W2: "I like this idea, sadly there is algea on the walls and floor of the pool so any time I
+    move i kick up sediment. I don't think this is the best use of time as written, instead I think I should swim with the
+    reference board in my hands starting from far away and then move towards the cameras, then the video can see when it can
+    detect the april tags and measure the board size to get a reference for size and distance. That can act as my seiki disk."
+  - 10:35 AM, thread 64518e06, on W4: "Yes lets add this, this can be part of the 1m, 2m, 3m distance ladder and we should shoot
+    1/2 and full color for the N6 and AE3 in still images first to see." Then 10:35 AM, thread d911e020: "oh I see, vidoe even
+    better!"
+  - 10:36 AM, thread 563cce3b, on W5: "Yes I like this too".
+  - 10:39 AM, thread b1cb6a07: urchin cutouts taped in the white space around the v3 colour card, "so we also get the v3
+    color card in frame".
+  - 10:44 AM, thread 6781294a, on decision 1: "Yes add W1-W5 please".
+  - 10:45 AM, thread 31803990, on decision 2: "Yes, 30px for the 8cm target. I'd like you to prepare 4x samples that I can print
+    and laminate. I'll get these printed locally and mount them to my existing board. Also good to have a standard 8cm and 5cm
+    black and grey target (grey so I dont get clippng) and I'll print these also".
+  - 10:45 AM, thread 5cf67378, on decision 3 (W4): "Yes include please".
+  - In the PE chat, ~5:15 PM: "I'll start the new PE once we finish the spec".
+  This rev specs the test; Nick still approves the Wed card and the envelope on Tue (rev 1 Done).
+- **Why:** rev 9 measures fps, completeness and sync. W1–W5 answer Nick's 8:50 AM ask: can each camera see an urchin, and at
+  what range, in real pool water. The floor stops of rev 10 are dropped (sediment).
+- **The board (must do 16):** Nick's existing AprilTag reference board, i.e. the v3 colour card with its corner tags (tag25h9,
+  LESSONS §5). In its white margin, laminated and taped:
+  - the print sheet's four urchin samples (2 × 80 mm, 2 × 50 mm; diameter = spine tip to spine tip);
+  - 80 mm and 50 mm black-and-grey quartered disks (no white);
+  - one slanted-edge square (black on mid-grey, ≥ 50 mm, rotated ~5°).
+  Print sheet: the 2-page US Letter PDF attached in the debrief doc (or a regenerated equivalent). The rig session records its
+  sha256 in the run MANIFEST. **Print check:** Nick measures the 10 cm bar and one 80 mm sample with a ruler, ±2 mm, else
+  reprint. **Before the dive:** Nick measures one tag's black-square edge in mm; it goes on the Wed card and sets the range.
+- **Must do 17, the swim (W1 + W2 + W3 + W4 in one swim):** after rev 9's N6-vs-AE3 clips, never before them.
+  1. **Pass 1 (full colour):** the N6 and AE3 record full colour (4:4:4); the IMX708 at its Wed setting. The diver holds the
+     board face-on to the rig, centred between the N6 and AE3 axes, mid-water, never touching the floor or walls. Start ~4 m
+     out, or past where the tags vanish. Swim slowly straight in to ~0.5 m, holding still ~5 s at about 3, 2 and 1 m (by eye
+     off the floor tape; the tags give the true range). All three cameras record.
+  2. **Pass 2 (half colour):** the same swim with the N6 and AE3 at half colour (4:2:0) (W4); the IMX708 unchanged. Under F15
+     the N6 runs half colour on both passes.
+  3. **Check pass** at the end: one more swim-in at pass 1's settings, written as its own phase in the program string (F12
+     drift check; scoring happens after the dive, so no "winning" setting is known at the pool).
+  4. The chroma change between passes is a phase in the Wed program string (the passthrough PR's per-phase args), never a
+     manual command. Each clip records its actual settings (passthrough condition 2).
+- **Must do 18, W5 swim-past:** after the swims, two crossings of the frame at ~1 m mid-water with the board face-on, one slow
+  and one at swimming speed.
+- **Range and speed:** every frame's range comes from the board's tag pose, using bm #184's centre focal lengths (fx/fy; NOT
+  VALIDATED as a lens model, but centre-stable) and Nick's measured tag size. bm #184's fx/fy are at 1280×800. They are
+  scaled to a Wed resolution only if that mode is a full-field scale: the N6's 960×600 is (TEST_CARD_B); for the AE3's
+  640×400 the rig session states, from the sensor-mode table, whether it is binned (scale) or windowed (no scale; the
+  principal point shifts). The fx/fy values used are written on the Wed card before Tue noon. Speed comes from the pose change between frames on
+  the capture clock (rev 5). Frames where no tag decodes have no range and are never scored for W1.
+- **Scoring (on the Mac, after the dive; code on the rig PR with QE before any W result):**
+  - **W1, per camera, on the pass that ran that camera's Wed part-B setting (the chroma of its part-B "holds" row on the Wed
+    card).** If both passes ran the same setting for that camera (always the IMX708; the N6 under F15; any camera under F18),
+    W1 uses pass 1. Range bins of 0.5 m centred on 0.5, 1.0 … 4.0 m. In each bin, 5 frames where the board is whole in that
+    camera's frame (frame rule below).
+    - Per frame: pixels across each 80 mm and 50 mm sample, taken from the tag homography and the samples' measured positions
+      on the board (Nick, or the rig session from a flat photo of the mounted board, before the dive), never drawn by hand.
+    - Detector: the urchin pilot's zero-shot model, prompt "purple sea urchin", checkpoint and score threshold written as values
+      on the Wed card from rig #123's merged pilot config. A hit = IoU ≥ 0.5 against the reference box, which is each sample's
+      outline projected through the same tag homography (no hand-drawn step). The box file is written and committed before the
+      detector runs, its sha in RESULTS.
+    - MTF50 from the slanted edge, in line pairs per mm at the board.
+    - Colour error (CIEDE2000) per v3 patch on uncorrected output.
+  - **W1 pass/fail (set now, before any data):**
+    - A camera sees an urchin in bin d when **both** 80 mm samples are ≥ 30 px across **in each of the bin's 5 frames**
+      **and** each is hit in ≥ 4 of 5 frames.
+    - **Which 5 frames:** hold frames are those with board speed < 0.1 m/s (from the tag pose). If a bin has ≥ 5 hold frames,
+      its candidates are its hold frames; otherwise all its whole-board frames. Over the N candidates in time order, take
+      indices round(i·(N−1)/4), i = 0…4.
+    - Its detectable range = the largest d where that holds and also holds in every closer bin from the chain's first bin. A
+      bin with fewer than 5 scorable frames breaks the chain.
+    - **The chain starts at the 1.0 m bin for every camera (rev 13, R2).** The 0.5 m bin is report-only: at ~0.5 m the board
+      with its samples doesn't fit whole in the N6 or AE3 view (bm #184 underwater fx/fy at 1280×800: the N6 covers 0.79·d ×
+      0.49·d, the AE3 0.92·d × 0.57·d; the 420 × 270 mm card alone is whole only from d ≈ 0.55 m / 0.47 m). Before Tue noon
+      the rig session computes, from those fx/fy at Wed's resolution and Nick's measured board outline (with the samples, and
+      the board centred between the two axes), whether the whole board fits each camera at 1.0 m. If it doesn't for a camera,
+      that camera's chain starts at the first bin centre where it does, written on the Wed card before any data.
+    - The same is reported for the 50 mm samples.
+    - N6 vs AE3: the longer range wins; a tie goes to the higher MTF50 (lp/mm) in the 1.0 m bin, where a camera's MTF50 is
+      the median over that bin's 5 W1 frames.
+    - **Fallback:** if the detector hits in < 4 of 5 frames in the chain's first bin (1.0 m unless the Wed card says
+      otherwise) on every camera, it's replaced by a blind yes/no on shuffled crops (≥ 4 of 5 yes per sample), and RESULTS
+      says so. The blind viewer is a fresh session the PjM names, given only the crops under neutral names, with no range,
+      camera or frame order.
+    - The 30 px line is Nick's (10:45 AM). After data it can only tighten (§13).
+  - **W2 (report-only), per camera:** the range at the first frame where ≥ 1 tag decodes on pass 1 (the "camera Secchi"
+    reading). Repeated on the check pass.
+  - **W3 (report-only):** CIEDE2000 per patch, median and worst, per camera, in the 1.0 and 2.0 m bins.
+  - **W4 (report-only; Nick judges by eye):** for the N6 and AE3, matched frames at the 3, 2 and 1 m holds, full vs half
+    colour side by side, with the same MTF50 and CIEDE2000 numbers. A W4 pass may run below 9.5 fps: allowed here only, with
+    fps logged. It changes no part-B "holds" verdict.
+  - **W5 (report-only):** the edge blur width (10–90 %, px) of the slanted edge and tag edges against measured speed, per camera,
+    both crossings.
+- **Failure modes (new rows; replace rev 10's F10–F14):**
+  - F10 Tag range wrong (tag size mis-measured, fx provisional). Detected: the three cameras' tag ranges at the same instant
+    disagree by > 10 %. Then: flag those frames; if > 25 % of a pass is flagged, its W1 range is "not measured".
+  - F11 Board cut by a frame edge (the AE3 view sits right of the N6's). Detected per frame. Then: excluded for that camera;
+    counts toward the < 5-frames chain break.
+  - F12 Water changes during the block (silt). Detected: W2's check-pass range differs from pass 1 by > 20 %. Then: flagged in
+    RESULTS; ranges stand with the flag.
+  - F13 Print scale wrong. Caught by the print check.
+  - F14 Pool time overrun. The block is time-boxed at 30 min. At the box, stop and keep what's recorded; pass 1 comes first.
+  - F15 **The N6 can't record full colour:** its hardware JPEG encoder is 4:2:0 only (rev 6). Part B runs one 4:4:4 probe clip on
+    the N6 before Tue noon. It is a new row on TEST_CARD_B (a rev 3 of that card on the pool-2 successor's next PR, not a push
+    to the QE-passed rig #125, https://github.com/nickraymond/nereus-camera-test-rig/pull/125), with its bar: ≥ 5 fps over a
+    30 s clip. If it fails, or drops below 5 fps, W4 runs the AE3 only, and the Wed card says so.
+  - F16 Tags stop decoding before an 80 mm sample drops under 30 px. W1's range is then capped at the last decoded bin and
+    reported as "≥ that range (tag-limited)". Every camera's chain end is reported with its reason: px, hits, < 5 scorable
+    frames, or tag-limited. Tag-limited applies only when the chain held through the farthest bin that has tag-decoded
+    frames.
+  - F17 Swim motion blurs frames. Hold frames are used first (see the W1 frame rule); MTF50 is reported per bin.
+  - F18 The chroma phase switch fails mid-dive. Caught by each clip's recorded settings (passthrough condition 2); that pass
+    becomes W1-only.
+- **Cost:** pool ~25 min (passes ~15, W4 ~2 extra, W5 ~3, check pass ~5), within the 30-min box. Rig session desk ~3 h
+  (scoring code, the N6 probe). Nick ~20 min (print, laminate, mount, measure). Disk: ~8 × 30 s clips ≈ 0.6 GB (≤ 1 GB),
+  added to Wed's SD and pull plan.
+- **Card, envelope, owners:**
+  - The pool test 2 session commits this text byte-identical (QE byte-check), puts must dos 16–18 on the Tue 3 PM card after
+    the N6-vs-AE3 clips, and writes the scoring code (QE before results).
+  - The PjM adds the program string's phases to the envelope's rig section. No new verbs; no manual commands.
+  - Out of scope: detector accuracy on real urchins (E6); lens correction (d58); per-m² counts (d33).

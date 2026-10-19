@@ -5,10 +5,12 @@ Pre-registered before any bench clip (TEAM_RULES §9, §13). QE checks it before
 the fix PR (branch `study/pool2-prep-qe-fixes` off main 9ff4ab5), and this card now describes that code. #121 merged
 at the FAIL sha, so **rig main 9ff4ab5 is never deployed as is**: the bench build is the fix PR's QE PASS sha. QE 006's
 FAIL on the fix PR @ 9ec4bfe (R1, R2 + nits) is fixed on the same PR.
+**Rev 3 (Sun 10/18 8:08 PM, on rig #126):** the spec is rev 13 (W1–W5 binding), and part B gains one pre-registered
+probe: the N6 in full colour (F15, §4 step 4).
 
 | | |
 |---|---|
-| **Spec** | [SPEC.md](SPEC.md) rev 9 (sha256 `aacf8d28116a…`, QE 005 PASS Sat 3:37 PM: d55, d56, lens) |
+| **Spec** | [SPEC.md](SPEC.md) rev 13 (sha256 `2e5525246709…`, QE 007 PASS Sun 10/18 8:06 PM; rev 12 replaced the conditional revs 10–11, rev 13 fixed it). Part B's bars are rev 9's, unchanged |
 | **Binding nits** | QE 005 N1–N7 (rev 5), R1, N9, N10, N11 (rev 6); QE 005 FAIL @ a938f76: R1, R2, R4–R8 + nits (rev 2 of this card); QE 006 FAIL @ 9ec4bfe: R1, R2 + nits |
 | **Decisions** | d52; d57 (Sat 3:26 PM: N6 resync fix in the build, usable-clip share, no pause bar; replaces d53); d55 (Sat 3:32 PM: sync bar N6 ↔ AE3 + IMX708 start bar; spec text in the next rev); d56 (Sat 3:32 PM: the rev 6 chroma rule approved, plus Nick's 4:4:4 vs 4:2:0 look) |
 | **Unit** | nereus002: Pi Zero 2 W + IMX708 + OpenMV N6 `10003500025043364d343000` + OpenMV AE3 `0829c14000000000` |
@@ -168,6 +170,14 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
      - QVGA is below the control and isn't run.
      - **Rev 9 (d56):** if the ladder runs 4:4:4 and its first rung above 640×400 fails, that rung re-runs in 4:2:0
        (n = 3). The ladder continues in 4:2:0 if it holds.
+   - **N6 full colour, `n6_444_probe` (spec rev 12–13 F15; before Tue noon, after the N6's answer is known):** one 30 s
+     clip at the N6's Wed size with `--n6-subsampling 444`, the AE3 at its control:
+     `pool2_bench.py n6_444_probe --under openmv_n6 --probe <W>x<H> --probe-min-fps 5 -- --n6-framesize <its name>
+     --n6-subsampling 444 --timing` (`--probe-min-fps`: rig #126).
+     - PROBE PASS = every N6 frame decodes at that size, its measured chroma is 4:4:4, and it delivers ≥ 5 fps over the
+       30 s (`fps_clip`), with the stream running the whole clip. Its frame kB and JPEG ms are reported.
+     - It is a probe: never one of any n, never a "holds". If it fails (the hardware encoder may be 4:2:0 only), W4 runs the
+       AE3 only, the N6 records half colour on both W passes, and the Wed card says so.
 5. **The 25× ready gate** (Tue afternoon, last, on Wed's exact build and settings; §6).
 
 **Fail fast (§9):** a setting stops at its first clip that misses a bar, because one miss fails the setting. A
