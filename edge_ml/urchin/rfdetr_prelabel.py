@@ -15,6 +15,7 @@ model, its training code (ADIN_SPI_OpenMV ml/rfdetr_gate/) and data live outside
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -68,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     from PIL import Image
     from rfdetr import RFDETRBase
 
+    ck_sha = hashlib.sha256(args.checkpoint.read_bytes()).hexdigest()
     names = [ln.strip() for ln in args.stills.read_text().splitlines() if ln.strip()]
     model = RFDETRBase(pretrain_weights=str(args.checkpoint))
     result, t0 = {}, time.monotonic()
@@ -83,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "model": f"RF-DETR Base (Nick), tiled, {args.checkpoint}",
+                "checkpoint_sha256": ck_sha,
                 "query": None,
                 "min_score": args.min_score,
                 "detections": result,
