@@ -4,7 +4,7 @@ Pure Python + numpy. A still is identified by its file name; its video, time and
 from stills.csv (extract_stills.py) plus a group map {video: group} written by hand from the
 dataset's folder names / Reef Check's notes, frozen in git (groups_reefcheck.json).
 
-    python -m edge_ml.urchin.split q1-sample   <stills.csv> <q1_sample.txt>
+    python -m edge_ml.urchin.split q1-sample   <stills.csv> <q1_sample.txt> [--exclude <names.txt>]
     python -m edge_ml.urchin.split screen-list <stills.csv> <groups.json> <group_screen.csv>
     python -m edge_ml.urchin.split folds       <stills.csv> <groups.json> <group_screen.csv> <out>
 
@@ -240,6 +240,12 @@ def main(argv: list[str] | None = None) -> int:
     q = sub.add_parser("q1-sample", help="100 stills (seed 0) for the Q1 usability review")
     q.add_argument("stills_csv", type=Path)
     q.add_argument("out", type=Path)
+    q.add_argument(
+        "--exclude",
+        type=Path,
+        help="still names never drawn (PREREG 2026-10-18 clarification: the pilot's 100); the "
+        "proportions are computed after removal",
+    )
     s = sub.add_parser("screen-list", help="per-group screen rows to fill (alphabetical order)")
     s.add_argument("stills_csv", type=Path)
     s.add_argument("groups", type=Path)
@@ -252,6 +258,14 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     stills = read_stills_csv(args.stills_csv)
     if args.cmd == "q1-sample":
+        if args.exclude:
+            drop = {ln.strip() for ln in args.exclude.read_text().splitlines() if ln.strip()}
+            names = {x.name for x in stills}
+            stills = [x for x in stills if x.name not in drop]
+            print(
+                f"q1-sample: {len(drop & names)} of {len(drop)} excluded names found and removed; "
+                f"{len(drop - names)} not among the stills; drawing from {len(stills)}"
+            )
         args.out.write_text("".join(f"{x.name}\n" for x in proportional_sample(stills, 100, 0)))
         return 0
     groups = json.loads(args.groups.read_text())
