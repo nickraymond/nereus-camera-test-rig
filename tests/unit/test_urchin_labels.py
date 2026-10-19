@@ -106,3 +106,65 @@ def test_coco_per_fold_and_overlays(tmp_path):
         lb.write_coco(labels, fold)
     n = lb.write_overlays(labels, ["v/a.jpg", "v/c.jpg"], root, tmp_path / "ov")
     assert n == 8 and json.loads((tmp_path / "ov" / "index.json").read_text())[1] == "v/c.jpg"
+
+
+def _b(box, score=0.5, ignore=False):
+    return {"box": [float(v) for v in box], "score": score, "ignore": ignore}
+
+
+def test_duplicate_rule_at_both_sides_of_0p7_and_containment_unmerged():
+    """PREREG clarification (PE 005, 10/18 10:46 PM): one urchin iff SAM IoU >= 0.7."""
+    base = _b([0, 0, 100, 100], 0.9)
+    at = _b([0, 0, 100, 70], 0.4)  # IoU 0.70 exactly → merged
+    below = _b([0, 0, 100, 69], 0.4)  # IoU 0.69 → kept, counted as near (0.5 <= IoU < 0.7)
+    small_in = _b([10, 10, 50, 50], 0.4)  # 100 % inside, IoU 0.16 → two urchins
+    kept, st = lb.dedupe([base, at])
+    assert kept == [base] and st == {"merged": 1, "near_0p5_0p7": 0, "contained_0p9": 0}
+    kept, st = lb.dedupe([below, base])
+    assert kept == [base, below] and st == {"merged": 0, "near_0p5_0p7": 1, "contained_0p9": 1}
+    kept, st = lb.dedupe([base, small_in])
+    assert len(kept) == 2 and st == {"merged": 0, "near_0p5_0p7": 0, "contained_0p9": 1}
+    ign = _b([0, 0, 100, 100], 0.99, ignore=True)
+    kept, _ = lb.dedupe([ign, _b([0, 0, 100, 98], 0.1)])
+    assert [k["ignore"] for k in kept] == [False]  # a u box wins over an ignore box
+
+
+def test_dedupe_after_misses_and_report_per_split(tmp_path):
+    root, pre, sheets = _setup(tmp_path)
+    labels = lb.assemble(pre, sheets, root, FakeSam())
+
+    class SameUrchinSam(FakeSam):  # SAM on a point inside a labelled urchin finds that urchin
+        def point_box(self, rgb, x, y):
+            return {"box": [100.0, 100.0, 158.0, 158.0], "sam_iou": 0.9, "sam_ok": True}
+
+    # a miss point on the urchin already labelled in v/a.jpg (box 101..159) → merged, not added
+    pts = [("v/a.jpg", 130.0, 130.0, False)]
+    out, failed = lb.add_misses(labels, pts, root, SameUrchinSam())
+    a = out["stills"]["v/a.jpg"]
+    assert not failed and [b.get("cand_id") for b in a["boxes"]] == [0, 2]
+    assert a["dup"]["merged"] == 2  # 1 at assemble + 1 after the miss search
+    # a point on a small urchin sitting on that one (box inside it, IoU < 0.7) stays: two urchins
+    out2, _ = lb.add_misses(labels, [("v/a.jpg", 130.0, 130.0, False)], root, FakeSam())
+    a2 = out2["stills"]["v/a.jpg"]
+    assert len(a2["boxes"]) == 3 and a2["dup"]["contained_0p9"] == 1
+    fold = tmp_path / "fold"
+    fold.mkdir()
+    for part, name in (("train", "v/a.jpg"), ("val", "v/b.jpg"), ("test", "v/c.jpg")):
+        (fold / f"{part}.txt").write_text(name + "\n")
+    lb.write_coco(out, fold)
+    rep = json.loads((fold / "labels_report.json").read_text())
+    assert rep["train"] == {"stills": 1, "label_boxes": 1, "ignore_boxes": 1, "merged": 2,
+                            "near_0p5_0p7": 0, "contained_0p9": 0, "sam_failures": 0,
+                            "merged_per_still": 2.0}  # fmt: skip
+    assert rep["val"]["merged"] == 1 and rep["test"]["merged"] == 0
+
+
+def test_sam_failures_are_counted(tmp_path):
+    root, pre, sheets = _setup(tmp_path)
+
+    class FailingSam(FakeSam):
+        def refine_box(self, rgb, box):
+            return {"box": list(box), "sam_iou": 0.1, "sam_ok": False}
+
+    res = lb.assemble(pre, sheets, root, FailingSam())
+    assert res["sam_failures"] == {"v/a.jpg": 3, "v/b.jpg": 2}
