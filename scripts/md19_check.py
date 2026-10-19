@@ -10,24 +10,30 @@ Purpose: spec rev 15 runs three 30 s clips per IMX708 buffer setting (a) --imx-b
     Sun 10/18), so it is reported "unknown" and the CMA bar is the next line only (rev 15);
   - CMA / dma-buf allocation errors in the kernel log for the clip window: every kernel line of
     this boot (`journalctl -k -b -o short-monotonic`) inside [first fire - 5 s, last fire +
-    seconds + 10 s] on CLOCK_MONOTONIC (the clip's own clock) that names CMA / DMA / dma-buf /
-    memory AND a failure. Every CMA / DMA line in the window is listed verbatim either way;
-  - host reset: none when this boot's monotonic clock is past every clip's end and this boot's
-    journal starts before the first clip (a reset during or after the clips makes the windows
-    not this boot's: "unknown: rebooted since", so run this right after each label);
+    seconds + 10 s] on CLOCK_MONOTONIC (the clip's own clock) that names an allocation, CMA, DMA /
+    dma-buf, memory / OOM, or a Pi media / display driver (vc_sm_cma, vb2, unicam, bcm2835-codec,
+    drm) AND a failure (QE 008 R1 on #134). Every CMA / DMA / allocation line in the window, and
+    every in-window line with a failure word (counted or not), is listed verbatim either way;
+  - host reset (QE 008 R2): this boot's start (`btime` in /proc/stat, wall clock) after a clip's
+    `utc` stamp (sync_video writes it just before the fire) = the host rebooted after the clips
+    started -> capture bar FAIL (card §8 rule 9). Otherwise, if this boot's journal starts after a
+    window or the monotonic clock isn't past it, the journal can't show the window: "unknown";
   - lost frames, rev 9 fps / max_gap per camera, from the label's setting.json rows: each board
     0 frames_lost and fps_clip >= 9.5; the IMX708 fps_clip >= 26.0 and max_gap <= 100 ms (its
     frames_lost counts frames under the 30 fps nominal, which rev 9's 26 fps bar allows);
   - mem_avail: min per clip from the rows (report-only; rev 4 flag 150 MB).
   Bars, all 3 clips: CMA = 0 allocation errors (driver-held peak unknown); capture = 0 lost, fps /
-  max_gap hold, no host reset.
+  max_gap hold, no host reset. md19.json also records boot_id, btime and CmaTotal (kB) for the card.
 
 Usage (on the Pi, repo root, right after `pool2_bench.py <label> ...`):
   python scripts/md19_check.py md19_buf4 [--bench-root results/pool2_bench] [--journal FILE]
+                                         [--btime EPOCH_S]
   --journal: read the kernel log from FILE instead of running journalctl (tests, or a saved copy).
+  --btime: this boot's start, epoch s (tests); default /proc/stat btime.
 Writes <bench-root>/<label>/md19.json and prints one line per clip + the verdict.
 Exit: 0 = both bars pass, 1 = the capture bar fails, 5 = only the CMA bar fails, 6 = can't judge
-  (fewer than 3 clips, a clip without its files, or the windows aren't this boot's), 2 = usage.
+  (fewer than 3 clips, a clip without its files, or the journal can't show a window; never
+  re-run silently: its cause goes on the card first, card §5b), 2 = usage.
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,8 +57,9 @@ WINDOW_BEFORE_S, WINDOW_AFTER_S = 5.0, 10.0
 CMA_DEBUGFS = Path("/sys/kernel/debug/cma")
 EXIT_OK, EXIT_CAPTURE, EXIT_USAGE, EXIT_CMA, EXIT_UNKNOWN = 0, 1, 2, 5, 6
 LINE_RE = re.compile(r"^\[\s*(\d+\.\d+)\]\s*(.*)$")
-TOPIC_RE = re.compile(r"\bcma\b|cma_alloc|dma[-_ ]?buf|dma_alloc|dmabuf|\bdma\b|memory|oom|"
-                      r"page allocation", re.I)
+# cma matches inside vc_sm_cma / linux,cma; alloc covers alloc / allocate / allocation.
+TOPIC_RE = re.compile(r"cma|alloc|dma[-_ ]?buf|dmabuf|\bdma\b|memory|oom|vc_sm|\bvb2|unicam|"
+                      r"bcm2835-codec|\bdrm\b|\[drm\]", re.I)
 FAIL_RE = re.compile(r"fail|error|out of memory|oom-kill|cannot|unable|no space|-12\b|ENOMEM",
                      re.I)
 
@@ -80,10 +88,24 @@ def clip_window(clip: Path) -> tuple[float, float] | None:
 
 
 def kernel_lines(journal: list[tuple[float, str]], win: tuple[float, float]) -> dict:
-    inside = [(t, m) for t, m in journal if win[0] <= t <= win[1] and TOPIC_RE.search(m)]
+    """alloc_errors (counted) = topic AND failure; failure_lines = every in-window failure line."""
+    window = [(t, m) for t, m in journal if win[0] <= t <= win[1]]
+    inside = [(t, m) for t, m in window if TOPIC_RE.search(m)]
     errors = [(t, m) for t, m in inside if FAIL_RE.search(m)]
+    fails = [(t, m) for t, m in window if FAIL_RE.search(m)]
     return {"cma_dma_lines": [f"[{t:.6f}] {m}" for t, m in inside],
-            "alloc_errors": [f"[{t:.6f}] {m}" for t, m in errors]}
+            "alloc_errors": [f"[{t:.6f}] {m}" for t, m in errors],
+            "failure_lines": [f"[{t:.6f}] {m}" for t, m in fails]}
+
+
+def clip_utc(clip: Path) -> float | None:
+    """video_sync.json `utc` (YYYYmmddTHHMMSSZ, stamped just before the fire) -> epoch s."""
+    try:
+        stamp = json.loads((clip / "video_sync.json").read_text()).get("utc")
+        return datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(
+            tzinfo=timezone.utc).timestamp()
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 def capture_misses(rows: list[dict]) -> list[str]:
@@ -111,7 +133,7 @@ def capture_misses(rows: list[dict]) -> list[str]:
 
 
 def check_label(label_dir: Path, journal: list[tuple[float, str]], now_mono: float,
-                debugfs: bool) -> dict:
+                debugfs: bool, btime: float | None = None) -> dict:
     setting = json.loads((label_dir / "setting.json").read_text())
     clips = setting.get("clips") or []
     boot_start = min((t for t, _ in journal), default=None)
@@ -120,7 +142,7 @@ def check_label(label_dir: Path, journal: list[tuple[float, str]], now_mono: flo
            "driver_held_cma": "unknown: /sys/kernel/debug/cma not readable (CONFIG_CMA_DEBUGFS "
                               "not set); CMA bar judged on kernel-log errors only (rev 15)"
            if not debugfs else "not sampled during the clips (debugfs present; card to say)",
-           "clips": [], "unknown": []}
+           "btime": btime, "clips": [], "unknown": []}
     for c in clips:
         cdir = label_dir / c["clip"]
         win = clip_window(cdir)
@@ -129,13 +151,22 @@ def check_label(label_dir: Path, journal: list[tuple[float, str]], now_mono: flo
             res["unknown"].append(f"{c['clip']}: no video_sync.json window")
             res["clips"].append(rec)
             continue
-        this_boot = boot_start is not None and boot_start <= win[0] and now_mono >= win[1]
-        rec.update(window_mono=[round(win[0], 3), round(win[1], 3)], this_boot=this_boot,
-                   **kernel_lines(journal, win))
-        if not this_boot:
-            res["unknown"].append(f"{c['clip']}: window is not this boot's (rebooted since?)")
+        utc = clip_utc(cdir)
+        reset = btime is not None and utc is not None and btime > utc
+        this_boot = (not reset and boot_start is not None and boot_start <= win[0]
+                     and now_mono >= win[1])
+        rec.update(window_mono=[round(win[0], 3), round(win[1], 3)], clip_utc=utc,
+                   host_reset=reset, this_boot=this_boot)
+        if reset:  # the windows are another boot's clock: no kernel lines to read
+            rec["kernel_lines"] = "not read: host rebooted after this clip started"
+        else:
+            rec.update(**kernel_lines(journal, win))
+            if not this_boot:
+                res["unknown"].append(f"{c['clip']}: this boot's journal can't show the window")
         rows = c.get("rows") or []
-        rec["capture_misses"] = capture_misses(rows)
+        rec["capture_misses"] = capture_misses(rows) + (
+            [f"host:reset (boot {btime:.0f} after clip utc {utc:.0f}; card §8 rule 9)"]
+            if reset else [])
         mem = [r.get("host_min_mem_avail_mb") for r in rows if r.get("host_min_mem_avail_mb")]
         rec["min_mem_avail_mb"] = min(mem) if mem else None
         rec["mem_flag"] = bool(mem) and min(mem) < MEM_FLAG_MB
@@ -149,10 +180,36 @@ def check_label(label_dir: Path, journal: list[tuple[float, str]], now_mono: flo
     res["cma_bar"] = all(not r.get("alloc_errors") for r in counted) and bool(counted)
     res["capture_bar"] = bool(counted) and all(
         r.get("this_boot") and not r.get("capture_misses") for r in counted)
-    res["verdict"] = ("unknown" if res["unknown"] else
+    res["host_reset"] = any(r.get("host_reset") for r in res["clips"])
+    res["verdict"] = ("capture_fails" if res["host_reset"] else  # a reset is a FAIL, never unknown
+                      "unknown" if res["unknown"] else
                       "pass" if res["cma_bar"] and res["capture_bar"] else
                       "capture_fails" if not res["capture_bar"] else "cma_fails")
     return res
+
+
+def read_btime() -> float | None:
+    try:
+        for line in Path("/proc/stat").read_text().splitlines():
+            if line.startswith("btime "):
+                return float(line.split()[1])
+    except OSError:
+        pass
+    return None
+
+
+def read_proc(path: str, key: str | None = None) -> str | None:
+    """A /proc file's text, or one `key:` line's value from it; None if unreadable."""
+    try:
+        text = Path(path).read_text()
+    except OSError:
+        return None
+    if key is None:
+        return text.strip()
+    for line in text.splitlines():
+        if line.startswith(key + ":"):
+            return line.split(":", 1)[1].strip()
+    return None
 
 
 def read_journal(path: str | None) -> str:
@@ -167,20 +224,28 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("label")
     ap.add_argument("--bench-root", type=Path, default=ROOT / "results" / "pool2_bench")
     ap.add_argument("--journal", default=None)
+    ap.add_argument("--btime", type=float, default=None)
     a = ap.parse_args(argv)
     label_dir = a.bench_root / a.label
     if not (label_dir / "setting.json").exists():
         print(f"no {label_dir / 'setting.json'}: run pool2_bench.py {a.label} first")
         return EXIT_USAGE
     journal = parse_journal(read_journal(a.journal))
-    res = check_label(label_dir, journal, time.monotonic(), CMA_DEBUGFS.exists())
+    btime = a.btime if a.btime is not None else read_btime()
+    res = check_label(label_dir, journal, time.monotonic(), CMA_DEBUGFS.exists(), btime)
+    res["boot_id"] = read_proc("/proc/sys/kernel/random/boot_id")
+    res["cma_total"] = read_proc("/proc/meminfo", "CmaTotal")  # card: from -> to on a raise
     (label_dir / "md19.json").write_text(json.dumps(res, indent=1))
     for r in res["clips"]:
         print(f"{r['clip']}: alloc errors {len(r.get('alloc_errors') or [])}, cma/dma lines "
-              f"{len(r.get('cma_dma_lines') or [])}, capture "
+              f"{len(r.get('cma_dma_lines') or [])}, failure lines "
+              f"{len(r.get('failure_lines') or [])}, capture "
               f"{'ok' if not r.get('capture_misses') else r['capture_misses']}, mem_avail min "
               f"{r.get('min_mem_avail_mb')} MB{' (< 150 flag)' if r.get('mem_flag') else ''}, "
               f"CmaFree min {r.get('min_cma_free_mb')} MB")
+    for r in res["clips"]:
+        for line in r.get("failure_lines") or []:
+            print(f"  {r['clip']} failure line: {line}")
     print(f"{res['label']}: driver-held CMA {res['driver_held_cma'].split(':')[0]}; "
           f"CMA bar {'PASS' if res['cma_bar'] else 'FAIL'}, capture bar "
           f"{'PASS' if res['capture_bar'] else 'FAIL'} -> {res['verdict'].upper()}"

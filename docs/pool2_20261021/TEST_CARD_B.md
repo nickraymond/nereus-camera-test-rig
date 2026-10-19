@@ -9,7 +9,8 @@ FAIL on the fix PR @ 9ec4bfe (R1, R2 + nits) is fixed on the same PR.
 probe: the N6 in full colour (F15, §4 step 4).
 **Rev 4 (Sun 10/18 9:53 PM PT by `date`, pool-2 prep successor 3):** must do 19 (spec rev 15, QE 008 PASS-with-nits N1–N3, Sun 8:57 PM)
 is pre-registered as §4 step 4b, with its own bars (§5b) and stop rules (§8 rules 9–10). Its checker is
-`scripts/md19_check.py`. No must do 19 clip exists yet.
+`scripts/md19_check.py`. No must do 19 clip exists yet. QE 008 FAIL @ 0fd4b3f (R1 CMA-line patterns, R2 host reset
+→ FAIL, N1, N2) fixed on the same PR (pool-2 prep successor 4).
 
 | | |
 |---|---|
@@ -260,26 +261,34 @@ N6's highest setting that holds (d57).
 
 | Bar (every one of the label's 3 non-void clips) | Value |
 |---|---|
-| CMA | 0 CMA / dma-buf allocation errors: no kernel line (`journalctl -k -b -o short-monotonic`) inside [first fire − 5 s, last fire + 30 s + 10 s] that names CMA / DMA / dma-buf / memory **and** a failure. Every CMA / DMA line in the window is listed verbatim in `md19.json`. Driver-held CMA peak ≤ 90 % of the pool: **unknown** (no debugfs) |
-| capture | every board 0 `frames_lost` and `fps_clip` ≥ 9.5; IMX708 `fps_clip` ≥ 26.0 and max gap ≤ 100 ms (its `frames_lost` counts frames under the 30 fps nominal, which rev 9's 26 fps allows); no host reset (this boot's clock is past every clip and its journal starts before the first) |
-| report only | min MemAvailable per clip (rev 4 flag < 150 MB), min CmaFree, the kernel CMA / DMA lines |
+| CMA | 0 CMA / dma-buf allocation errors: no kernel line (`journalctl -k -b -o short-monotonic`) inside [first fire − 5 s, last fire + 30 s + 10 s] that names an allocation, CMA, DMA / dma-buf, memory / OOM or a Pi media / display driver (`vc_sm_cma`, `vb2`, `unicam`, `bcm2835-codec`, `drm`) **and** a failure (QE 008 R1). Every CMA / DMA / allocation line in the window, and every in-window line with a failure word (counted or not), is listed verbatim in `md19.json` and printed, so a person sees anything the patterns miss. Driver-held CMA peak ≤ 90 % of the pool: **unknown** (no debugfs) |
+| capture | every board 0 `frames_lost` and `fps_clip` ≥ 9.5; IMX708 `fps_clip` ≥ 26.0 and max gap ≤ 100 ms (its `frames_lost` counts frames under the 30 fps nominal, which rev 9's 26 fps allows); no host reset: this boot's start (`/proc/stat` btime) is before every clip's `utc` stamp (QE 008 R2). A boot after a clip's stamp is a reset: capture bar FAIL, exit 1, §8 rule 9 |
+| report only | min MemAvailable per clip (rev 4 flag < 150 MB), min CmaFree, the kernel CMA / DMA lines, every in-window failure line, `boot_id`, btime, CmaTotal |
 
-**Open reading (asked PE 005 by message, Sun 10/18, before 9:53 PM PT):** B0's `ae3_420` clip03 lost one N6 frame (`short_frames` 1, the d57 resync
+**Open reading (Nick's call):** B0's `ae3_420` clip03 lost one N6 frame (`short_frames` 1, the d57 resync
 fix). "0 lost frames" read literally fails that, and the card's STOP follows. The other reading is each camera's own
-part-B frame bar (N6 ≥ 285 / 300 usable). The checker implements the literal reading until the PE pins one.
+part-B frame bar (N6 ≥ 285 / 300 usable). That loosens a rev 15 number, so it is Nick's (TEAM_RULES §13; PE 005 and
+QE 008, Sun 10/18; board card `nick_md19_capture_bar`). The checker implements the literal reading until he answers
+and the PE amends the spec.
 
 **What happens** (rev 15, by the bar that failed; `md19_check.py` exit 0 pass, 1 capture fails, 5 only CMA fails,
 6 can't judge):
+- Exit 6 is never re-run silently. Its cause (from `md19.json` `unknown`) goes on the card first. A host reset is never
+  exit 6: it is exit 1 and §8 rule 9.
 - Both bars pass at (a) → Wed uses `--imx-buffers 4`; else both pass at (b) → `--imx-buffers 2`.
 - Only the CMA bar fails at both → the CMA pool raise, **only with Nick's own words** (root, Nick's sudo; NEEDED on
   c_pool1016_video_review). `/boot/firmware/config.txt` line 26 `dtoverlay=vc4-kms-v3d` → `dtoverlay=vc4-kms-v3d,cma-320`.
   - Backup first: `sudo cp -p /boot/firmware/config.txt /boot/firmware/config.txt.bak-20261019`. Restore:
     `sudo cp -p /boot/firmware/config.txt.bak-20261019 /boot/firmware/config.txt`.
-  - One cold boot (flag present). Then read back CmaTotal = 327680 kB (QE 008 N3) and re-run (a), then (b), as
+  - One cold boot (flag present). Then read back CmaTotal: from 262144 kB (rig session, Sun 10/18; `md19.json`
+    `cma_total` before the raise) to 327680 kB (QE 008 N3; N1 on #134) and re-run (a), then (b), as
     `md19_buf4_cma320` / `md19_buf2_cma320`, recording MemAvailable and swap too (rig session: mem_avail is already
     124–137 MB in clips).
   - The raise must land by the Tue 6 PM freeze and be announced on the board (§10). The overlay's own help lists cma-320
     as "needs 1GB"; this Pi has 512 MB.
+  - Expected memory effect (QE 008 N2 on #134): the pool grows by 64 MiB (262144 → 327680 kB) of the 512 MB. What that
+    does to MemAvailable (124–137 MB in B0 clips) and swap is **unknown**: the `_cma320` labels measure it, and it goes
+    in the NEEDED ask on c_pool1016_video_review.
 - The capture bar fails, or the CMA bar still fails after the raise → **stop** (§8 rule 9).
 
 ## 6. The 25× ready gate (spec rev 3 + rev 4 G-a/G-b + rev 5 QE N1–N7)

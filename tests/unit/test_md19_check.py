@@ -14,6 +14,9 @@ md19 = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(md19)
 
 FIRES = (1000.0, 1100.0, 1200.0)  # clip fires on CLOCK_MONOTONIC, 30 s each
+UTCS = ("20261019T160000Z", "20261019T160140Z", "20261019T160320Z")  # sync_video's stamps
+CLIP1_UTC = 1792425600.0           # 20261019T160000Z as epoch s
+BTIME = CLIP1_UTC - 1000.0         # this boot started 1000 s before clip01 (mono 1000)
 
 
 def _row(cam, **over):
@@ -32,7 +35,7 @@ def _label(tmp_path, rows_per_clip=None, void=(False, False, False)):
         c = d / f"clip0{k + 1}"
         c.mkdir(parents=True)
         (c / "video_sync.json").write_text(json.dumps(
-            {"seconds": 30.0, "fire_host_mono": {"imx708": fire, "openmv_n6": fire + 0.001,
+            {"utc": UTCS[k], "seconds": 30.0, "fire_host_mono": {"imx708": fire, "openmv_n6": fire + 0.001,
                                                  "openmv_ae3": fire + 0.002}}))
         rows = (rows_per_clip or {}).get(k) or [_row(c_) for c_ in
                                                 ("imx708", "openmv_n6", "openmv_ae3")]
@@ -47,8 +50,8 @@ BOOT = "[    0.000000] Booting Linux on physical CPU 0x0\n" \
        "[    0.000000] cma: Reserved 256 MiB at 0x000000000b000000\n"
 
 
-def _check(d, journal_text, now=5000.0):
-    return md19.check_label(d, md19.parse_journal(journal_text), now, debugfs=False)
+def _check(d, journal_text, now=5000.0, btime=BTIME):
+    return md19.check_label(d, md19.parse_journal(journal_text), now, debugfs=False, btime=btime)
 
 
 def test_clean_setting_passes_and_says_driver_cma_is_unknown(tmp_path):
@@ -86,10 +89,46 @@ def test_imx708_is_judged_by_fps_and_gap_not_its_nominal_lost_count(tmp_path):
     assert _check(_label(tmp_path / "b"), BOOT)["clips"][0]["capture_misses"] == []  # lost 95 ok
 
 
-def test_a_reboot_since_the_clips_makes_it_unknown(tmp_path):
-    # this boot's journal starts at 0 but the clock is only 300 s in: the clips weren't this boot
+def test_utc_fixture_matches_the_epoch_constant(tmp_path):
+    d = _label(tmp_path)
+    assert md19.clip_utc(d / "clip01") == CLIP1_UTC
+
+
+def test_a_journal_that_cannot_show_the_window_is_unknown(tmp_path):
+    # btime says no reboot, but the clock is only 300 s in: the journal can't show the windows
     res = _check(_label(tmp_path), BOOT, now=300.0)
-    assert res["verdict"] == "unknown" and not res["capture_bar"]
+    assert res["verdict"] == "unknown" and not res["capture_bar"] and not res["host_reset"]
+
+
+def test_a_host_reset_after_the_clips_started_fails_the_capture_bar(tmp_path):
+    # QE 008 R2: the host rebooted during clip02 (boot after clip02's utc): FAIL, rule 9, exit 1
+    btime = CLIP1_UTC + 110.0
+    res = _check(_label(tmp_path), BOOT, now=60.0, btime=btime)
+    assert res["verdict"] == "capture_fails" and res["host_reset"] and not res["capture_bar"]
+    # clip03 (utc after the boot) is the new boot's: no reset, but its window is unknown
+    assert [r["host_reset"] for r in res["clips"]] == [True, True, False]
+    assert any(m.startswith("host:reset") for m in res["clips"][1]["capture_misses"])
+    # even when the new boot's clock has passed the old windows, the reset is still caught
+    res = _check(_label(tmp_path / "b"), BOOT, now=5000.0, btime=btime)
+    assert res["verdict"] == "capture_fails" and res["host_reset"]
+
+
+def test_a_reset_between_clips_marks_only_later_clips(tmp_path):
+    btime = CLIP1_UTC + 50.0  # after clip01's stamp, before clip02's (+100 s)
+    res = _check(_label(tmp_path), BOOT, btime=btime)
+    assert [r["host_reset"] for r in res["clips"]] == [True, False, False]
+    assert res["verdict"] == "capture_fails"
+
+
+def test_main_exits_1_on_a_reset(tmp_path, monkeypatch):
+    d = _label(tmp_path)
+    j = tmp_path / "kern.txt"
+    j.write_text(BOOT)
+    monkeypatch.setattr(md19.time, "monotonic", lambda: 60.0)
+    assert md19.main([d.name, "--bench-root", str(tmp_path), "--journal", str(j),
+                      "--btime", str(CLIP1_UTC + 110.0)]) == md19.EXIT_CAPTURE
+    out = json.loads((d / "md19.json").read_text())
+    assert out["verdict"] == "capture_fails" and out["host_reset"] and "boot_id" in out
 
 
 def test_a_void_clip_leaves_fewer_than_three(tmp_path):
@@ -102,7 +141,8 @@ def test_main_exit_codes_and_md19_json(tmp_path, monkeypatch):
     j = tmp_path / "kern.txt"
     j.write_text(BOOT + "[ 1215.5] cma: cma_alloc: alloc failed, ret: -12\n")
     monkeypatch.setattr(md19.time, "monotonic", lambda: 5000.0)  # clock past the clips
-    assert md19.main([d.name, "--bench-root", str(tmp_path), "--journal", str(j)]) == md19.EXIT_CMA
+    assert md19.main([d.name, "--bench-root", str(tmp_path), "--journal", str(j),
+                      "--btime", str(BTIME)]) == md19.EXIT_CMA
     assert json.loads((d / "md19.json").read_text())["verdict"] == "cma_fails"
     assert md19.main(["nope", "--bench-root", str(tmp_path), "--journal", str(j)]) == \
         md19.EXIT_USAGE
@@ -112,9 +152,26 @@ def test_main_exit_codes_and_md19_json(tmp_path, monkeypatch):
     ("cma: cma_alloc: linux,cma: alloc failed, req-size: 8100 pages, ret: -12", True),
     ("rpicam-vid: dma-buf allocation failed", True),
     ("unicam fe801000.csi: Failed to allocate DMA buffer", True),
+    # QE 008 R1 probe on #134: Pi driver forms the first regex missed
+    ("vc4-drm gpu: [drm] *ERROR* Failed to allocate buffer with size 8294400", True),
+    ("vc_sm_cma: vc_sm_cma_ioctl_alloc: failed to allocate", True),
+    ("bcm2835-codec bcm2835-codec: bcm2835_codec_queue_setup: failed to allocate", True),
+    ("unicam fe801000.csi: Failed to allocate buffers", True),
+    ("videobuf2_common: vb2_core_reqbufs: memory allocation failed", True),
     ("usb 1-1.3: new high-speed USB device number 5 using dwc2", False),
     ("cma: Reserved 256 MiB at 0x000000000b000000", False),
+    ("usb 1-1.2: device descriptor read/64, error -71", False),
 ])
 def test_error_line_patterns(line, hit):
     lines = md19.kernel_lines([(10.0, line)], (0.0, 20.0))
     assert bool(lines["alloc_errors"]) is hit
+
+
+def test_every_in_window_failure_line_is_listed_even_if_not_counted(tmp_path):
+    j = BOOT + ("[ 1010.0] usb 1-1.2: device descriptor read/64, error -71\n"
+                "[ 1012.0] vc_sm_cma: vc_sm_cma_ioctl_alloc: failed to allocate\n"
+                "[ 1500.0] usb 1-1.2: error -71 (outside every window)\n")
+    res = _check(_label(tmp_path), j)
+    c1 = res["clips"][0]
+    assert len(c1["failure_lines"]) == 2 and len(c1["alloc_errors"]) == 1
+    assert "error -71" in c1["failure_lines"][0] and res["verdict"] == "cma_fails"
