@@ -112,3 +112,11 @@
   `ups_power_cycle.sh`): idle CmaFree is 24 MB now vs 83 MB after ~1 h up on 10/15, so a fragmented CMA pool. That's a
   call within the ladder hand-over. `recorder_web.py --review-only` (:8093) runs from boot; it holds no camera, and the gate's
   program-name matching doesn't count it.
+- **Nick's key rules (Sun ~8:52 PM, via PjM 005):** "they should not be guessing - that needs to be a key rule, never make
+  it up". Every fact cites its source; an unknown says "unknown: <how we'll find out>". Cards and replies stay short
+  (short ≤ 60 chars, next ≤ 2 sentences), details behind https links; every referenced doc, PR or report gets its link.
+- **Done at 8:52 PM:**
+  - Nick's 4:4:4/4:2:0 look published: https://claude.ai/artifact/4q6FHMFvkHNoYsb4p7MA1r (private; Nick can open it).
+  - QuickTime pair (remuxed camera JPEGs, chroma kept, decode checked with QuickLook) + MANIFEST:
+    `~/NereusData/nereus-camera-test-rig/2026-10-18_ae3_chroma/`.
+  - d56 evidence links the page.
