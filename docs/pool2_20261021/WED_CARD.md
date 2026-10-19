@@ -1,8 +1,7 @@
 # nereus002 Wed dive card: pool test 2 (Wed 2026-10-21)
 
 **DRAFT** (part C of `SPEC_pool2_prep` rev 19.2, sha256 `0e73002de78d…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
-19.2 = "most clips" on Wed; it is committed as
-[SPEC.md](SPEC.md) when this PR lands). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
+19.2 = "most clips" on Wed; committed byte-identical on this PR as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
 before Wed. Open items are marked **OPEN**, with who closes them.
 
 Rig: Pi Zero 2 W + IMX708 + OpenMV N6 + OpenMV AE3 in one housing, LiFePO4wered/Pi+ UPS, the physical switch (= the UPS
@@ -123,7 +122,8 @@ board crops at the holds); W5 report-only (edge blur vs speed). No W result is r
 4. The 30-min block box (F14).
 5. SD: the run refuses below 2 GB free (`--reserve-gb 2`); before the dive SD free ≥ 2 GB + 2 × 1.36 GB ≈ 4.72 GB
    (rev 19.1). This program writes ≈ 1.36 GB (64.8 MB per 30 s clip at Wed's settings, md19_buf4).
-6. Freeze (§10): no rig change after Tue 10/20 6 PM unless Nick accepts the risk.
+6. Host throttling: a clip with `throttled` ≠ 0x0 is void; 2 throttled clips in a row → stop (spec pass/fail block).
+7. Freeze (§10): no rig change after Tue 10/20 6 PM unless Nick accepts the risk.
 
 ## 8. Bench, before leaving (Tue, by 6 PM)
 
