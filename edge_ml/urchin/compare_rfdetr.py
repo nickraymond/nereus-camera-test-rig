@@ -1,6 +1,7 @@
 """Nick's RF-DETR urchin model vs the night pilot's calls and OWLv2 (image level). Study-only code.
 
-    <rfdetr venv>/bin/python -I compare_rfdetr.py run   <pilot_run_dir> <out.json> <checkpoint.pth>
+    <rfdetr venv>/bin/python -I compare_rfdetr.py run <pilot_run_dir> <out.json> <ckpt.pth> \
+        [--tile 1080] [--no-whole]
     python3 -I compare_rfdetr.py score <pilot_run_dir>
 
 `run` needs the `rfdetr` package (Apache-2.0); it is not in requirements.txt: the model and its
@@ -53,7 +54,7 @@ def nms(boxes, scores, thr: float = 0.5) -> list[int]:
     return keep
 
 
-def cmd_run(run: Path, out: Path, ck: str) -> int:
+def cmd_run(run: Path, out: Path, ck: str, tile: int = 1080, whole: bool = True) -> int:
     import numpy as np
     from PIL import Image
     from rfdetr import RFDETRBase
@@ -66,13 +67,14 @@ def cmd_run(run: Path, out: Path, ck: str) -> int:
 
     names = [ln.strip() for ln in (run / "pilot_sample.txt").read_text().splitlines() if ln.strip()]
     model = RFDETRBase(pretrain_weights=ck)
-    res = {"checkpoint": ck, "floor": FLOOR, "whole": {}, "tiled": {}}
+    res = {"checkpoint": ck, "floor": FLOOR, "tile": tile, "whole": {}, "tiled": {}}
     t0 = time.time()
     for k, n in enumerate(names):
         im = Image.open(run / "stills" / n).convert("RGB")
-        res["whole"][n] = dets(model.predict(im, threshold=FLOOR))
+        if whole:
+            res["whole"][n] = dets(model.predict(im, threshold=FLOOR))
         w, h = im.size
-        side = min(w, h, 1080)
+        side = min(w, h, tile)
         allb = []
         for y0 in tile_starts(h, side):
             for x0 in tile_starts(w, side):
@@ -140,6 +142,9 @@ def cmd_score(run: Path) -> int:
         "RF-DETR (Nick), tiled": rf["tiled"],
         "OWLv2 zero-shot, tiled": owl,
     }
+    for extra in sorted(c.glob("rfdetr_dets_tile*.json")):
+        r = json.loads(extra.read_text())
+        models[f"RF-DETR (Nick), {r['tile']} px tiles"] = r["tiled"]
     out = compare(calls, models)
     (c / "compare.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
@@ -148,7 +153,8 @@ def cmd_score(run: Path) -> int:
 
 def main(argv: list[str]) -> int:
     if len(argv) >= 4 and argv[0] == "run":
-        return cmd_run(Path(argv[1]), Path(argv[2]), argv[3])
+        tile = int(argv[argv.index("--tile") + 1]) if "--tile" in argv else 1080
+        return cmd_run(Path(argv[1]), Path(argv[2]), argv[3], tile, "--no-whole" not in argv)
     if len(argv) == 2 and argv[0] == "score":
         return cmd_score(Path(argv[1]))
     print(__doc__)

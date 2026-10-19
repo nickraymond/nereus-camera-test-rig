@@ -42,3 +42,23 @@ def test_compare_groups_and_thresholds():
     assert m["flagged@0.5"]["yes"] == "1/2" and m["flagged@0.3"]["yes"] == "2/2"
     assert m["flagged@0.5"]["no_red"] == "1/1" and m["flagged@0.5"]["no_other"] == "0/1"
     assert m["auc_yes_vs_no_other"] == 1.0 and m["auc_yes_vs_no"] == 0.75
+
+
+def test_score_adds_extra_tile_runs(tmp_path):
+    import json
+
+    run = tmp_path / "run"
+    c = run / "compare_rfdetr"
+    c.mkdir(parents=True)
+    (run / "pilot_sample_calls.csv").write_text(
+        "idx,still,video,usable,urchin,note\n0,a,v,yes,yes,\n1,b,v,yes,no,rock\n"
+    )
+    (run / "owl_prelabels.json").write_text(json.dumps({"detections": {"a": [{"score": 0.6}]}}))
+    (c / "rfdetr_dets.json").write_text(json.dumps({"whole": {}, "tiled": {"a": [{"score": 0.9}]}}))
+    (c / "rfdetr_dets_tile560.json").write_text(
+        json.dumps({"tile": 560, "tiled": {"b": [{"score": 0.8}]}})
+    )
+    assert cr.cmd_score(run) == 0
+    out = json.loads((c / "compare.json").read_text())
+    assert out["models"]["RF-DETR (Nick), 560 px tiles"]["flagged@0.5"]["no"] == "1/1"
+    assert out["models"]["RF-DETR (Nick), tiled"]["flagged@0.5"]["yes"] == "1/1"
