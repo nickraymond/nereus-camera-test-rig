@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 13, tier (a); rev 2–13 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -513,3 +513,108 @@ check-pass setting; R2 W1 chain starts at 1.0 m) and nits N1–N5. No bar is loo
     the N6-vs-AE3 clips, and writes the scoring code (QE before results).
   - The PjM adds the program string's phases to the envelope's rig section. No new verbs; no manual commands.
   - Out of scope: detector accuracy on real urchins (E6); lens correction (d58); per-m² counts (d33).
+
+## Amendment rev 14 (PE 004, Sun 10/18 8:51 PM PT), rewritten in place as rev 15 (8:55 PM PT; QE 008's rev 14 FAIL R1–R3): CMA headroom before Wed (must do 19, F19). Binding, before any Wed data.
+- **Why:** B0 on nereus002, Sun 8:40–8:50 PM PT (build a9ac2af, lit bench), clip01 host_stats.csv (read by QE 008): CmaFree
+  31 → 3 MB in one second at camera start (mem_avail 167 → 138 MB), i.e. real buffer allocation, then drift to 0–2 MB with
+  mem_avail flat, i.e. page-cache borrowing (line 249). In-clip mem_avail 129–130 MB. No crash, no throttling. CmaFree alone is
+  therefore not headroom; the risk to measure is drivers running out of CMA (the 10/13 hard-reset pattern).
+- **Must do 19 (before the Tue 3 PM card; final build rig #125 + #126; the exact Wed program, N6 and AE3 at their Wed modes):**
+  three 30 s clips per setting, in order (a) IMX708 `--buffer-count 4` (tonight's), (b) `--buffer-count 2`. Per clip, record:
+  - driver-held CMA peak: `/sys/kernel/debug/cma/*/used` vs `count`, sampled ≥ 1 Hz (if debugfs isn't readable: "unknown",
+    say so on the card, and judge on the next two bars only);
+  - CMA / dma-buf allocation errors in `dmesg` for the clip window;
+  - lost frames, the rev 9 fps / max_gap per camera, any host reset (uptime), and mem_avail (report-only, rev 4 flag 150 MB).
+  - **The CMA bar for a setting, all 3 clips:** 0 CMA/dma-buf allocation errors AND driver-held CMA peak ≤ 90 % of the pool.
+    (unknown: the driver-held CMA at the 10/13 resets; the rig session looks for it in that run's logs. If found, the bar
+    becomes 10 % below that reading, written on the card before must do 19 runs.)
+  - **The capture bar, all 3 clips:** 0 lost frames, rev 9 fps / max_gap holds, no host reset.
+- **What happens (branch by the bar that failed):**
+  - Both bars pass at (a) or (b) → the Wed program uses the first that passes.
+  - Only the CMA bar fails at both → raise the CMA pool in the boot config (backup, restore command and the exact line on the
+    card), reboot, re-run (a) then (b). It lands by the Tue 6 PM rig freeze and is announced on the board (§10).
+  - The capture bar fails, or the CMA bar still fails after the raise → STOP: the data goes to the PE + Nick on the card. Any
+    change to E1 (N6 at HD, his ask) is Nick's call (§13).
+- **F19 (new row): CMA runs out during a Wed clip** → a hard reset or a lost clip. Detected: dmesg CMA/dma-buf errors and
+  driver-held CMA per clip; a reset shows as an uptime reset in the host log. Then: that pass is "lost", the next pass runs, and
+  the 30-min box (F14) holds.
+
+## Amendment rev 16 (PE 005, Sun 10/18 9:30 PM PT): tag ranges from undistorted tag corners. Binding, before any Wed data.
+- **Why:** pool-2 successor 3's dry run of the W scoring code on Friday's pool049 clips 099–103
+  (`~/NereusData/nereus-camera-test-rig/2026-10-18_pool2_wscore_dryrun/`, F10_DRYRUN.txt, MANIFEST.md): with raw corners, F10
+  flags 85 / 15 / 62 / 52 / 43 % of matched instants (≤ 50 ms), so 4 of 5 clips are past the 25 % "not measured" line; the N6
+  reads 5–11 % farther than the AE3 (medians). With the corners undistorted by bm #184's own dist_coeffs: N6/AE3 1.054 → 0.982
+  (clip100, n 278) and 1.110 → 0.985 (clip102, n 144); IMX708/AE3 0.996 → 0.997 (clip102, n 227). So the disagreement is the
+  N6's barrel distortion (k1 −0.42) on off-centre tags, not a wrong range, and F10 as written would void W1 for it. Friday's
+  board was not held as Wed's: this is evidence about the method, not Wed data.
+- **Change to "Range and speed":** before the pose, every decoded tag's corners are undistorted (`cv2.undistortPoints` or
+  equivalent) with the camera matrix and dist_coeffs of the same bm #184 fit whose fx/fy the Wed card cites (same file and
+  sha, written on the card before Tue noon). K is mapped to the Wed resolution by the existing scale / window rule; the
+  coefficients are unchanged (normalised coordinates). Range, speed, W2, F10 and the board pose use these corners.
+- **The image is never undistorted.** The detector, MTF50, colour and every pixel-size test (the 30 px gate) use the raw frame.
+  Sample boxes placed from the pose are projected back into raw-image pixels with the same K and coefficients
+  (`cv2.projectPoints` with dist_coeffs), and their px are measured there.
+- **Guard:** a camera whose Wed mode can't be mapped to the fit's K (a windowed mode with an unknown offset) keeps raw corners;
+  the card says so, and F10 judges it as written.
+- **Unchanged:** F10's 10 % and 25 % lines and every W1–W5 bar. F10 stays the check on the lens model, which is unvalidated in
+  the bottom ~40 % of each frame (c_charuco: B3/B5c FAIL): a bad extrapolation there shows as cross-camera disagreement and is
+  flagged.
+- **Report-only:** RESULTS gives each pass's F10 share and per-pair median range ratios both raw and undistorted. Decisions use
+  the undistorted ones.
+- **Tests (rig PR, before any W result):** (1) a synthetic tag projected with k1 = −0.42 at 1.0 m, off-centre, gives its true
+  range within 1 % after undistortion and is ≥ 5 % off without it; (2) a sample box projected back lands within 0.5 px of its
+  raw-image position; (3) the guard path keeps raw corners and labels the camera.
+
+## Amendment rev 17 (PE 005, Sun 10/18 9:43 PM PT): the W1 detector's checkpoint and threshold as values. Binding, before any Wed data.
+- **Gap (pool-2 successor 3):** N1 and the W1 detector line say "checkpoint and score threshold … from rig #123's merged pilot
+  config", but #123 (merged 4d6f7d9) has no single threshold: `edge_ml/urchin/pilot.py:51` `CAND_SCORES = (0.05, 0.3)` is a
+  pre-label floor and a "strong" line. E6's frozen threshold (F1-max on validation) won't exist before Tue noon.
+- **Pinned now:** checkpoint `google/owlv2-base-patch16-ensemble` at revision `cfd3195ba4ea9592eec887ded089f4c08eff231d` (the
+  only cached snapshot on this Mac, checked 9:43 PM; the scorer refuses any other revision); score threshold **0.3** =
+  `CAND_SCORES[1]` @ 4d6f7d9. Both go on the Wed card as values (N1). Why 0.3, not 0.05: at 0.05 OWLv2 "fires on nearly every
+  still" (pilot RESULTS @ e127321, line 69), so an IoU ≥ 0.5 hit on the reference box would say little. The same value for all
+  three cameras; W1 ranks N6 vs AE3, so the comparison doesn't hinge on the exact cut.
+- **Report-only:** RESULTS also gives each camera's chain at 0.05 and 0.5, next to the 0.3 result. Decisions use 0.3.
+- Unchanged: the 4-of-5 rule, IoU ≥ 0.5, the 30 px gate, the blind-viewer fallback, every bar.
+
+## Amendment rev 18 (PE 005, Sun 10/18 11:03 PM PT): readings 10–16 from rig #133 pinned. Binding, before any Wed data.
+Source: pool-2 successor 4's fix comment on rig #133 @ 305b81c (https://github.com/nickraymond/nereus-camera-test-rig/pull/133#issuecomment-6260772610),
+items 10–16, raised by QE 008 (N4, N6, reading 5, R6). Readings 1–9 in the PR body stay with QE.
+- **10, px across (30 px gate):** the **shortest** projected diameter of the sample's outline in raw pixels (strict; on a
+  tilted board the detector sees the foreshortened width). The longest is reported beside it. Changed from the PR's longest.
+- **11, frame-pick rounding:** half up, floor(x + 0.5).
+- **12, tie-break MTF50 median:** over the bin's W1 frames that have an MTF50 value; if fewer than 3 of the 5 have one, the
+  tie-break is "undecided (MTF50)".
+- **13, tag-limited ranges (F16):** a tag-limited range is a lower bound. N6 vs AE3: a tag-limited camera wins only if its
+  lower bound is longer than the other's range; otherwise the result is "undecided (tag-limited)", and a tie is never broken
+  by MTF50 when either side is tag-limited.
+- **14, F10 on 2-camera instants:** judged when the third camera has no ranged frame within 50 ms (> 10 % between the two
+  flags it). 1-camera instants are not judged; their count is reported, and they don't enter the 25 % denominator.
+- **15, IMX708 clip with no ScalerCrop:** full-sensor scale is assumed, and that clip's IMX708 ranges are flagged in RESULTS.
+- **16, guard principal point:** the frame centre (offset unknown), stated in the lens table in RESULTS.
+- **Files:** the card-values file and the box files live in `docs/pool2_20261021/` (`results/` is git-ignored, .gitignore:20),
+  as `.json` / `.md` / `.csv` only (TEAM_RULES §11).
+
+## Amendment rev 19 (PE 005, Mon 10/19 9:46 AM PT; sent by PE 006; rev 19.1 PE 006 9:58 AM = QE 009 nits N1–N3, text only): the Wed program pinned. Binding, before any Wed data.
+Source: pool-2 successor 4's draft (parses with `pool_capture.parse_program` @ 920e58f, sha256 a605ebf1a8be…), after the
+Mon 9:06–9:29 AM ladder + must do 19 run (`~/NereusData/nereus-camera-test-rig/2026-10-19_pool2_ladder/RESULTS.md`: n6_hd HOLDS 3/3,
+ae3_hd FAILS 3.17 fps so the AE3 stays 640×400 4:2:0, md19_buf4 PASS).
+- **Program (pinned; one line, copy it whole: sha256 of the string without a trailing newline = a605ebf1a8be…):**
+
+  `video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:1x60[--n6-framesize HD --ae3-subsampling 420]`
+
+  ~18 min from switch-on, IMX708 at 4 buffers (md19_buf4). The Wed card carries the string and its sha256 byte for byte.
+- **1, must do 13's n for the N6-vs-AE3 clips: n = 6 × 30 s** at both cameras' part-B settings, scored per clip (median and
+  range across the 6, never one clip).
+- **2, long clips:** one 120 s clip per swim pass is pinned. Must do 19 tested 30 s clips only, so the one bench run of the exact
+  program on the final build (before the Tue 6 PM rig freeze) also judges every clip, the 120 s and 60 s ones included, on must
+  do 19's two bars (CMA: 0 alloc errors; capture: the rev 9 fps / max_gap bars, no reset). Any long clip failing either bar →
+  that phase becomes 4 × 30 s (60 s → 2 × 30 s), and the bench run repeats. No separate md19 label. If that fallback fires, the new string and its sha256 are re-pinned (rev 19.x, QE re-check) before the Wed card is final.
+- **3, W5:** one 60 s clip holding both crossings, slow then fast; the crossings are separated in scoring by the measured speed.
+- **4, must do 14 (close ChArUco re-poses) is OUT for Wed.** Nick on d58 (board comment, Sat 10/17 3:39 PM, verbatim): "I can rerun
+  the test, but first I need a better mechanical mount and a way to get data from the rig to the surface to check the alignment.
+  So this is no an option for Wednesday. We should add to the backlock and check back in Nov" (c_calib_redive_nov).
+- **5, card values:** part-B N6 HD 4:2:0, AE3 640×400 4:2:0, so W1 = pass 2 (rev 13 R3); guard cameras none (the session's reading
+  that HD and VGA both map to the fit's K; QE checks it in the code); `first_bin` waits on Nick's board outline (blk_board_outline).
+- **SD:** the estimate is now ≈ 1.36 GB (measured 64.8 MB per 30 s) (was ~0.6 GB in the cost line); the SD rules stand: ≥ 2 GB free at every reading, and before
+  the dive SD free ≥ 2 GB + 2 × 1.36 GB (≈ 4.72 GB).
