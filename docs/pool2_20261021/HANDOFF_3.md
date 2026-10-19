@@ -64,3 +64,24 @@
 - A bare `cat > file` with no heredoc waits on stdin forever (it hung a probe). Write scratch files with the Write tool.
 - transformers 5.19 leaves `config._commit_hash` unset. `detect` reads the revision from the HF cache's `main` snapshot,
   offline.
+
+## Update Sun 10/18 9:55 PM PT (by `date`): #134 open, rotating
+- **Rig #134** (draft → QE 008): https://github.com/nickraymond/nereus-camera-test-rig/pull/134, branch `study/pool2-md19`
+  @ 0fd4b3f, off main 4441175.
+  - TEST_CARD_B rev 4: must do 19 as §4 step 4b, bars §5b, stop rules §8 9–10.
+  - `scripts/md19_check.py` (Pi, right after each label; exit 0 pass / 1 capture / 5 CMA only / 6 can't judge); 13 tests.
+  - Smoke on B0's real `ae3_420` folders: CMA PASS, capture FAIL on clip03's 1 lost N6 frame.
+- **Open with PE 005 (by message; read pe_specs / ask PE 005 for the answers):**
+  1. Detector threshold for W1 (REC 0.3; #123's pilot has no single value).
+  2. Must do 19's "0 lost frames" reading. B0 `ae3_420` clip03: the N6 lost 1 frame (`short_frames` 1, the d57 resync
+     fix), so the literal reading would STOP. REC each camera's part-B frame bar; it may be Nick's call (§13, looser). The
+     checker does the literal reading until it's pinned.
+- **Open with QE 008:** code verdicts on #133 and #134; the rev 16 spec gate (then commit SPEC.md byte-identical on #133).
+- **N6 → AE3 offset (Wed card fit-check input):**
+  `~/NereusData/nereus-camera-test-rig/2026-10-18_pool2_wscore_dryrun/rev16/BASELINE_N6_AE3.txt`. It is range-dependent
+  (axes not parallel): ≈ (−64, −69) mm at 1.08 m, ≈ (−87, −121) mm at ~2 m (x right, y down; design 63 mm tags).
+  Use the 1.08 m value for the 1.0 m fit check, scaled by Nick's measured tag edge / 63. Still needed: Nick's board
+  outline (ask via the PjM; not yet asked by me).
+- **nereus002:** not touched by me. The rig session cold-boots and writes the hand-over Mon AM (start target ~9 AM).
+- Messages to me (e41064) after I stop go unanswered. Successor: tell PE 005, QE 008, PjM 005 and the rig session your
+  name at start.
