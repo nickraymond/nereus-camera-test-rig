@@ -16,6 +16,7 @@ One record per frame (the wscore.py frame record, plus what the RESULTS tables n
   reproj_px          RMS between the decoded raw corners and the pose's projection of them
   board_whole        F11: >= MIN_TAGS_H tags decoded, and the board outline (densified, so a
                      bowed edge counts) projected into raw pixels lies wholly inside the frame
+  board_box          the projected board outline's bounds, clipped to the frame (W4 crops)
   samples            per urchin sample, in raw pixels: px across (longest projected diameter) and
                      the reference box (the projected outline's bounds)
   mtf50_cpp / _lpmm  slanted-edge MTF50 (median over the square's usable edges), cycles/px and
@@ -244,7 +245,11 @@ def measure_frame(img: np.ndarray, lens: pose.Lens, lay: Layout, colour: bool = 
         return rec
     rec["rvec"] = [round(float(v), 6) for v in rvec.ravel()]
     rec["tvec_mm"] = [round(float(v), 3) for v in tvec.ravel()]
-    rec["board_whole"] = _inside(proj(_densify(lay.outline_corners_mm(), OUTLINE_STEPS)), w, h)
+    outline = proj(_densify(lay.outline_corners_mm(), OUTLINE_STEPS))
+    rec["board_whole"] = _inside(outline, w, h)
+    (bx1, by1), (bx2, by2) = np.clip(outline.min(axis=0), 0, [w, h]), \
+        np.clip(outline.max(axis=0), 0, [w, h])
+    rec["board_box"] = [round(float(v), 1) for v in (bx1, by1, bx2, by2)]
     for name, (centre, diam) in lay.samples.items():
         s = sample_box(proj, centre, diam)
         rec["samples"][name] = {"px": round(s["px_across"], 2),

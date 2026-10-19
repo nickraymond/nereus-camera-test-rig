@@ -23,7 +23,7 @@ RUN_DIR. Usage:
   python -m edge_ml.pool2.run scan   RUN_DIR OUT --layout L.yaml --phase pass1=@swim1 ...
   python -m edge_ml.pool2.run select OUT --partb openmv_n6=420 --partb openmv_ae3=420 \
                                          --boxes results/pool2_20261021/w1_boxes.json
-  python -m edge_ml.pool2.run detect OUT --boxes ... --model-id M --min-score S
+  python -m edge_ml.pool2.run detect OUT --boxes ... --model-id M --model-revision R --min-score S
   python -m edge_ml.pool2.run score  OUT --boxes ... [--blind answers.json]
 
 --first-bin CAM=D (from the Wed card's fit check) moves a camera's chain start; default 1.0 m.
@@ -165,7 +165,8 @@ def cmd_scan(a) -> int:
            "tag_edge_mm": lay.tag_edge_mm, "phases": {}}
     for name, spec in phases.items():
         clips = phase_clips(Path(a.run_dir), spec)
-        man["phases"][name] = {"spec": spec, "clips": [c.name for c in clips]}
+        man["phases"][name] = {"spec": spec, "clips": [c.name for c in clips],
+                               "dirs": [str(c) for c in clips]}
         for cam in a.cameras.split(","):
             res = [scan_clip(c, cam, lay, colour=not a.no_colour,
                              raw_corners=cam in (a.raw_corners or [])) for c in clips]
@@ -321,6 +322,12 @@ def committed_unchanged(path: Path) -> str:
     return git("log", "-1", "--format=%H", "--", path.name).stdout.strip()
 
 
+def clip_dirs(out: Path) -> dict[str, Path]:
+    """Clip name -> its folder, as scan read it (the scan manifest)."""
+    man = _read(out / "scan" / "manifest.json")
+    return {Path(d).name: Path(d) for ph in man["phases"].values() for d in ph.get("dirs", [])}
+
+
 def picked_frames(boxes: dict) -> dict[tuple[str, str, str], list[dict]]:
     """(camera, pass, clip) -> the picked frames of that clip (every bin, incl. report-only)."""
     out: dict = {}
@@ -346,16 +353,18 @@ def cmd_detect(a) -> int:
     out, bpath = Path(a.out), Path(a.boxes)
     commit = committed_unchanged(bpath)
     boxes = _read(bpath)
-    run_dir = Path(_read(out / "scan" / "manifest.json")["run_dir"])
+    dirs = clip_dirs(out)
     from edge_ml.urchin.owl import OwlDetector
     det = OwlDetector(a.device, model_id=a.model_id)
     rev = getattr(det.model.config, "_commit_hash", None)
+    if rev != a.model_revision:  # the Wed card pins the checkpoint (rev 13)
+        raise SystemExit(f"{a.model_id} loaded revision {rev}, the card pins {a.model_revision}")
     res = {"stage": "detect", "boxes": str(bpath), "boxes_sha256": sha256_file(bpath),
            "boxes_commit": commit, "model_id": a.model_id, "model_revision": rev,
            "query": det.query, "min_score": a.min_score, "iou_min": 0.5, "code": code_state(),
            "frames": {}}
     for (cam, _ph, clip), picks in picked_frames(boxes).items():
-        cdir = run_dir / "video" / clip if (run_dir / "video" / clip).exists() else run_dir / clip
+        cdir = dirs[clip]
         fr = {f["index"]: f for f in frames.camera_frames(cdir, cam)}
         want = [fr[p["index"]] for p in picks]
         for f, img in frames.iter_images(cdir, cam, want):
@@ -376,10 +385,10 @@ def cmd_crops(a) -> int:
     """Rev 13 fallback: crops of every sample in every picked frame, shuffled, neutral names; the
     key (crop -> camera / frame / sample) goes to a separate file the viewer never sees."""
     out, boxes = Path(a.out), _read(Path(a.boxes))
-    run_dir = Path(_read(out / "scan" / "manifest.json")["run_dir"])
+    dirs = clip_dirs(out)
     items = []
     for (cam, _ph, clip), picks in picked_frames(boxes).items():
-        cdir = run_dir / "video" / clip if (run_dir / "video" / clip).exists() else run_dir / clip
+        cdir = dirs[clip]
         fr = {f["index"]: f for f in frames.camera_frames(cdir, cam)}
         for f, img in frames.iter_images(cdir, cam, [fr[p["index"]] for p in picks]):
             p = next(p for p in picks if p["index"] == f["index"])
@@ -459,10 +468,72 @@ def w4_pairs(out: Path, cam: str) -> list[dict]:
             de = list((f.get("de00") or {}).values())
             rows.append({"pass": ph, "hold_m": d, "frame": f"{f['clip']}/{f['index']}",
                          "range_m": f["range_m"], "speed_ms": round(s, 3),
+                         "board_box": f.get("board_box"),
                          "mtf50_lpmm": f.get("mtf50_lpmm"),
                          "de00_median": round(float(np.median(de)), 2) if de else None,
                          "de00_worst": round(float(max(de)), 2) if de else None})
     return rows
+
+
+def _frame_image(out: Path, cam: str, ref: str):
+    clip, idx = ref.split("/")
+    cdir = clip_dirs(out)[clip]
+    fr = [f for f in frames.camera_frames(cdir, cam) if f["index"] == int(idx)]
+    return next(frames.iter_images(cdir, cam, fr))[1] if fr else None
+
+
+def w4_images(out: Path, cam: str, pairs: list[dict]) -> list[str]:
+    """W4: per hold, pass 1 | pass 2 board crops side by side, the same height, as PNG (lossless,
+    so the page adds no chroma loss of its own). Nick judges these by eye."""
+    by = {}
+    for p in pairs:
+        by.setdefault(p["hold_m"], {})[p["pass"]] = p
+    written = []
+    for d, pp in sorted(by.items()):
+        tiles = []
+        for ph in ("pass1", "pass2"):
+            p = pp.get(ph) or {}
+            img = _frame_image(out, cam, p["frame"]) if p.get("frame") else None
+            box = p.get("board_box")
+            if img is None or not box:
+                continue
+            x1, y1, x2, y2 = (int(round(v)) for v in box)
+            crop = img[y1:y2, x1:x2]
+            if crop.size:
+                tiles.append(crop)
+        if len(tiles) != 2:
+            continue
+        hh = max(t.shape[0] for t in tiles)
+        tiles = [cv2.resize(t, (round(t.shape[1] * hh / t.shape[0]), hh),
+                            interpolation=cv2.INTER_NEAREST) for t in tiles]
+        path = out / "score" / "w4" / f"{cam}_{d:.0f}m_pass1_vs_pass2.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(path), np.hstack(tiles))
+        written.append(str(path.relative_to(out)))
+    return written
+
+
+W5_SPEED_BINS = (0.0, 0.1, 0.3, 0.6, float("inf"))
+
+
+def _median_of(rows: list[dict], key: str) -> float | None:
+    v = [r[key] for r in rows if r.get(key) is not None]
+    return round(float(np.median(v)), 2) if v else None
+
+
+def w5_summary(rows: list[dict]) -> list[dict]:
+    """W5 table: per crossing and speed band, n and the median edge widths (px)."""
+    out = []
+    for cr in ("w5_slow", "w5_fast"):
+        for lo, hi in zip(W5_SPEED_BINS[:-1], W5_SPEED_BINS[1:]):
+            rs = [r for r in rows if r["crossing"] == cr and r["speed_ms"] is not None
+                  and lo <= r["speed_ms"] < hi]
+            if not rs:
+                continue
+            out.append({"crossing": cr, "speed_ms": f"{lo:g}-{hi:g}", "n": len(rs),
+                        "slanted_edge_w_px": _median_of(rs, "slanted_edge_w_px"),
+                        "tag_edge_w_px": _median_of(rs, "tag_edge_w_px")})
+    return out
 
 
 def w3_table(boxes: dict) -> dict:
@@ -547,10 +618,15 @@ def cmd_score(a) -> int:
         if cam not in boxes["cameras"]:
             continue
         c1, c2 = phase_chroma(out, "pass1", cam), phase_chroma(out, "pass2", cam)
-        res["w4"][cam] = ({"chroma": [c1, c2], "pairs": w4_pairs(out, cam)} if c1 and c2
-                          and c1 != c2 else {"not_run": f"pass 1 {c1}, pass 2 {c2} (F15 / F18)"})
+        if c1 and c2 and c1 != c2:
+            pairs = w4_pairs(out, cam)
+            res["w4"][cam] = {"chroma": [c1, c2], "pairs": pairs,
+                              "images": w4_images(out, cam, pairs)}
+        else:
+            res["w4"][cam] = {"not_run": f"pass 1 {c1}, pass 2 {c2} (F15 / F18)"}
     for cam in boxes["cameras"]:
-        res["w5"][cam] = w5_table(out, cam)
+        rows = w5_table(out, cam)
+        res["w5"][cam] = {"rows": rows, "by_speed": w5_summary(rows)}
     _write(out / "score" / "results.json", res)
     (out / "score" / "RESULTS.md").write_text(results_md(res))
     print(f"score: {out / 'score' / 'RESULTS.md'}")
@@ -609,9 +685,16 @@ def results_md(res: dict) -> str:
             L.append(f"  - {p['pass']} @ {p['hold_m']} m: {p.get('frame')} MTF50 "
                      f"{p.get('mtf50_lpmm')} lp/mm, ΔE00 median {p.get('de00_median')} / worst "
                      f"{p.get('de00_worst')}")
-    L += ["", "## W5 edge blur vs speed (rows in results.json)", ""]
-    for cam, rows in res["w5"].items():
-        L.append(f"- {cam}: {len(rows)} frames with an edge width")
+    for cam, r in res["w4"].items():
+        for img in r.get("images") or []:
+            L.append(f"  - image: {img}")
+    L += ["", "## W5 edge blur (10-90 %, px) vs board speed (every row in results.json)", "",
+          "| camera | crossing | speed (m/s) | n | slanted edge | tag edges |",
+          "|---|---|---|---|---|---|"]
+    for cam, r in res["w5"].items():
+        for b in r["by_speed"]:
+            L.append(f"| {cam} | {b['crossing']} | {b['speed_ms']} | {b['n']} | "
+                     f"{b['slanted_edge_w_px']} | {b['tag_edge_w_px']} |")
     return "\n".join(L) + "\n"
 
 
@@ -639,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("out")
     s.add_argument("--boxes", required=True)
     s.add_argument("--model-id", required=True)
+    s.add_argument("--model-revision", required=True, help="the Wed card's pinned HF commit")
     s.add_argument("--min-score", type=float, required=True)
     s.add_argument("--device", default=None)
     s = sub.add_parser("crops")

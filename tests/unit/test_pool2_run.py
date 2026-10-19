@@ -180,3 +180,34 @@ def test_speed_uses_the_3d_pose():
           {"t": 0.2, "range_m": 1.0, "pos_m": [0.10, 0.0, 1.0]}]
     sp = wscore.speeds(fr)
     assert sp[1] == pytest.approx(0.5)  # lateral motion: range alone would read 0
+
+
+def test_w5_summary_bins_by_speed():
+    rows = [{"crossing": "w5_slow", "speed_ms": 0.05, "slanted_edge_w_px": 2.0,
+             "tag_edge_w_px": 3.0},
+            {"crossing": "w5_slow", "speed_ms": 0.07, "slanted_edge_w_px": 4.0,
+             "tag_edge_w_px": None},
+            {"crossing": "w5_fast", "speed_ms": 0.9, "slanted_edge_w_px": None,
+             "tag_edge_w_px": 9.0}]
+    out = run.w5_summary(rows)
+    assert out == [{"crossing": "w5_slow", "speed_ms": "0-0.1", "n": 2, "slanted_edge_w_px": 3.0,
+                    "tag_edge_w_px": 3.0},
+                   {"crossing": "w5_fast", "speed_ms": "0.6-inf", "n": 1,
+                    "slanted_edge_w_px": None, "tag_edge_w_px": 9.0}]
+
+
+def test_w4_images_are_lossless_side_by_side_crops(tmp_path):
+    import cv2
+    import numpy as np
+    from test_pool2_frames import _board_clip
+    clip = _board_clip(tmp_path)   # 4 frames of 64 x 40, AE3
+    out = tmp_path / "out"
+    (out / "scan").mkdir(parents=True)
+    (out / "scan" / "manifest.json").write_text(json.dumps(
+        {"run_dir": str(tmp_path), "phases": {"pass1": {"dirs": [str(clip)]}}}))
+    pairs = [{"pass": "pass1", "hold_m": 1.0, "frame": "clip001/0", "board_box": [0, 0, 32, 20]},
+             {"pass": "pass2", "hold_m": 1.0, "frame": "clip001/3", "board_box": [8, 0, 40, 20]}]
+    imgs = run.w4_images(out, "openmv_ae3", pairs)
+    assert imgs == ["score/w4/openmv_ae3_1m_pass1_vs_pass2.png"]
+    im = cv2.imread(str(out / imgs[0]))
+    assert im.shape[:2] == (20, 64) and np.abs(im[:, :32].mean() - 0) < 3
