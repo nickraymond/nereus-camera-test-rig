@@ -27,9 +27,29 @@ from edge_ml.urchin.compare_rfdetr import nms, tile_starts
 log = logging.getLogger("urchin.rfdetr_prelabel")
 
 CHECKPOINT = Path.home() / "nereus_ml/runs/rfdetr_gate/checkpoint_best_total.pth"
+# SPEC_e6_prelabel_rfdetr rev 3 must do 1 / F3: the only checkpoint the full run may use.
+CHECKPOINT_BYTES = 127_700_271
+CHECKPOINT_SHA256 = "ae9aa853d9d73354f318e03e710f517d032408791721f206f55c01f3ca0c915f"
 TILE_MAX = 1080
 NMS_IOU = 0.5
 MAX_PER_STILL = 300
+
+
+def check_checkpoint(path: Path) -> str:
+    """Size, then SHA-256, against the pin; refuse (SystemExit) on any mismatch, before the model
+    is loaded. Returns the SHA-256."""
+    size = path.stat().st_size if path.is_file() else None
+    if size != CHECKPOINT_BYTES:
+        raise SystemExit(f"checkpoint {path}: {size} B, pinned {CHECKPOINT_BYTES} B; refusing")
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 22), b""):
+            h.update(chunk)
+    if h.hexdigest() != CHECKPOINT_SHA256:
+        raise SystemExit(
+            f"checkpoint {path}: sha256 {h.hexdigest()}, pinned {CHECKPOINT_SHA256}; refusing"
+        )
+    return h.hexdigest()
 
 
 def detect_tiled(model, im, min_score: float) -> list[dict]:
@@ -66,10 +86,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--checkpoint", type=Path, default=CHECKPOINT)
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    ck_sha = check_checkpoint(args.checkpoint)  # before anything is imported or loaded
     from PIL import Image
     from rfdetr import RFDETRBase
 
-    ck_sha = hashlib.sha256(args.checkpoint.read_bytes()).hexdigest()
     names = [ln.strip() for ln in args.stills.read_text().splitlines() if ln.strip()]
     model = RFDETRBase(pretrain_weights=str(args.checkpoint))
     result, t0 = {}, time.monotonic()
@@ -86,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "model": f"RF-DETR Base (Nick), tiled, {args.checkpoint}",
                 "checkpoint_sha256": ck_sha,
+                "checkpoint_bytes": CHECKPOINT_BYTES,
                 "query": None,
                 "min_score": args.min_score,
                 "detections": result,
