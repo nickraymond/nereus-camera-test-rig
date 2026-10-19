@@ -83,7 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     tab = _table()
     a.out.mkdir(parents=True, exist_ok=True)
     picks = []
-    for clip in (a.clip_a, a.clip_b):
+    # Output names carry "<setting>_<clip>" (e.g. ctl_1_clip01): two settings' clips are both
+    # called clipNN, and a bare clip name let the second crop overwrite the first (B0, 10/18).
+    names = [f"{c.parent.name}_{c.name}" for c in (a.clip_a, a.clip_b)]
+    if names[0] == names[1]:
+        print(f"refused: both clips are {names[0]}")
+        return 1
+    for clip, name in zip((a.clip_a, a.clip_b), names):
         f = nearest(frames(clip, a.camera), a.t)
         if f is None:
             print(f"{clip.name}: no {a.camera} frame with a capture time")
@@ -95,9 +101,9 @@ def main(argv: list[str] | None = None) -> int:
         if sof is None or data[-2:] != b"\xff\xd9":
             print(f"{clip.name}: frame {f['seq']} is not a whole JPEG")
             return 1
-        jpg = a.out / f"{clip.name}_{a.camera}_seq{f['seq']:04d}.jpg"
+        jpg = a.out / f"{name}_{a.camera}_seq{f['seq']:04d}.jpg"
         jpg.write_bytes(data)
-        picks.append({"clip": clip.name, "frame": f["seq"], "t_s": round(f["t_s"], 3),
+        picks.append({"clip": name, "frame": f["seq"], "t_s": round(f["t_s"], 3),
                       "width": sof["width"], "height": sof["height"],
                       "subsampling_measured": sof["subsampling"], "jpg": jpg})
     if (picks[0]["width"], picks[0]["height"]) != (picks[1]["width"], picks[1]["height"]):
