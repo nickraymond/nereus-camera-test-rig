@@ -448,7 +448,9 @@ def board_framesizes(board: str) -> list[str]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    # allow_abbrev=False: a dive-program phase's "[--sec 5]" must not pass check_extra_args as an
+    # abbreviation and then override the caller's --seconds (QE 007 nit 1)
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], allow_abbrev=False)
     sizes = {b: board_framesizes(b) for b in ("n6", "ae3")}
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--out", default="")

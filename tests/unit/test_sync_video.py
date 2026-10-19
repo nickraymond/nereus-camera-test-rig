@@ -172,6 +172,7 @@ def test_extra_args_are_checked_against_the_boards_own_framesizes():
     sv.check_extra_args(["--n6-framesize", "960x600", "--ae3-subsampling", "420", "--timing"])
     for bad in (["--ae3-framesize", "960x600"],       # the AE3 has no ISP scaler
                 ["--n6-framesize", "hd"], ["--board-framesize", "960x600"],
-                ["--ae3-subsampling", "411"], ["--seconds", "5"], ["--out=/tmp/x"]):
+                ["--ae3-subsampling", "411"], ["--seconds", "5"], ["--out=/tmp/x"],
+                ["--sec", "5"], ["--ou", "/tmp/x"], ["--n6-frame", "HD"]):   # no abbreviations
         with pytest.raises(ValueError):
             sv.check_extra_args(bad)

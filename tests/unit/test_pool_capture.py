@@ -275,6 +275,9 @@ def test_program_without_brackets_is_unchanged():
     "video:6x30[--seconds 5]",                 # owned by pool_capture
     "video:6x30[--out /tmp/x]",
     "video@Best:6x30",                         # labels are lower case
+    "video:6x30[--sec 5]",                     # QE 007 nit 1: an abbreviation of --seconds
+    "video:6x30[--ou /tmp/x]",                 # ... and of --out
+    "video@a:1x30,video@a:1x30",               # QE 007 nit 4: a label names one phase
 ])
 def test_malformed_program_is_refused_before_any_recording(bad):
     with pytest.raises(ValueError):

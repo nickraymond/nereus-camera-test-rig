@@ -457,11 +457,15 @@ def parse_program(spec: str) -> list[dict]:
     """Phase list with cumulative [start, end) minutes; raises ValueError on a bad spec,
     including a phase's [args] that sync_video.py would refuse (checked here, before any
     recording)."""
-    phases, t = [], 0.0
+    phases, t, labels = [], 0.0, set()
     for item in split_program(spec):
         m = _PHASE_RE.fullmatch(item)
         if not m:
             raise ValueError(f"malformed phase {item!r} (name[@label]:value[args])")
+        if m["label"]:
+            if m["label"] in labels:  # a label names one phase in the logs and on the card
+                raise ValueError(f"label {m['label']!r} used twice")
+            labels.add(m["label"])
         name, val = m["name"], m["val"]
         args = shlex.split(m["args"]) if m["args"] is not None else None
         if name not in ("cal_a", "cal_b", "stills", "video"):
