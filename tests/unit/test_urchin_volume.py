@@ -78,8 +78,30 @@ def test_cli_timed_sheets_keep_full_set_ids(tmp_path):
     assert len(ids) == 96 and on_sheets == ids  # 2 sheets of 48, numbered by full-set id
     assert not (out / "sheet_002.json").exists()
     res = tmp_path / "volume.json"
-    assert vol.main(["project", str(pj), "1800", str(res), "--start",
-                     "2026-10-21T11:00:00-07:00"]) == 0  # fmt: skip
+    assert vol.main(["project", str(pj), "1800", str(res), "--reviewers", "2", "--start",
+                     "2026-10-21T11:00"]) == 0  # naive = Pacific (QE N1)  # fmt: skip
     got = json.loads(res.read_text())
     assert got["rate_crops_per_h"] == 192.0 and got["projections"]["0.1"]["candidates"] == 160
     assert got["floor"] == 0.1  # 220 at 0.05 = 1.15 h > 1 h left; 160 at 0.1 = 0.83 h
+
+    assert got["timed_reviewers"] == 2 and got["start"] == "2026-10-21T11:00:00-07:00"
+    assert got["prelabels"]["sha256"] == vol.file_ref(pj)["sha256"]
+    assert "review_prelabels" not in got  # switched: set by `floor --record`
+    floored = tmp_path / "pre_010.json"
+    assert vol.main(["floor", str(pj), "0.1", str(floored), "--record", str(res)]) == 0
+    rec = json.loads(res.read_text())["review_prelabels"]
+    assert rec == vol.file_ref(floored) | {"floor": 0.1}
+    with pytest.raises(SystemExit, match="refusing"):  # a floor the projection did not pick
+        vol.main(["floor", str(pj), "0.2", str(tmp_path / "x.json"), "--record", str(res)])
+    with pytest.raises(SystemExit):  # --reviewers is required
+        vol.main(["project", str(pj), "1800", str(res)])
+
+
+def test_no_switch_records_the_same_file_for_the_review(tmp_path):
+    pj = tmp_path / "pre.json"
+    pj.write_text(json.dumps(_pre({"a.jpg": [0.5] * 10})))
+    res = tmp_path / "volume.json"
+    assert vol.main(["project", str(pj), "60", str(res), "--reviewers", "2",
+                     "--start", "2026-10-20T09:00-07:00"]) == 0  # fmt: skip
+    got = json.loads(res.read_text())
+    assert got["floor"] == 0.05 and got["review_prelabels"] == got["prelabels"]

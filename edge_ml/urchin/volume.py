@@ -2,8 +2,9 @@
 must do 4). Study-only code; never imported from src/.
 
     python -m edge_ml.urchin.volume timed-sheets <prelabels.json> <stills_root> <out_dir>
-    python -m edge_ml.urchin.volume project <prelabels.json> <seconds> <out.json> [--start ISO]
-    python -m edge_ml.urchin.volume floor <prelabels.json> <0.1> <out.json>
+    python -m edge_ml.urchin.volume project <prelabels.json> <seconds> <volume.json> --reviewers N
+                                            [--start ISO, Pacific if no offset]
+    python -m edge_ml.urchin.volume floor <prelabels.json> <0.1> <out.json> --record <volume.json>
 
 PREREG text: "The review rate is timed on 96 crops: every k-th candidate scoring >= 0.1 in
 candidate_ids order, k = floor(number of candidates >= 0.1 / 96) ... Projected review time =
@@ -14,13 +15,18 @@ PE ... Decided from counts and time only, never from label content."
 `timed-sheets` draws the 96 (ids 0, k, 2k, ... of the >= 0.1 list, numbered by their full-set
 candidate id) onto 2 sheets of 48. Their review is timed as wall clock from the start of the
 first sheet to the end of the last, in the same set-up as the full review. `project` turns that
-time into a rate and both projections, and names the floor that runs. `floor` writes the
-pre-labels with every detection below the floor removed, for `review.py candidate-sheets`.
+time into a rate and both projections, and names the floor that runs; it records the number of
+parallel reviewers in the timing (the full review uses at least as many) and the pre-labels file
+(path + sha256). `floor` writes the pre-labels with every detection below the floor removed.
+candidate_ids then renumbers every candidate, so after a switch every later step (candidate
+sheets, decisions, labels.py) reads the floored file only, never the 0.05 file; `--record` writes
+that file's path + sha256 into volume.json as `review_prelabels`.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timedelta
@@ -70,6 +76,16 @@ def project(prelabels: dict, n_timed: int, seconds: float, start: datetime) -> d
     return out
 
 
+def parse_start(text: str) -> datetime:
+    """ISO time; one without an offset is read as Pacific (QE 008 N1 on #130)."""
+    t = datetime.fromisoformat(text)
+    return t if t.tzinfo else t.replace(tzinfo=PT)
+
+
+def file_ref(path: Path) -> dict:
+    return {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
 def apply_floor(prelabels: dict, floor: float) -> dict:
     if floor < prelabels.get("min_score", 0):
         raise ValueError(f"floor {floor} is below the run's min_score {prelabels['min_score']}")
@@ -89,11 +105,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("prelabels", type=Path)
     p.add_argument("seconds", type=float, help="wall clock of the timed review")
     p.add_argument("out", type=Path)
-    p.add_argument("--start", help="review start, ISO time (default: now, Pacific)")
+    p.add_argument("--start", help="review start, ISO time; no offset = Pacific (default: now)")
+    p.add_argument("--reviewers", type=int, required=True, help="parallel reviewers in the timing")
     f = sub.add_parser("floor")
     f.add_argument("prelabels", type=Path)
     f.add_argument("floor", type=float)
     f.add_argument("out", type=Path)
+    f.add_argument("--record", type=Path, required=True, help="volume.json from `project`")
     args = ap.parse_args(argv)
     pre = json.loads(args.prelabels.read_text())
     if args.cmd == "timed-sheets":
@@ -103,12 +121,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(ids)} timed crops on {n} sheets → {args.out_dir}")
         return 0
     if args.cmd == "project":
-        start = datetime.fromisoformat(args.start) if args.start else datetime.now(PT)
+        start = parse_start(args.start) if args.start else datetime.now(PT)
         res = project(pre, len(timed_ids(pre)), args.seconds, start)
+        res["timed_reviewers"] = args.reviewers
+        res["prelabels"] = file_ref(args.prelabels)
+        if res["floor"] == 0.05:  # no switch: the review reads this same file
+            res["review_prelabels"] = res["prelabels"]
         args.out.write_text(json.dumps(res, indent=1) + "\n")
         print(json.dumps(res, indent=1))
         return 0 if res["floor"] is not None else 2
+    vol = json.loads(args.record.read_text())
+    if (
+        vol.get("floor") != args.floor
+        or vol["prelabels"]["sha256"] != file_ref(args.prelabels)["sha256"]
+    ):
+        raise SystemExit(
+            f"{args.record} picked floor {vol.get('floor')} for another file; refusing"
+        )
     args.out.write_text(json.dumps(apply_floor(pre, args.floor), indent=1))
+    vol["review_prelabels"] = file_ref(args.out) | {"floor": args.floor}
+    args.record.write_text(json.dumps(vol, indent=1) + "\n")
     print(f"floor {args.floor:g}: {count_at(pre, args.floor)} candidates → {args.out}")
     return 0
 
