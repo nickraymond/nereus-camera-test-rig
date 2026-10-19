@@ -187,7 +187,8 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && PY=/home/pi/nereus-camera-test-rig/
    their part-B "holds" settings (the N6-vs-AE3 clips: the largest board frames of the program). The W passes' chroma
    changes only board-side encoding, not the Pi's buffers.
    - (a) `python scripts/pool2_bench.py md19_buf4 --under openmv_n6 -- <Wed board args> --imx-buffers 4 --timing`, then
-     at once `python scripts/md19_check.py md19_buf4`;
+     at once `python scripts/md19_check.py md19_buf4`, with no reboot or power cycle between the two (the checker reads
+     this boot's kernel log; QE 008 nit on #134);
    - (b) the same with label `md19_buf2` and `--imx-buffers 2`.
    - Order: (a) first, then (b) (rev 15). n = 3 clips of 30 s each.
    - Driver-held CMA is **unknown** on nereus002. Kernel 6.18.34+rpt-rpi-v8 has `CONFIG_CMA_DEBUGFS` and
