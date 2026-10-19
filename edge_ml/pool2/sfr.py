@@ -8,9 +8,9 @@ line pairs per mm at the board (W1). Edge width = the 10-90 % rise of the ESF, i
 
 Pure numpy. The ROI must hold one straight dark/light edge, within ~45 deg of vertical (pass a
 transposed ROI for a near-horizontal edge), a few degrees off the pixel grid (the board's square is
-printed ~5 deg rotated), with flat sides. Checked against the analytic Gaussian edge (tests/unit/test_pool2_sfr.py): MTF50
-within 2.5 % for blur sigma 0.7-3 px in a 64 px ROI; keep the ROI >= ~16 sigma wide (at sigma 4 px a
-64 px ROI reads +4 %).
+printed ~5 deg rotated), with flat sides. Checked against the analytic Gaussian edge
+(tests/unit/test_pool2_sfr.py): MTF50 within 2.5 % for blur sigma 0.7-3 px in a 64 px ROI; keep the
+ROI >= ~16 sigma wide (at sigma 4 px a 64 px ROI reads +4 %).
 """
 
 from __future__ import annotations

@@ -1,0 +1,94 @@
+"""edge_ml/pool2/wscore.py: the rev 12 W1 verdict, set before any data."""
+
+from __future__ import annotations
+
+import pytest
+from edge_ml.pool2 import wscore as w
+
+
+def _frames(bins, px80=60.0, hit=True, per_bin=8, hold=False, px_scale=True, mtf=0.5):
+    """A swim-in: per_bin frames inside each bin centre, closest bin last in time."""
+    out, t = [], 0.0
+    for c in sorted(bins, reverse=True):
+        for k in range(per_bin):
+            r = c - 0.2 + 0.4 * k / max(per_bin - 1, 1)
+            if hold:
+                r = c
+            px = px80 * (0.5 / c) if px_scale else px80   # px ~ 1 / range, at the bin centre
+            out.append({"t": t, "range_m": r, "tags": 4, "board_whole": True, "mtf50_lpmm": mtf,
+                        "samples": {n: {"px": px * (50 / 80 if n.startswith("u50") else 1),
+                                        "hit": hit, "human": True}
+                                    for n in ("u80a", "u80b", "u50a", "u50b")}})
+            t += 0.1 if hold else 0.5
+    return out
+
+
+def test_bins_and_speed():
+    assert w.BIN_CENTRES == (0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0)
+    assert w.bin_of(0.74) == 0.5 and w.bin_of(0.75) == 1.0 and w.bin_of(4.3) is None
+    fr = [{"t": 0.0, "range_m": 2.0}, {"t": 1.0, "range_m": 1.5}, {"t": 2.0, "range_m": None}]
+    assert w.speeds(fr) == [0.5, 0.5, None]
+    gap = [{"t": 0.0, "range_m": 2.0}, {"t": 0.5, "range_m": 1.9}, {"t": 40.0, "range_m": 1.0}]
+    assert w.speeds(gap)[1] == pytest.approx(0.2) and w.speeds(gap)[2] is None   # no clip-gap speed
+
+
+def test_range_is_the_last_bin_of_an_unbroken_chain():
+    # 80 mm sample at 60 px at 0.5 m -> 30 px at 1.0 m, 20 px at 1.5 m (px ~ 1 / range)
+    res = w.detectable_range(_frames(w.BIN_CENTRES, px80=60.0))
+    assert res["range_m"] == 1.0 and res["end_bin"] == 1.5 and res["end_reason"] == "px"
+    big = w.detectable_range(_frames(w.BIN_CENTRES, px80=240.0))   # 30 px at 4.0 m
+    assert big["range_m"] == 4.0 and big["end_reason"] is None
+
+
+def test_a_missing_bin_breaks_the_chain_and_f16_marks_tag_limited():
+    # tags decode out to 2.0 m but the 1.5 m bin has no scorable frames: a chain break
+    gap = w.detectable_range(_frames((0.5, 1.0, 2.0), px80=240.0))
+    assert gap["range_m"] == 1.0 and gap["end_reason"] == "frames" and not gap["tag_limited"]
+    # the chain held through the farthest bin with tag-decoded frames: the tags set the range
+    tags = w.detectable_range(_frames((0.5, 1.0), px80=240.0))
+    assert tags["range_m"] == 1.0 and tags["end_reason"] == "tag-limited" and tags["tag_limited"]
+
+
+def test_hits_need_4_of_5_and_px_every_frame():
+    fr = _frames((0.5, 1.0), px80=240.0)
+    sel = w.select_bin(fr, 0.5)
+    assert len(sel) == 5 and w.bin_sees(sel)["ok"]
+    for f in sel[:2]:
+        f["samples"]["u80b"]["hit"] = False
+    assert w.bin_sees(sel)["why"] == ["u80b:hits 3/5"]
+    sel[0]["samples"]["u80b"]["hit"] = True
+    assert w.bin_sees(sel)["ok"]                               # 4 of 5
+    sel[2]["samples"]["u80a"]["px"] = 29.9                     # one frame under 30 px
+    assert w.bin_sees(sel)["why"] == ["u80a:px"]
+
+
+def test_hold_frames_first_f17():
+    fr = _frames((1.0,), hold=False) + _frames((1.0,), hold=True, per_bin=6)
+    for f in fr[8:]:
+        f["t"] += 100
+    sel = w.select_bin(fr, 1.0)
+    assert all(f["t"] >= 100 for f in sel)           # 6 hold frames -> only hold frames
+
+
+def test_50mm_report_fallback_and_n6_vs_ae3():
+    fr = _frames(w.BIN_CENTRES, px80=240.0)
+    assert w.detectable_range(fr, "50")["range_m"] == 2.5   # 150 px x 0.5 / r >= 30 to 2.5 m
+    miss = _frames(w.BIN_CENTRES, px80=240.0, hit=False)
+    weak = {c: w.detectable_range(miss) for c in ("imx708", "openmv_n6", "openmv_ae3")}
+    assert w.detector_fallback(weak)
+    assert w.detectable_range(miss, key="human")["range_m"] == 4.0
+    assert not w.detector_fallback({**weak, "imx708": w.detectable_range(fr)})
+    a = w.detectable_range(_frames(w.BIN_CENTRES, px80=120.0, mtf=0.6))
+    b = w.detectable_range(_frames(w.BIN_CENTRES, px80=120.0, mtf=0.4))
+    assert w.n6_vs_ae3(a, b) == "openmv_n6" and w.n6_vs_ae3(b, a) == "openmv_ae3"
+    assert w.n6_vs_ae3(w.detectable_range(_frames(w.BIN_CENTRES, px80=240.0)), a) == "openmv_n6"
+
+
+def test_w2_f10_f12():
+    fr = [{"t": 2.0, "range_m": 3.1, "tags": 1}, {"t": 1.0, "range_m": None, "tags": 0},
+          {"t": 3.0, "range_m": 2.9, "tags": 4}]
+    assert w.w2_secchi(fr) == 3.1
+    assert w.f12_water_changed(3.0, 2.3) and not w.f12_water_changed(3.0, 2.5)
+    assert w.f10_flags({"imx708": 2.0, "openmv_n6": 2.25}) and not w.f10_flags({"a": 2.0, "b": 2.1})
+    assert w.f10_pass_unmeasured([True, False, False])
+    assert not w.f10_pass_unmeasured([True] + [False] * 3)

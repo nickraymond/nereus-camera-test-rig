@@ -6,7 +6,6 @@ import math
 
 import numpy as np
 import pytest
-
 from edge_ml.pool2 import sfr
 
 _erf = np.frompyfunc(math.erf, 1, 1)
