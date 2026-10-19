@@ -289,3 +289,47 @@ def test_serial_io_parses_framed_focus_stream():
     assert header["frame"]["size_bytes"] == len(payload)
     assert io.read_exact(len(payload)) == payload
     assert cp.decode_message(io.read_line())["status"] == "completed"
+
+
+class TriggerBoard(FakeBoard):
+    """FakeBoard with the synchronized-capture wire: ``capture_image`` + ``trigger`` answers
+    ``armed`` and completes only when the host's fire byte (a bare newline) arrives."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.pending = None
+
+    def write(self, data):
+        if self.pending and data.strip() == b"":
+            command_id, settings = self.pending
+            self.pending = None
+            self._do_capture(command_id, settings)
+            meta = cp.decode_message(bytes(self._out).splitlines()[-1])
+            del self._out[:]
+            meta["output"]["sync"] = {"armed_ms": 1000, "fire_rx_ms": 3000, "snap_ms": 3040,
+                                      "timed_out": False, "frame_ms": 33}
+            self._emit(meta)
+            return
+        super().write(data)
+
+    def _do_capture(self, command_id, settings):
+        if settings.get("trigger") and self.pending is None and command_id not in self.files:
+            self.files[command_id] = b""  # mark: armed once
+            self.pending = (command_id, settings)
+            self._emit(cp.armed_response(command_id, 1000))
+            return
+        super()._do_capture(command_id, settings)
+
+
+def test_arm_fire_finish_round_trips_and_reports_sync(tmp_path):
+    board = TriggerBoard(captured_bytes=b"\xff\xd8" + b"sync" * 50 + b"\xff\xd9")
+    cam = OpenMvUsbCamera(serial_number="s", transport=board)
+    dest = tmp_path / "ae3" / "image.jpg"
+    cam.arm("image", str(dest), CaptureRequest(kind="image", settings={"framesize": "HD"}))
+    assert board.pending is not None and not dest.exists()  # nothing taken before the fire
+    t_fire = cam.fire()
+    result = cam.finish()
+    assert result.ok, result.error
+    assert dest.read_bytes() == board.captured
+    sync = result.sensor_metadata["sync"]
+    assert sync["fire_to_snap_ms"] == 40 and sync["fire_host_mono"] == t_fire

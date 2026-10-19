@@ -264,3 +264,21 @@ def test_write_folds_fails_when_a_held_out_group_has_no_test_stills(tmp_path):
     with pytest.raises(ValueError, match=r"\['site1'\] have 0 test stills"):
         sp.write_folds([fold], groups, tmp_path / "out")
     assert not (tmp_path / "out").exists()  # nothing written
+
+
+def test_q1_sample_excludes_the_pilot_names_and_reallocates(tmp_path, capsys):
+    """PREREG clarification 2026-10-18: the full-run Q1 draw skips the pilot's 100 names, with the
+    proportions computed after removal."""
+    stills_csv, _ = _stills_csv(tmp_path)
+    all_kept = sp.read_stills_csv(stills_csv)
+    pilot = sp.proportional_sample(all_kept, 100, seed=0)  # the worst case: the same draw
+    excl = tmp_path / "pilot_sample.txt"
+    excl.write_text("".join(f"{x.name}\n" for x in pilot) + "gone/never_extracted.jpg\n")
+    out = tmp_path / "q1.txt"
+    assert sp.main(["q1-sample", str(stills_csv), str(out), "--exclude", str(excl)]) == 0
+    q1 = out.read_text().splitlines()
+    assert len(q1) == 100 and not set(q1) & {x.name for x in pilot}
+    rest = [x for x in all_kept if x.name not in {p.name for p in pilot}]
+    assert q1 == [x.name for x in sp.proportional_sample(rest, 100, seed=0)]
+    msg = capsys.readouterr().out
+    assert "100 of 101 excluded names found" in msg and "1 not among the stills" in msg

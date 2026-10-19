@@ -26,8 +26,20 @@ keeps our own multi-step users from interleaving. It is fail-soft: if the lock c
 within 2 s, the operation goes ahead without it, so the lock can never stall a capture. The
 root lifepo4wered-daemon (PI_RUNNING poll, 1/s) does not take it.
 
+Boot self-check verdict (Nick, 10/15 ~3:40 PM, plan A; `pool_capture.py run --self-check`):
+    OK     slow blink, 2 s on / 2 s off            = all three cameras answered (10 min, then
+                                                     the loop sets steady ON)
+    F<N>   N quick flashes (0.2 s on / 0.3 s off),
+           then 4 s dark, repeating                = camera N failed: 1 IMX708, 2 N6, 3 AE3;
+                                                     two failed cameras alternate their codes
+    B (low battery, above) still overrides both. Not steady ON for OK on purpose: steady is
+    also the firmware's default whenever the Pi runs, so it cannot prove the check ran.
+    I2C: OK = 0.5 writes/s; F3 = 6 writes per 5.5 s (~1.1/s), all to the UPS (0x43).
+    Mode "idle" writes nothing (the firmware keeps the LED while the check runs).
+
 CLI (bench demo / recovery, on the Pi):
     python3 scripts/pool_led.py demo A --seconds 20     # show one pattern, then restore
+    python3 scripts/pool_led.py demo F2 --seconds 20    # the self-check fault code for the N6
     python3 scripts/pool_led.py restore                 # LED_STATE 1 (firmware default)
 """
 
@@ -49,6 +61,8 @@ FIRMWARE_DEFAULT = LED_ON
 # I2C budget (Nick 2026-10-13 9:08 PM: polling the Bar30 faster than every few seconds can
 # wedge the shared bus, and then the LiFePO4wered misbehaves). All in one place:
 A_ON_S, A_OFF_S = 0.25, 3.75          # pattern A: 2 LED writes per 4 s = 0.5 writes/s max
+OK_ON_S, OK_OFF_S = 2.0, 2.0          # self-check OK: slow blink, 0.5 writes/s
+F_ON_S, F_OFF_S, F_DARK_S = 0.2, 0.3, 4.0   # self-check fault code: N flashes, then dark
 BAR30_MIN_INTERVAL_S = 3.0            # >= 3 s between any two Bar30 sessions (pool: ~2 per set)
 UPS_KEYS = ("VIN", "VBAT", "VOUT", "IOUT")  # the only UPS registers the loop polls
 BAR30_STAMP = os.environ.get("POOL_BAR30_STAMP", "/tmp/nereus_pool_bar30.last")
@@ -82,9 +96,9 @@ def i2c_lock(timeout_s: float = 2.0):
             fh.close()
 
 
-def ups_cli(*args: str, timeout: float = 5.0) -> str:
+def ups_cli(*args: str, timeout: float = 5.0, lock_timeout_s: float = 2.0) -> str:
     """lifepo4wered-cli under the I2C lock; '' on any failure (never raises)."""
-    with i2c_lock():
+    with i2c_lock(lock_timeout_s):
         try:
             return subprocess.run(["lifepo4wered-cli", *args], capture_output=True, text=True,
                                   timeout=timeout).stdout
@@ -132,8 +146,15 @@ def bar30_session(min_interval_s: float | None = None, max_wait_s: float = 10.0)
                     fh.write(f"{time.time():.3f}\n")
 
 
+# An LED write waits at most this long for the shared lock, then goes ahead unlocked: it is a
+# single register write, and the kernel serializes each SMBus transfer anyway. Bench 10/15: right
+# after a cold boot the UPS logger's 4 locked reads took ~1.7 s, and a blink phase waiting
+# behind them stretched from 2.0 s to 3.7 s (a fault code's flashes could split the same way).
+LED_LOCK_WAIT_S = 0.2
+
+
 def set_led(state: int) -> None:
-    ups_cli("set", "LED_STATE", str(state))
+    ups_cli("set", "LED_STATE", str(state), lock_timeout_s=LED_LOCK_WAIT_S)
 
 
 def decide(mode: str, vbat_hist: list[int], on_battery: bool, last_set_all_ok: bool | None,
@@ -157,9 +178,9 @@ class LedDriver(threading.Thread):
     """Shows one mode. C and B are written once on entry; A is toggled from here. stop()
     restores the firmware default. Every write is fail-soft (ups_cli never raises)."""
 
-    def __init__(self, writer=set_led):
+    def __init__(self, writer=set_led, mode: str = "ok"):
         super().__init__(daemon=True)
-        self.mode, self._shown, self._write = "ok", None, writer
+        self.mode, self._shown, self._write = mode, None, writer
         self.stopped = False
         self._wake, self._stop = threading.Event(), threading.Event()
 
@@ -172,6 +193,19 @@ class LedDriver(threading.Thread):
         self._wake.clear()  # a mode set before start() must not cut the first A flash short
         while not self._stop.is_set():
             mode = self.mode
+            if mode == "idle":  # self-check running: the LED stays the firmware's
+                self._sleep(1.0)
+                continue
+            if mode == "verdict_ok":
+                self._shown = mode
+                if self._show(LED_ON, OK_ON_S):
+                    continue
+                self._show(LED_OFF, OK_OFF_S)
+                continue
+            if mode.startswith("fault:"):
+                self._shown = mode
+                self._fault_codes([int(c) for c in mode[6:].split(",") if c.strip()])
+                continue
             if mode == "camera":
                 self._write(LED_ON)
                 self._shown = "camera"
@@ -184,6 +218,25 @@ class LedDriver(threading.Thread):
                 self._write(LED_FLASHING if mode == "lowbatt" else LED_ON)
                 self._shown = mode
             self._sleep(1.0)
+
+    def _fault_codes(self, codes: list[int]) -> None:
+        """One round: for each code N, N quick flashes then F_DARK_S dark. Returns early on a
+        mode change or stop (the caller re-reads the mode)."""
+        for n in codes or [0]:
+            for _ in range(max(1, n)):
+                if self._show(LED_ON, F_ON_S):
+                    return
+                if self._show(LED_OFF, F_OFF_S):
+                    return
+            if self._sleep(F_DARK_S):
+                return
+
+    def _show(self, state: int, hold_s: float) -> bool:
+        """Write ``state`` and hold it ``hold_s`` from the START of the write, so a slow write
+        does not stretch the phase (verdict patterns only). True if woken early."""
+        t0 = time.monotonic()
+        self._write(state)
+        return self._sleep(max(0.0, hold_s - (time.monotonic() - t0)))
 
     def _sleep(self, s: float) -> bool:
         """Sleep up to ``s``; True if woken early by a mode change or stop."""
@@ -204,7 +257,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("demo", help="show one pattern on the real LED, then restore")
-    d.add_argument("pattern", choices=("A", "B", "C"))
+    d.add_argument("pattern", choices=("A", "B", "C", "OK", "F1", "F2", "F3"))
     d.add_argument("--seconds", type=float, default=20.0)
     sub.add_parser("restore", help="LED_STATE 1 (firmware default)")
     args = ap.parse_args(argv)
@@ -212,7 +265,8 @@ def main(argv=None) -> int:
         set_led(FIRMWARE_DEFAULT)
         return 0
     drv = LedDriver()
-    drv.set_mode({"A": "camera", "B": "lowbatt", "C": "ok"}[args.pattern])
+    drv.set_mode({"A": "camera", "B": "lowbatt", "C": "ok", "OK": "verdict_ok",
+                  "F1": "fault:1", "F2": "fault:2", "F3": "fault:3"}[args.pattern])
     drv.start()
     print(f"showing pattern {args.pattern} for {args.seconds:.0f} s", flush=True)
     time.sleep(args.seconds)

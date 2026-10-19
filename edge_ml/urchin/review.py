@@ -60,10 +60,21 @@ def crop_cell(img: np.ndarray, box: list[float], cell: int = CELL) -> np.ndarray
     return out
 
 
-def make_sheets(owl: dict, stills_root: Path, out_dir: Path, per_sheet: int = PER_SHEET) -> int:
-    """Write sheet_NNN.jpg + sheet_NNN.json (ids on it). Returns the number of sheets."""
+def make_sheets(
+    owl: dict,
+    stills_root: Path,
+    out_dir: Path,
+    per_sheet: int = PER_SHEET,
+    only: list[int] | None = None,
+) -> int:
+    """Write sheet_NNN.jpg + sheet_NNN.json (ids on it). Returns the number of sheets.
+
+    `only` keeps just those candidate ids (in id order), still numbered by their full-set id."""
     out_dir.mkdir(parents=True, exist_ok=True)
     cands = candidate_ids(owl)
+    if only is not None:
+        keep = set(only)
+        cands = [c for c in cands if c[0] in keep]
     cache: dict[str, np.ndarray] = {}
     n_sheets = math.ceil(len(cands) / per_sheet)
     rows = math.ceil(per_sheet / COLS)

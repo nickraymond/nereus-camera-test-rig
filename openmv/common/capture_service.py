@@ -43,6 +43,11 @@ _RAW_CHUNK = 4096  # memoryview slices of the frame buffer: no copy, no allocati
 # never traverse out of STORAGE_DIR.
 _SAFE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
 
+# Stream JPEG chroma subsampling: wire name -> ``image`` module constant (OpenMV v5.0.1,
+# modules/py_image.c). "auto" passes nothing, i.e. the firmware default.
+_SUBSAMPLING = {"auto": None, "420": "JPEG_SUBSAMPLING_420", "422": "JPEG_SUBSAMPLING_422",
+                "444": "JPEG_SUBSAMPLING_444"}
+
 
 def _safe_basename(name):
     """Reduce ``name`` to a safe basename inside STORAGE_DIR, or raise ProtocolError."""
@@ -56,12 +61,16 @@ def _safe_basename(name):
 
 
 def _resolve_framesize(board_config, settings, default=None):
+    """Allowlisted wire name -> what ``sensor.set_framesize`` takes: a ``sensor`` constant, or a
+    (w, h) tuple for a board's custom size (the N6's ISP-scaled 960x600, n6/board_config.py)."""
     fs = settings.get("framesize", default or board_config.DEFAULT_FRAMESIZE)
     attr = board_config.FRAMESIZES.get(fs)
     if attr is None:
         raise cp.ProtocolError(
             cp.ERR_CAPTURE_FAILED, "unsupported framesize: " + repr(fs)
         )
+    if isinstance(attr, tuple):
+        return attr, fs
     return getattr(sensor, attr), fs
 
 
@@ -86,11 +95,40 @@ def _sha256_file(path):
     return binascii.hexlify(h.digest()).decode()
 
 
-def capture_image(board_config, settings):
+# Synchronized capture (2026-10-14, Nick: the three cameras must shoot the same moment). After
+# warm-up the board says "armed" and keeps snapshotting (autos stay live) until the host's fire
+# byte arrives, then takes the next frame. A host that never fires cannot hang the board.
+TRIGGER_MAX_WAIT_MS = 20000
+
+
+def _wait_fire(usb, command_id, snap):
+    """Armed loop: returns board ticks of armed / fire receipt + the frame period seen while
+    waiting (the fire-to-frame latency is up to about one frame period)."""
+    t_armed = time.ticks_ms()
+    usb.write(cp.encode_message(cp.armed_response(command_id, t_armed)))
+    frames = 0
+    while True:
+        if usb.any():
+            t_fire = time.ticks_ms()
+            usb.read(64)  # consume the fire byte(s)
+            break
+        if time.ticks_diff(time.ticks_ms(), t_armed) > TRIGGER_MAX_WAIT_MS:
+            t_fire = None
+            break
+        snap()
+        frames += 1
+    waited = time.ticks_diff(time.ticks_ms(), t_armed)
+    return {"armed_ms": t_armed, "fire_rx_ms": t_fire, "timed_out": t_fire is None,
+            "frame_ms": (waited // frames) if frames else None}
+
+
+def capture_image(board_config, settings, usb=None, command_id=None):
     """Configure the sensor, snapshot to STORAGE_DIR, return output metadata (§8).
 
     Validates framesize/pixel_format against the board allowlist; raises ProtocolError
     (mapped to a structured failure by the caller) on bad settings or capture error.
+    ``settings["trigger"]``: synchronized capture — after warm-up, wait for the host's fire
+    byte (``_wait_fire``; needs ``usb`` + ``command_id``) and report the board ticks.
     """
     name = _safe_basename(settings.get("filename"))
     fs_const, fs_name = _resolve_framesize(board_config, settings)
@@ -103,7 +141,12 @@ def capture_image(board_config, settings):
     sensor.set_framesize(fs_const)
     if warmup_ms > 0:
         sensor.skip_frames(time=warmup_ms)
+    sync = None
+    if settings.get("trigger") and usb is not None:
+        sync = _wait_fire(usb, command_id, sensor.snapshot)
     img = sensor.snapshot()
+    if sync is not None:
+        sync["snap_ms"] = time.ticks_ms()
 
     path = STORAGE_DIR + "/" + name
     img.save(path, quality=quality)
@@ -120,6 +163,8 @@ def capture_image(board_config, settings):
         "sha256": _sha256_file(path),
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
     }
+    if sync is not None:
+        out["sync"] = sync
     # Settled 3A state at snapshot time (§12 exposure settings where available). Makes a
     # stuck auto-exposure/AWB episode diagnosable from capture.json alone: a "normal"
     # scene captured at extreme exposure/gain is the stale-state signature. Capability-
@@ -219,7 +264,10 @@ def capture_raw(usb, command_id, board_config, settings):
     while time.ticks_diff(time.ticks_ms(), t_start) < warmup_ms:
         cam.snapshot()
     metered = {"exposure_us": cam.exposure_us(), "gain_db": _finite(cam.gain_db())}
-    exposure_us = int(settings.get("exposure_us") or metered["exposure_us"])
+    # exposure_scale (default 1): lock at metered x scale, e.g. 0.5 = one stop dark for the
+    # calibration block, so the ChArUco white squares stay under ~250 (8-bit Bayer).
+    scale = float(settings.get("exposure_scale") or 1.0)
+    exposure_us = int(settings.get("exposure_us") or metered["exposure_us"] * scale)
     gain_db = float(settings.get("gain_db") or metered["gain_db"] or 0.0)
     cam.auto_exposure(False, exposure_us=exposure_us)
     cam.auto_gain(False, gain_db=gain_db)
@@ -235,19 +283,25 @@ def capture_raw(usb, command_id, board_config, settings):
         cam.auto_exposure(False, exposure_us=exposure_us)
     try:
         _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
-                                 metered, exposure_us, gain_db, frame_time_us)
+                                 metered, exposure_us, gain_db, frame_time_us,
+                                 trigger=bool(settings.get("trigger")))
     finally:
         if default_ft is not None:
             _set_frame_time(cam, default_ft)
 
 
 def _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, t_start,
-                             metered, exposure_us, gain_db, frame_time_us):
+                             metered, exposure_us, gain_db, frame_time_us, trigger=False):
     t_locked = time.ticks_ms()
     for _ in range(3):
         _snap(cam)
+    sync = None
+    if trigger:
+        sync = _wait_fire(usb, command_id, lambda: _snap(cam))
     img = _snap(cam)
     t_snap = time.ticks_ms()
+    if sync is not None:
+        sync["snap_ms"] = t_snap
 
     data = memoryview(img.bytearray())
     size = len(data)
@@ -276,6 +330,8 @@ def _capture_locked_and_send(usb, command_id, board_config, cam, name, fs_name, 
         "sha256": sha,
         "mount_rotation_deg": board_config.MOUNT_ROTATION_DEG,
     }
+    if sync is not None:
+        out["sync"] = sync
     usb.write(cp.encode_message(cp.sending_response(command_id, name, size, sha)))
     for off in range(0, size, _RAW_CHUNK):
         usb.write(data[off:off + _RAW_CHUNK])
@@ -378,13 +434,37 @@ def stream_frames(usb, command_id, board_config, settings):
     # = less CPU/USB activity and current: Nick 2026-10-13, N6 at 10 fps like the AE3.
     fps = float(settings.get("fps", 0) or 0)
     period_ms = int(1000 / fps) if fps > 0 else 0
+    # JPEG chroma subsampling (pool 2 B0, 2026-10-17). Absent / "auto" = the firmware's own choice,
+    # unchanged: the AE3's software encoder picks 4:4:4 at quality >= 60 (lib/imlib/jpege.c), the
+    # N6's hardware encoder is 4:2:0. "420" | "422" | "444" force one.
+    sub = settings.get("subsampling") or "auto"
+    if sub not in _SUBSAMPLING:
+        raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "unsupported subsampling: " + repr(sub))
+    sub_const = None
+    if sub != "auto":
+        import image  # OpenMV firmware module; imported only when a subsampling is forced
+
+        sub_const = getattr(image, _SUBSAMPLING[sub])
+    # Per-frame timing (B0): each header carries this frame's snapshot and JPEG ms and the
+    # previous frame's USB write ms (a frame's own write ends after its header is sent).
+    timing = bool(settings.get("timing"))
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
     sensor.set_framesize(fs_const)
-    sensor.skip_frames(time=300)
+    # Synchronized video (settings["trigger"], 2026-10-14): warm up, say "armed", start on the
+    # host's fire byte; every frame header then carries its board ticks. Focus stream: as before.
+    trigger = bool(settings.get("trigger"))
+    sensor.skip_frames(time=int(settings.get("warmup_ms", 2000 if trigger else 300)))
+    sync = _wait_fire(usb, command_id, sensor.snapshot) if trigger else None
+    if sync is not None and sync["timed_out"]:
+        # The host never fired (it died or gave up): do not stream into a port nobody reads.
+        usb.write(cp.encode_message(cp.completed_response(command_id,
+                                                          {"frames": 0, "sync": sync})))
+        return
 
     seq = 0
+    write_ms = None
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
     while True:
         # Any inbound byte is the host's stop signal; drain it and exit.
@@ -398,13 +478,25 @@ def stream_frames(usb, command_id, board_config, settings):
             break
         t_frame = time.ticks_ms()
         img = sensor.snapshot()
-        img.compress(quality=quality)
+        t_snap = time.ticks_ms()
+        if sub_const is None:
+            img.compress(quality=quality)
+        else:
+            img.compress(quality=quality, subsampling=sub_const)
         data = img.bytearray()
         n = len(data)
+        extra = None
+        if timing:
+            extra = {"snap_ms": time.ticks_diff(t_snap, t_frame),
+                     "jpeg_ms": time.ticks_diff(time.ticks_ms(), t_snap),
+                     "prev_write_ms": write_ms}
+        t_write = time.ticks_ms()
         usb.write(cp.encode_message(
-            cp.frame_response(command_id, seq, n, n, img.width(), img.height())
+            cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
+                              ticks_ms=t_snap if trigger else None, extra=extra)
         ))
         usb.write(data)
+        write_ms = time.ticks_diff(time.ticks_ms(), t_write)
         seq += 1
         if period_ms:
             # Sleep the rest of the period in <= 50 ms slices so a host stop byte is still seen
@@ -415,4 +507,7 @@ def stream_frames(usb, command_id, board_config, settings):
                     break
                 time.sleep_ms(min(rest, 50))
 
-    usb.write(cp.encode_message(cp.completed_response(command_id, {"frames": seq})))
+    out = {"frames": seq}
+    if sync is not None:
+        out["sync"] = sync
+    usb.write(cp.encode_message(cp.completed_response(command_id, out)))

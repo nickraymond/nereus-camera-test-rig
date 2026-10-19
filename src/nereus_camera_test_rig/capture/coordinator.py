@@ -282,6 +282,157 @@ def _capture_one_camera(
     return outcome
 
 
+# -- synchronized capture (Nick 2026-10-14: "three of the same images from three different
+# sensors"; sequential capture put the stills ~20-30 s apart) --------------------------------
+# The IMX708 (rpicam-still --signal) takes its still ~190-230 ms after SIGUSR1 (mode switch,
+# measured on nereus002); the boards ~10 ms after their fire byte. So the IMX708 is fired first
+# and the boards SYNC_IMX_LEAD_MS later (rig.sync.imx_lead_ms overrides). The per-shot skew is
+# recorded in sync.json and checked against a visible clock (docs/rig_gate_20261014).
+SYNC_IMX_LEAD_MS = 200
+
+
+def _sync_frame_time(result: CaptureResult) -> Optional[float]:
+    """Host-monotonic time of the camera's captured frame, from its sync metadata."""
+    sync = (result.sensor_metadata or {}).get("sync") or {}
+    if sync.get("sensor_ts_mono"):
+        return float(sync["sensor_ts_mono"])
+    if sync.get("fire_host_mono") is not None and sync.get("fire_to_snap_ms") is not None:
+        return float(sync["fire_host_mono"]) + sync["fire_to_snap_ms"] / 1000.0
+    return None
+
+
+def _capture_synchronized(ordered: list[str], cameras_cfg: dict[str, Any],
+                          paths: ExperimentPaths, when: datetime, raw: Optional[bool],
+                          lead_ms: float, raw_only: bool = False
+                          ) -> tuple[list[CameraOutcome], list[dict]]:
+    """Every camera shoots the same moment, per shot (still, then RAW). Never raises.
+
+    Per shot: boards with ``reset_before_capture`` are reset in parallel (the AE3 allows one
+    camera session per boot, OQ-19), all cameras arm in parallel (warm-up, autos running),
+    then the IMX708 is fired and the boards ``lead_ms`` later; results are collected in
+    parallel. A camera that fails to build or arm is recorded failed; the others still shoot.
+    """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    devices: dict[str, Any] = {}
+    profiles: dict[str, dict] = {}
+    results: dict[str, dict[str, CaptureResult]] = {}
+    for name in ordered:
+        try:
+            profiles[name] = load_camera_profile(cameras_cfg[name])
+            devices[name] = build_camera(cameras_cfg[name], profile=profiles[name])
+        except Exception as exc:
+            logger.error("camera %s: could not build adapter: %s", name, exc)
+            results[name] = {"still": _synth_failed_result(name, cameras_cfg[name],
+                                                           "camera_init_failed", str(exc))}
+    want_raw = any(profiles[n].get("raw", False) for n in devices) if raw is None else raw
+    # raw_only (calibration poses, ~10 s per shot): one RAW shot — the IMX708 writes its DNG and
+    # a JPEG from that one exposure, the boards their Bayer — recorded as each camera's capture.
+    shots = [("raw", "raw")] if raw_only else (
+        [("still", "image")] + ([("raw", "raw")] if want_raw else []))
+    sync_log: list[dict] = []
+    pool = ThreadPoolExecutor(max_workers=max(1, len(devices)))
+    try:
+        for i, (shot, kind) in enumerate(shots):
+            live = [n for n in devices if i == 0 or results.get(n, {}).get("still")]
+
+            def prepare(name, shot=shot, i=i):
+                dev, prof = devices[name], profiles[name]
+                _reset_if_asked(name, dev, prof, f"synchronized {shot}")
+                if i == 0:
+                    try:
+                        dev.get_device_info()  # identity + firmware into the record (§12)
+                    except Exception as exc:
+                        logger.debug("camera %s: get_device_info failed: %s", name, exc)
+                arm = getattr(dev, "arm", None)
+                if not callable(arm):
+                    raise RuntimeError(f"{type(dev).__name__} has no synchronized capture")
+                ext = "jpg" if shot == "still" else getattr(dev, "raw_extension", "raw")
+                dest = paths.capture_dir(name) / naming.capture_filename(
+                    name, "image" if shot == "still" else "raw", ext, when)
+                arm(kind, str(dest), CaptureRequest(kind="image", settings=dict(prof)))
+
+            armed = []
+            for name, fut in [(n, pool.submit(prepare, n)) for n in live]:
+                try:
+                    fut.result()
+                    armed.append(name)
+                except Exception as exc:
+                    logger.error("camera %s: arm for %s FAILED: %s", name, shot, exc)
+                    results.setdefault(name, {})[shot] = _synth_failed_result(
+                        name, cameras_cfg[name], "arm_failed", str(exc))
+            # Fire: the slow-to-shoot IMX708 first, then every board back to back.
+            fire_host: dict[str, float] = {}
+            imx = [n for n in armed if getattr(devices[n], "driver", "") == "imx708"]
+            boards = [n for n in armed if n not in imx]
+
+            def fire(name, shot=shot):
+                try:  # a board that stops reading makes this write time out (10 s): fail it
+                    fire_host[name] = devices[name].fire()
+                except Exception as exc:
+                    logger.error("camera %s: fire for %s FAILED: %s", name, shot, exc)
+                    results.setdefault(name, {})[shot] = _synth_failed_result(
+                        name, cameras_cfg[name], "fire_failed", str(exc))
+
+            for n in imx:
+                fire(n)
+            if imx and boards:
+                time.sleep(lead_ms / 1000.0)
+            for n in boards:
+                fire(n)
+            fired = [n for n in armed if n in fire_host]
+            for name, fut in [(n, pool.submit(devices[n].finish)) for n in fired]:
+                try:
+                    results.setdefault(name, {})[shot] = fut.result()
+                except Exception as exc:
+                    logger.exception("camera %s: finish of %s raised", name, shot)
+                    results.setdefault(name, {})[shot] = _synth_failed_result(
+                        name, cameras_cfg[name], "adapter_exception", repr(exc))
+            frames = {n: _sync_frame_time(results[n][shot]) for n in fired
+                      if results[n][shot].ok}
+            frames = {n: t for n, t in frames.items() if t is not None}
+            t0 = min(frames.values()) if frames else None
+            entry = {"shot": shot, "lead_ms": lead_ms,
+                     "fire_host_mono": {n: round(t, 4) for n, t in fire_host.items()},
+                     "frame_host_mono": {n: round(t, 4) for n, t in frames.items()},
+                     "frame_offset_ms": {n: round((t - t0) * 1000, 1)
+                                         for n, t in frames.items()} if t0 else {},
+                     "skew_ms": round((max(frames.values()) - t0) * 1000, 1)
+                     if len(frames) >= 2 else None,
+                     # a board whose fire arrived after its 20 s armed wait shot unsynchronized
+                     "timed_out": sorted(
+                         n for n in fired if results[n][shot].ok and
+                         ((results[n][shot].sensor_metadata or {}).get("sync") or {})
+                         .get("timed_out"))}
+            sync_log.append(entry)
+            logger.info("synchronized %s: skew %s ms offsets %s", shot, entry["skew_ms"],
+                        entry["frame_offset_ms"])
+    finally:
+        pool.shutdown(wait=True)
+        for dev in devices.values():
+            close = getattr(dev, "close", None)
+            if callable(close):
+                close()
+
+    outcomes: list[CameraOutcome] = []
+    for name in ordered:
+        r = results.get(name, {})
+        first = "raw" if raw_only else "still"
+        result = r.get(first) or _synth_failed_result(name, cameras_cfg[name], "not_captured",
+                                                      f"no {first}")
+        cap_dir = paths.capture_dir(name)
+        write_capture_metadata(cap_dir / "capture.json", result)
+        raw_result = None if raw_only else r.get("raw")
+        if raw_result is not None:
+            write_capture_metadata(cap_dir / "raw_capture.json", raw_result)
+        outcomes.append(CameraOutcome(camera_name=name, result=result,
+                                      image_path=result.output_path,
+                                      metadata_path=str(cap_dir / "capture.json"),
+                                      raw_result=raw_result))
+    return outcomes, sync_log
+
+
 def run_experiment(
     config: dict[str, Any],
     experiment_type: str,
@@ -293,6 +444,8 @@ def run_experiment(
     analysis: bool = True,
     when: Optional[datetime] = None,
     raw: Optional[bool] = None,
+    sync: bool = False,
+    sync_raw_only: bool = False,
 ) -> ExperimentOutcome:
     """Run one sequential capture set across all connected cameras (Spec §11, §13).
 
@@ -303,6 +456,9 @@ def run_experiment(
     ``raw``: take a RAW after each still (Phase 8 S3); ``None`` = each camera profile's
     ``raw`` flag (default off, so the Phase 5 path is unchanged). A failed RAW is recorded in
     ``raw_captures`` + ``errors`` but does not fail the camera's still.
+
+    ``sync``: all cameras shoot the same moment (``_capture_synchronized``; per-shot skew in
+    ``sync.json``). Analysis is skipped in sync mode (captures only, as the pool loop runs).
     """
     when = when or datetime.now(timezone.utc)
     if results_root is None:
@@ -339,9 +495,22 @@ def run_experiment(
         paths.experiment_id, environment_label, ordered, analyzer is not None,
     )
 
+    if sync:
+        import json
+
+        lead = float((config.get("rig", {}).get("sync") or {}).get("imx_lead_ms",
+                                                                   SYNC_IMX_LEAD_MS))
+        sync_outcomes, sync_log = _capture_synchronized(ordered, cameras_cfg, paths, when, raw,
+                                                        lead, raw_only=sync_raw_only)
+        (paths.root / "sync.json").write_text(json.dumps(
+            {"mode": "synchronized", "imx_lead_ms": lead, "shots": sync_log}, indent=2) + "\n")
+        it = iter(sync_outcomes)
+    else:
+        it = None
     outcomes: list[CameraOutcome] = []
     for name in ordered:
-        outcome = _capture_one_camera(name, cameras_cfg[name], paths, analyzer, when, raw)
+        outcome = next(it) if it is not None else _capture_one_camera(
+            name, cameras_cfg[name], paths, analyzer, when, raw)
         outcomes.append(outcome)
         record.cameras.append(outcome.result.camera)
         record.captures.append(outcome.result)

@@ -120,6 +120,16 @@ def test_frame_response_shape():
     }
 
 
+def test_frame_response_carries_stream_timing():
+    # pool 2 B0 (2026-10-17): per-frame snapshot / JPEG / previous-write ms ride in the header
+    fr = cp.frame_response("cid", 4, 100, 100, 640, 400, ticks_ms=9000,
+                           extra={"snap_ms": 16, "jpeg_ms": 66, "prev_write_ms": 23})
+    assert fr["frame"]["ticks_ms"] == 9000
+    assert (fr["frame"]["snap_ms"], fr["frame"]["jpeg_ms"], fr["frame"]["prev_write_ms"]) == (
+        16, 66, 23)
+    assert "snap_ms" not in cp.frame_response("cid", 4, 100, 100, 640, 400)["frame"]
+
+
 def test_reset_board_is_allowlisted():
     # reset_board acks then machine.reset()s — the in-band cure for firmware 3A state
     # that survives sensor.reset() (stale AWB after lights-off runs, 2026-07-16).

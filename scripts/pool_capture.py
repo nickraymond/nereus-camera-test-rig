@@ -65,8 +65,11 @@ from __future__ import annotations
 import argparse
 import atexit
 import hashlib
+import importlib.util
 import json
 import os
+import re
+import shlex
 import shutil
 import signal
 import socket
@@ -79,6 +82,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import pool_led  # noqa: E402  (Nick's LED codes + the shared I2C lock)
+import pool_selfcheck  # noqa: E402  (boot camera self-check, --self-check)
 from hil_soak import SERIALS, PowerLog, pi_health  # noqa: E402  (reuse, not a copy)
 
 
@@ -406,13 +410,193 @@ def ups_power_cycle(reason: str) -> int:
                           capture_output=True, text=True, timeout=60).returncode
 
 
+# -- dive program (Friday 2026-10-16: calibration A/B, stills, synchronized video) ------------
+# "cal_a:12,cal_b:10,stills:10,video:6x30" = phases in order, minutes each; video = N clips of
+# S seconds back to back. Times run from switch-on (uptime) when started at boot, so the diver
+# follows a watch (no LED codes: Nick 2026-10-13). After the program the loop keeps taking
+# synchronized stills until stopped.
+# Pool 2 (Wed 2026-10-21, must-do 11 + F4): a phase may carry a label and its own args,
+#   "video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420]"
+# = a 640x400 control clip at sync_video's defaults, then 6 clips at the part-B winners. The args
+# are checked against sync_video's own parser at startup, before any recording; a phase without
+# brackets runs exactly as before. Only video phases take args today.
+CAL_IMX_EV = -1.0          # calibration: ~1 stop dark (10/14: clipping cost the IMX708 half its
+CAL_BOARD_EXPOSURE = 0.5   # frames; white squares must stay under ~250)
+
+
+_PHASE_RE = re.compile(r"(?P<name>[a-z_0-9]+)(?:@(?P<label>[a-z0-9_]+))?:(?P<val>[^\[\]]+)"
+                       r"(?:\[(?P<args>[^\[\]]*)\])?")
+
+
+def split_program(spec: str) -> list[str]:
+    """Program items: split on commas outside [...]; raises ValueError on unbalanced or nested
+    brackets. Pure."""
+    items, cur, depth = [], "", 0
+    for ch in spec:
+        depth += (ch == "[") - (ch == "]")
+        if depth not in (0, 1):
+            raise ValueError(f"unbalanced or nested brackets in {spec!r}")
+        if ch == "," and depth == 0:
+            items.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if depth:
+        raise ValueError(f"unclosed '[' in {spec!r}")
+    return [x.strip() for x in items + [cur] if x.strip()]
+
+
+def _sync_video():
+    spec = importlib.util.spec_from_file_location("sync_video", ROOT / "scripts" / "sync_video.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def parse_program(spec: str) -> list[dict]:
+    """Phase list with cumulative [start, end) minutes; raises ValueError on a bad spec,
+    including a phase's [args] that sync_video.py would refuse (checked here, before any
+    recording)."""
+    phases, t, labels = [], 0.0, set()
+    for item in split_program(spec):
+        m = _PHASE_RE.fullmatch(item)
+        if not m:
+            raise ValueError(f"malformed phase {item!r} (name[@label]:value[args])")
+        if m["label"]:
+            if m["label"] in labels:  # a label names one phase in the logs and on the card
+                raise ValueError(f"label {m['label']!r} used twice")
+            labels.add(m["label"])
+        name, val = m["name"], m["val"]
+        args = shlex.split(m["args"]) if m["args"] is not None else None
+        if name not in ("cal_a", "cal_b", "stills", "video"):
+            raise ValueError(f"unknown phase {name!r} (cal_a | cal_b | stills | video)")
+        if args is not None and not args:
+            raise ValueError(f"{item!r}: empty [] (leave the brackets out for the defaults)")
+        if args and name != "video":
+            raise ValueError(f"{item!r}: [args] are only for video phases")
+        if args:
+            _sync_video().check_extra_args(args)
+        if name == "video":
+            clips, _, secs = val.partition("x")
+            ph = {"name": name, "clips": int(clips), "clip_s": float(secs)}
+            # one clip per period on a fixed grid (the diver knows when a clip runs): period =
+            # the clip + ~30 s of board reset / arm / finish, rounded up to whole minutes
+            ph["period_s"] = 60.0 * -(-(ph["clip_s"] + 30) // 60)
+            minutes = ph["clips"] * ph["period_s"] / 60
+        else:
+            ph = {"name": name}
+            minutes = float(val)
+        if m["label"]:
+            ph["label"] = m["label"]
+        if args:
+            ph["args"] = args
+        ph.update(start_min=round(t, 2), end_min=round(t + minutes, 2))
+        phases.append(ph)
+        t += minutes
+    return phases
+
+
+def phase_at(phases: list[dict], t_min: float) -> dict:
+    for ph in phases:
+        if ph["start_min"] <= t_min < ph["end_min"]:
+            return ph
+    return {"name": "stills", "start_min": phases[-1]["end_min"] if phases else 0,
+            "end_min": None, "tail": True}
+
+
+def write_cal_config(run_dir: Path, run_config: Path) -> Path:
+    """The calibration-block rig.yaml: profile copies with the IMX708 at EV -1 and the boards'
+    RAW locked at metered x 0.5 (exposure_scale)."""
+    import yaml
+
+    cfg = yaml.safe_load(run_config.read_text())
+    prof_dir = run_dir / "profiles_cal"
+    prof_dir.mkdir(exist_ok=True)
+    for name, cam in cfg.get("cameras", {}).items():
+        profile = yaml.safe_load(Path(cam["profile"]).read_text()) or {}
+        if name == "imx708":
+            profile.setdefault("camera_controls", {}).setdefault("exposure", {})["ev"] = CAL_IMX_EV
+        else:
+            profile["exposure_scale"] = CAL_BOARD_EXPOSURE
+        dst = prof_dir / f"{name}.yaml"
+        dst.write_text(f"# calibration block: {Path(cam['profile']).name} + 1 stop dark\n"
+                       + yaml.safe_dump(profile, sort_keys=False))
+        cam["profile"] = str(dst)
+    out = run_dir / "rig_cal.yaml"
+    out.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    return out
+
+
+def append_pose(run_dir: Path, n: int, block: str, line: dict) -> None:
+    """poses.csv: one row per calibration pose, one file per camera (extrinsics later)."""
+    path = run_dir / "poses.csv"
+    new = not path.exists()
+    cams = line.get("cameras", {})
+    files = {c: (cams.get(c, {}).get("still") or {}).get("file") or "" for c in CAMERAS}
+    with path.open("a") as f:
+        if new:
+            f.write("pose_id,utc,block,experiment," + ",".join(CAMERAS) + "\n")
+        f.write(f"{n},{line['clock']['pi_utc']},{block},{line.get('experiment', '')},"
+                + ",".join(files[c] for c in CAMERAS) + "\n")
+
+
+def run_video_clip(run_dir: Path, n: int, seconds: float, extra: list[str] | None = None) -> dict:
+    """One synchronized clip (scripts/sync_video.py) into <run>/video/clipNNN; its summary.
+    ``extra``: the phase's own sync_video args (pool 2); the summary records them, each board's
+    requested settings, and the format its first frame really has (PE 003 condition 2)."""
+    out = run_dir / "video" / f"clip{n:03d}"
+    extra = list(extra or [])
+    # Own process group, killed on every exit: rpicam-vid must not outlive a hung clip (QE #115).
+    proc = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "sync_video.py"),
+                             "--seconds", str(seconds), "--out", str(out), *extra],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            start_new_session=True)
+    try:
+        proc.communicate(timeout=seconds + 120)
+        summary = json.loads((out / "video_sync.json").read_text())
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "error": repr(exc)[:200], "dir": str(out.relative_to(run_dir)),
+                "args": extra}
+    finally:
+        _killpg_quiet(proc.pid)
+        if proc.poll() is None:
+            proc.wait()
+    cams = summary.get("cameras") or {}
+    tab = _clip_table()
+    boards = [c for c in cams if c != "imx708"]
+    return {"ok": bool(summary.get("ok")), "skew_ms": summary.get("start_skew_ms"),
+            "frames": {c: r.get("frames") for c, r in cams.items()},
+            "fps": {c: r.get("fps") for c, r in cams.items()},
+            "fps_clip": {c: r.get("fps_clip") for c, r in cams.items()},
+            "lost": sum(r.get("frames_lost") or 0 for r in cams.values()),
+            "host": summary.get("host"), "dir": str(out.relative_to(run_dir)), "args": extra,
+            "settings": {c: cams[c].get("settings") for c in boards},
+            "measured": {c: tab.first_frame_format(out, c) for c in boards}}
+
+
+def _clip_table():
+    spec = importlib.util.spec_from_file_location("video_clip_table",
+                                                  ROOT / "scripts" / "video_clip_table.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _killpg_quiet(pgid: int) -> None:
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
 def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
-                cameras: list) -> dict:
+                cameras: list, extra_args: tuple = ()) -> dict:
     before = set(run_dir.glob("*/exp_*"))
     env = {**os.environ, "PYTHONPATH": f"{ROOT / 'src'}:{ROOT}"}
     cmd = [sys.executable, "-m", "nereus_camera_test_rig.cli", "--config", str(run_config),
            "experiment", "--type", "pool", "--env", "pool", "--raw", "--no-analysis",
-           "--cameras", ",".join(cameras), "--notes", f"pool_capture {run_id} set {n}"]
+           "--cameras", ",".join(cameras), "--notes", f"pool_capture {run_id} set {n}",
+           *extra_args]
     line: dict = {}
     # Own process group: on a timeout the whole group is killed, so an rpicam-still or serial
     # grandchild cannot outlive the set and hold a camera into the next one (QE #97).
@@ -431,10 +615,22 @@ def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
             pass
         proc.communicate()
         line["exit_code"] = "timeout"
+    finally:
+        # Even after a normal exit: nothing of this set (e.g. a signal-mode rpicam-still left
+        # by a crashed synchronized set) may survive to hold the camera (QE #115).
+        _killpg_quiet(proc.pid)
     new = sorted(set(run_dir.glob("*/exp_*")) - before)
     if new:
         exp = new[-1]
         line["experiment"] = str(exp.relative_to(run_dir))
+        sync_path = exp / "sync.json"
+        if sync_path.is_file():  # synchronized set: per-shot skew + boards that fired late
+            try:
+                line["sync"] = {sh["shot"]: {"skew_ms": sh.get("skew_ms"),
+                                             "timed_out": sh.get("timed_out", [])}
+                                for sh in json.loads(sync_path.read_text()).get("shots", [])}
+            except (OSError, ValueError):
+                pass
         try:
             line["cameras"] = summarize_set(exp)
         except (OSError, ValueError, KeyError) as exc:
@@ -444,10 +640,24 @@ def run_one_set(n: int, run_dir: Path, run_config: Path, run_id: str,
 
 
 def health_text(line: dict) -> str:
+    if "video" in line:
+        v = line["video"]
+        fmt = " · ".join(f"{c.split('_')[-1]} {m['dims']} {m['subsampling']}"
+                         for c, m in (v.get("measured") or {}).items() if m)
+        return (f"[set {line['set']:03d} | {line.get('phase', 'video')}] VIDEO "
+                f"{'ok' if v.get('ok') else 'FAIL ' + str(v.get('error', ''))[:80]} · skew "
+                f"{v.get('skew_ms')} ms · fps {v.get('fps')} · lost {v.get('lost')}"
+                + (f" · {fmt}" if fmt else ""))
+    return _health_text(line)
+
+
+def _health_text(line: dict) -> str:
     """The one human line per set (pool.log). OK n/3 counts a camera only if still AND raw."""
     cams = line.get("cameras", {})
+    # calibration sets: one RAW shot, recorded as the capture ("still" key)
+    kinds = ("still",) if line.get("phase", "").startswith("cal") else ("still", "raw")
     ok = [c for c in CAMERAS if all((cams.get(c, {}).get(k) or {}).get("status") == "completed"
-                                    for k in ("still", "raw"))]
+                                    for k in kinds)]
     parts = []
     for c in CAMERAS:
         raw = (cams.get(c, {}).get("raw") or {})
@@ -455,6 +665,8 @@ def health_text(line: dict) -> str:
         short = {"imx708": "imx", "openmv_n6": "n6", "openmv_ae3": "ae3"}[c]
         if c in line.get("benched", []):
             parts.append(f"{short} benched")
+        elif c in ok and len(kinds) == 1:
+            parts.append(f"{short} cal {still['bytes'] / 1e6:.1f}MB")
         elif c in ok:
             parts.append(f"{short} raw {raw['bytes'] / 1e6:.1f}MB jpg {still['bytes'] / 1e6:.2f}MB")
         else:
@@ -465,7 +677,14 @@ def health_text(line: dict) -> str:
     pw = (f" · ups {p['vin_mv'] / 1000:.2f}Vin {p['vbat_mv'] / 1000:.2f}Vbat {p['w_out']:.1f}W"
           f"{' BATT' if p.get('on_battery') else ''}" if p else " · ups -")
     up = int(line["clock"]["uptime_s"] or 0)
-    return (f"[set {line['set']:03d} | run+{int(line['run_s']) // 60:3d}m | boot+{up // 60}m] "
+    sync = line.get("sync") or {}
+    if sync:
+        late = sorted({n for sh in sync.values() for n in sh.get("timed_out") or []})
+        parts.append("sync " + "/".join(f"{k} {v.get('skew_ms')}ms" for k, v in sync.items())
+                     + (f" LATE-FIRE {','.join(late)}" if late else ""))
+    phase = f" {line['phase']}" if line.get("phase") else ""
+    return (f"[set {line['set']:03d}{phase} | run+{int(line['run_s']) // 60:3d}m | "
+            f"boot+{up // 60}m] "
             f"{'OK' if len(ok) == 3 else 'PARTIAL' if ok else 'FAIL'} {len(ok)}/3 · "
             + " · ".join(parts)
             + depth_text((line.get("depth") or {}).get("end") or {})
@@ -532,12 +751,52 @@ def run(args) -> int:
         power.start()
     # Nick 2026-10-13 ~9:25 PM: "remove any custom LED flashing sequence". The LED codes (#101)
     # are opt-in (--led-codes); by default the loop never touches the LED (firmware default).
-    led = pool_led.LedDriver() if args.led_codes else None
+    led = None
+    if args.self_check:
+        # The self-check verdict owns the LED (Nick 10/15, plan A); every write is traced.
+        trace_fh = (run_dir / "led_trace.csv").open("a")
+        trace_fh.write("t_mono_s,utc,led_state,mode\n")
+
+        def traced(state: int) -> None:
+            trace_fh.write(f"{time.monotonic():.3f},"
+                           f"{datetime.now(timezone.utc).isoformat(timespec='milliseconds')},"
+                           f"{state},{led.mode if led else ''}\n")
+            trace_fh.flush()
+            pool_led.set_led(state)
+
+        led = pool_led.LedDriver(writer=traced, mode="idle")
+    elif args.led_codes:
+        led = pool_led.LedDriver()
     if led:
         led.start()
         # A crash mid-pattern must not leave the LED dark (reads as "Pi off"): restore the
         # firmware default at interpreter exit if the normal stop below never ran (QE #101).
         atexit.register(lambda: None if led.stopped else led.stop())
+    program = parse_program(args.program) if args.program else []
+    cal_config = write_cal_config(run_dir, run_config) if any(
+        ph["name"].startswith("cal") for ph in program) else None
+    if program:
+        manifest["program"] = program
+        # The Wed card and envelope quote the exact string + its sha256 (PE 003 condition 3)
+        manifest["program_string"] = args.program
+        manifest["program_sha256"] = hashlib.sha256(args.program.encode()).hexdigest()
+        atomic_json(run_dir / "run_manifest.json", manifest)
+        say("  program (minutes from " + ("switch-on" if args.started_by == "boot" else
+                                          "run start") + "): " + " · ".join(
+            f"{ph['name']}{'@' + ph['label'] if ph.get('label') else ''} "
+            f"{ph['start_min']:g}-{ph['end_min']:g}"
+            f"{' ' + ' '.join(ph['args']) if ph.get('args') else ''}" for ph in program)
+            + f" (sha256 {manifest['program_sha256'][:12]})")
+    verdict_mode, verdict_t = None, 0.0
+    if args.self_check:
+        say("  self-check: IMX708 (1), N6 (2), AE3 (3); read-only, no fixes "
+            "(on a fault Nick switches off/on)")
+        sc = pool_selfcheck.run_check(SERIALS)
+        verdict_mode, verdict_t = pool_selfcheck.led_mode(sc), time.monotonic()
+        manifest["self_check"] = sc
+        atomic_json(run_dir / "run_manifest.json", manifest)
+        led.set_mode(verdict_mode)
+        say(pool_selfcheck.summary(sc))
     vbat_hist: list[int] = []
     end = t_start + args.hours * 3600
     n, fails_in_row, cycle_tried = 0, {c: 0 for c in CAMERAS}, False
@@ -588,9 +847,33 @@ def run(args) -> int:
         cams_now, benched = cameras_for_set(n, fails_in_row, args.retry_every)
         line = {"set": n, "run_id": run_id, "clock": clocks(), "run_s": round(t0 - t_start, 1),
                 "usb_before": present, "benched": benched, "pi_before": pi_health(run_dir)}
+        phase = None
+        if program:
+            t_min = ((line["clock"]["uptime_s"] or 0) if args.started_by == "boot"
+                     else t0 - t_start) / 60
+            phase = phase_at(program, t_min)
+            line["phase"] = (phase["name"] + (f"@{phase['label']}" if phase.get("label") else "")
+                             + ("_tail" if phase.get("tail") else ""))
         read_now = args.depth and depth_errors < DEPTH_DISABLE_AFTER
         depth = {"start": read_depth(ref_mbar, args.depth_bus)} if read_now else {}
-        line.update(run_one_set(n, run_dir, run_config, run_id, cams_now))
+        if phase and phase["name"] == "video":
+            # Start on the clip grid: phase start + k x period (minutes from switch-on).
+            t_rel = (line["clock"]["uptime_s"] or 0) if args.started_by == "boot" \
+                else time.monotonic() - t_start
+            k = -(-(t_rel - phase["start_min"] * 60) // phase["period_s"])
+            wait = phase["start_min"] * 60 + k * phase["period_s"] - t_rel
+            if 0 < wait < phase["period_s"]:
+                time.sleep(wait)
+            line["clip_grid_s"] = round(phase["start_min"] * 60 + k * phase["period_s"], 1)
+            line["video"] = run_video_clip(run_dir, n, phase["clip_s"], phase.get("args"))
+        elif phase and phase["name"] in ("cal_a", "cal_b"):
+            line.update(run_one_set(n, run_dir, cal_config, run_id, cams_now,
+                                    ("--sync-raw-only",)))
+        else:
+            line.update(run_one_set(n, run_dir, run_config, run_id, cams_now,
+                                    ("--sync",) if (program or args.sync) else ()))
+        if phase and phase["name"] in ("cal_a", "cal_b") and line.get("cameras"):
+            append_pose(run_dir, n, phase["name"], line)
         if read_now:
             depth["end"] = read_depth(ref_mbar, args.depth_bus)
             for d in depth.values():
@@ -616,11 +899,16 @@ def run(args) -> int:
             fh.flush()
             os.fsync(fh.fileno())
         cams = line.get("cameras", {})
+        # Calibration sets take one RAW shot (recorded as the capture); video clips are scored
+        # in their own summary and never bench a board.
+        kinds = ("still",) if line.get("phase", "").startswith("cal") else ("still", "raw")
         good = [c for c in CAMERAS if all((cams.get(c, {}).get(k) or {}).get("status")
-                                          == "completed" for k in ("still", "raw"))]
+                                          == "completed" for k in kinds)]
+        if "video" in line:
+            good = [c for c in CAMERAS if (line["video"].get("frames") or {}).get(c)]
         for c in good:
             manifest["ok_counts"][c] += 1
-        for c in cams_now:
+        for c in ([] if "video" in line else cams_now):
             fails_in_row[c] = 0 if c in good else fails_in_row[c] + 1
         manifest["fails_in_row"] = dict(fails_in_row)
         manifest.update({"sets": n, "last_set": {"set": n, "clock": line["clock"],
@@ -631,7 +919,13 @@ def run(args) -> int:
             vbat_hist.append(p_now["vbat_mv"])
         else:
             vbat_hist.clear()
-        if led:
+        if led and verdict_mode:  # --self-check: the boot verdict, only low battery overrides
+            low = pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")), None,
+                                  args.low_vbat_mv) == "lowbatt"
+            led.set_mode(pool_selfcheck.verdict_led_mode(
+                verdict_mode, time.monotonic() - verdict_t, low))
+            line["led"] = led.mode
+        elif led:
             led.set_mode(pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")),
                                          len(good) == 3, args.low_vbat_mv))
             line["led"] = led.mode
@@ -765,15 +1059,42 @@ def main() -> int:
                         "the UPS and Nick is moving it to its own bus)")
     r.add_argument("--led-codes", action="store_true",
                    help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
+    r.add_argument("--self-check", action="store_true",
+                   help="boot camera self-check before set 1, verdict on the UPS LED: slow "
+                        "blink = all OK, N quick flashes = camera N failed (1 IMX708, 2 N6, "
+                        "3 AE3). Read-only: no power cycle, no retries (Nick 10/15, plan A)")
+    r.add_argument("--sync", action="store_true",
+                   help="synchronized sets: all three cameras shoot the same moment")
+    r.add_argument("--program", default="",
+                   help="dive program, e.g. cal_a:12,cal_b:10,stills:10,video:6x30 (minutes from "
+                        "switch-on; implies --sync; stills continue after it). A video phase may "
+                        "carry a label and sync_video args: "
+                        "'video@best:6x30[--n6-framesize HD --ae3-subsampling 420]'")
     r.add_argument("--no-depth", dest="depth", action="store_false",
                    help="skip the MS5837 depth/temperature read at the start and end of each set")
+    r.add_argument("--check-only", action="store_true",
+                   help="check the arguments (incl. --program and its per-phase args), print the "
+                        "program and its sha256, exit 0; touches no hardware (pool_mode.sh arm)")
     s = sub.add_parser("summary")
     s.add_argument("run_dir")
     args = ap.parse_args()
+    if args.cmd == "run" and args.program:
+        try:
+            parse_program(args.program)
+        except ValueError as exc:
+            ap.error(f"--program: {exc}")
     if args.cmd == "run" and args.lens_position != "auto":
         lp = float(args.lens_position)
         if not 0.0 <= lp <= 15.0:
             ap.error("--lens-position must be 0..15 dioptres or 'auto'")
+    if args.cmd == "run" and args.check_only:
+        for ph in parse_program(args.program) if args.program else []:
+            print(f"  {ph['name']}{'@' + ph['label'] if ph.get('label') else ''} "
+                  f"{ph['start_min']:g}-{ph['end_min']:g} min"
+                  f"{' ' + ' '.join(ph['args']) if ph.get('args') else ''}")
+        print(f"pool_capture: arguments OK; program sha256 "
+              f"{hashlib.sha256(args.program.encode()).hexdigest()}")
+        return 0
     return run(args) if args.cmd == "run" else summary(args)
 
 

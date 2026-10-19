@@ -104,3 +104,14 @@ def test_arm_surface_read_uses_the_depth_bus_both_forms(sandbox, tmp_path):
                          .read_text())
         assert ref.get("bus") == 3, ref  # the requested bus, recorded even when the read fails
         assert run("disarm").returncode == 0
+
+
+def test_arm_refuses_a_bad_program_before_installing_anything(sandbox):
+    """Pool 2: arm checks the run's own arguments (pool_capture run --check-only), so a bad
+    --program fails at the bench, not at the next boot in the pool."""
+    home, run = sandbox
+    r = run("arm", "--program", "video:6x30[--n6-framesize HD")
+    assert r.returncode != 0 and "refused" in (r.stdout + r.stderr)
+    assert not (home / ".pool_armed").exists() and not (home / ".no_dive_autostart").exists()
+    assert "POOL_MODE" not in ((home / ".fake_crontab").read_text()
+                               if (home / ".fake_crontab").exists() else "")

@@ -21,6 +21,12 @@ Control response (board -> host)::
     {"version":1,"command_id":"<id>","status":"completed","output":{...}}\\n
     {"version":1,"command_id":"<id>","status":"failed","error":{"code":..,"message":..}}\\n
 
+Synchronized capture (``"trigger": true`` in ``capture_image`` / ``capture_raw`` settings): the
+board warms up, then sends one non-terminal line and keeps its autos running until the host
+sends any byte (the "fire"); it then snapshots and answers as usual::
+
+    {"version":1,"command_id":"<id>","status":"armed","armed":{"ticks_ms":N}}\\n
+
 File transfer (board -> host), framed per §10 — never mix JSON and raw binary
 without a length::
 
@@ -140,8 +146,14 @@ def sending_response(command_id, filename, size_bytes, sha256, version=PROTOCOL_
     }
 
 
+def armed_response(command_id, ticks_ms, version=PROTOCOL_VERSION):
+    """Non-terminal line: warmed up, waiting for the host's fire byte (synchronized capture)."""
+    return {"version": version, "command_id": command_id, "status": "armed",
+            "armed": {"ticks_ms": ticks_ms}}
+
+
 def frame_response(command_id, seq, size_bytes, sharpness, width, height,
-                   version=PROTOCOL_VERSION):
+                   version=PROTOCOL_VERSION, ticks_ms=None, extra=None):
     """Header line that precedes one JPEG frame in a focus stream.
 
     ``sharpness`` is a relative focus proxy (JPEG byte count at fixed quality): it rises
@@ -149,7 +161,7 @@ def frame_response(command_id, seq, size_bytes, sharpness, width, height,
     corrupt focus frame is cosmetic, and framing (exact ``size_bytes``) keeps the stream
     in sync.
     """
-    return {
+    msg = {
         "version": version,
         "command_id": command_id,
         "status": "frame",
@@ -158,6 +170,11 @@ def frame_response(command_id, seq, size_bytes, sharpness, width, height,
             "width": width, "height": height,
         },
     }
+    if ticks_ms is not None:  # board time the frame was taken (synchronized video, 2026-10-14)
+        msg["frame"]["ticks_ms"] = ticks_ms
+    if extra:  # optional per-frame diagnostics, e.g. stream timing (pool 2 B0, 2026-10-17)
+        msg["frame"].update(extra)
+    return msg
 
 
 # -- validation -------------------------------------------------------------

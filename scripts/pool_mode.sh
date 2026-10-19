@@ -62,7 +62,10 @@ newest_run() { ls -1d "$POOL"/pool[0-9]* 2>/dev/null | sort | tail -1; }
 cmd_arm() {
   local args=("$@")
   [ -x "$PY" ] || die "python not found: $PY (set POOL_PYTHON)"
-  "$PY" "$ROOT/scripts/pool_capture.py" run --help >/dev/null || die "pool_capture.py does not load"
+  # Check the run's own arguments now (a bad --program would otherwise surface at the next boot,
+  # in the pool); --check-only touches no hardware.
+  "$PY" "$ROOT/scripts/pool_capture.py" run --check-only ${args[@]+"${args[@]}"} \
+    || die "pool_capture.py refused these arguments (see above)"
   local bk="$HOME/pool_backup/$(ts)"; mkdir -p "$bk"
   if crontab -l >"$bk/crontab_before.txt" 2>/dev/null; then :; else : >"$bk/crontab_before.txt"; fi
   # Flag pre-arm state, recorded so disarm restores exactly it (QE #97): "absent" -> pool mode
@@ -136,8 +139,9 @@ cmd_supervise() {  # runs detached; restarts an abnormal exit
       3|4) say "loop refused to start (rc=$rc), not restarting"; break ;;
     esac
     # Abnormal exit mid LED pattern: back to the firmware default, but ONLY if this run drives
-    # the LED (--led-codes); otherwise pool mode never touches the LED (Nick, 2026-10-13).
-    case " $* " in *" --led-codes "*) lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true ;; esac
+    # the LED (--led-codes, or --self-check's verdict); otherwise pool mode never touches the
+    # LED (Nick, 2026-10-13).
+    case " $* " in *" --led-codes "*|*" --self-check "*) lifepo4wered-cli set LED_STATE 1 >/dev/null 2>&1 || true ;; esac
     [ -e "$NO_RESTART" ] && { say "stop requested, not restarting (rc=$rc)"; break; }
     restarts=$((restarts + 1))
     [ "$restarts" -gt "$MAX_RESTARTS" ] && { say "FAIL: $MAX_RESTARTS restarts used, giving up"; break; }
