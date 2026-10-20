@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60; rev 19.6 = W1 keeps OWLv2 + blind fallback, RF-DETR report-only)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -650,3 +650,16 @@ ae3_hd FAILS 3.17 fps so the AE3 stays 640×400 4:2:0, md19_buf4 PASS).
   `video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]`
 
   It replaces rev 19's a605ebf1a8be string. The late-start behaviour goes on a post-Wed card for pool_capture (not fixed now).
+
+## Amendment rev 19.6 (PE 006, Tue 10/20 2:11 PM PT): W1 detector after the in-air rehearsal. Binding, before any Wed data.
+- Rehearsal (pool-2 successor 4, nereus002, Nick's mounted board, in air, Tue 1:56–2:01 PM;
+  ~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/out/detect/detections.json, TEST_CARD.md there): the pinned OWLv2
+  (rev 17, threshold 0.3) tops out at 0.115 on the printed urchins, so W1 `score` takes rev 13's blind-viewer fallback on every
+  camera; at 0.05 the N6 hits u80a at ~0.9 m (IoU 0.56–0.64), so the layout is right.
+- **(a) No change to W1's decision:** the OWLv2 pin and threshold 0.3 stay, and W1 is judged by the rev 13 blind-viewer fallback
+  wherever OWLv2 doesn't reach 0.3. No bar moves.
+- **(b) Report-only, added:** Nick's RF-DETR, checkpoint ~/nereus_ml/runs/rfdetr_gate/checkpoint_best_total.pth (sha256
+  ae9aa853d9d7…), run through rig main's `edge_ml/urchin/rfdetr_prelabel.py` (rig #128 code; 560-px tiles, TILE_MAX = 560) on the
+  same W1 frames. Per camera and range bin it reports: max score, and hits (IoU ≥ 0.5 vs the layout box) at 0.3 and at 0.05,
+  next to OWLv2's same numbers. It changes no W1 verdict. Making it the W1 detector would be a change to a pinned method after
+  rehearsal data, so that is Nick's call (not asked here).

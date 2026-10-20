@@ -1,7 +1,7 @@
 # nereus002 Wed dive card: pool test 2 (Wed 2026-10-21)
 
-**DRAFT** (part C of `SPEC_pool2_prep` rev 19.5, sha256 `85e377466f0f…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
-19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60; committed byte-identical on this PR
+**DRAFT** (part C of `SPEC_pool2_prep` rev 19.6, sha256 `065cd74dd891…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
+19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60, 19.6 = RF-DETR report-only after the rehearsal; committed byte-identical on this PR
 as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
 before Wed. Open items are marked **OPEN**, with who closes them.
 
@@ -96,6 +96,13 @@ Before the dive, **OPEN** (Nick, card blk_board_outline):
 - **Detector (spec rev 17):** OWLv2 `google/owlv2-base-patch16-ensemble` at revision
   `cfd3195ba4ea9592eec887ded089f4c08eff231d`, prompt "purple sea urchin", score threshold **0.3**; 0.05 and 0.5 reported
   beside it.
+- **In-air rehearsal (Tue 10/20 1:56–2:01 PM, Nick's mounted board, nereus002;
+  `~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/`):** OWLv2 tops out at 0.115 on the printed urchins, so
+  W1 takes rev 13's **blind-viewer fallback** (spec rev 19.6 a; no bar moves). **Report-only (rev 19.6 b):** Nick's
+  RF-DETR (`~/nereus_ml/runs/rfdetr_gate/checkpoint_best_total.pth`, sha256 `ae9aa853d9d7…`, via rig main
+  `edge_ml/urchin/rfdetr_prelabel.py`, 560-px tiles) runs on the same W1 frames; per camera and bin: max score and IoU ≥ 0.5
+  hits at 0.3 and 0.05, next to OWLv2's. In the rehearsal it scored 0.85–0.91 on the printed 80 mm urchin where OWLv2 scored
+  ≤ 0.12. **OPEN:** its scoring code (rig PR, QE) before any Wed result.
 - **Lens values (bm #184 pool049 fits, intrinsics_full; NOT VALIDATED as a lens model; rev 13 + rev 16)**, from
   `edge_ml/pool2/pose.py` @ 920e58f:
 
