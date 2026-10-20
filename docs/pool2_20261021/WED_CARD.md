@@ -179,8 +179,8 @@ SHA256SUMS verified; `pool_mode.sh disarm` only after that).
 ## 10. Approval envelope: rig section (must do 15; the Lead drafts c_envelope_1021)
 
 - **Units:** nereus002 only (no field units, no Spotters).
-- **Verbs:** `gate_cycle.py disarm`; `pool_mode.sh arm` (the line in §8) / `status`; switch ON / OFF; `host_tools.pool_pull`.
-  Recording only; no new verbs (spec rev 12).
+- **Verbs:** `gate_cycle.py disarm`; `pool_mode.sh arm` (the line in §8) / `status`; switch ON / OFF; `host_tools.pool_pull`; `pool_mode.sh disarm` only after the full pull verifies
+  (envelope rev 2). Recording only; no new verbs (spec rev 12).
 - **Scripts:** `scripts/pool_mode.sh`, `scripts/pool_capture.py` (program above, sha256 `87ee096f158a…`),
   `scripts/sync_video.py`, `host_tools/pool_pull.py`, all at rig main 920e58f.
 - **Stop rules:** §7.
