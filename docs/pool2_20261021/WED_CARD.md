@@ -153,9 +153,12 @@ ssh pi@nereus002 'cd ~/nereus-rig-poolcam && ~/nereus-camera-test-rig/.venv/bin/
 The gate and the pool loop must never both be armed.
 
 ```bash
-ssh pi@nereus002 "bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program 'video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]' --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --hours 6 --self-check"
+ssh pi@nereus002 "bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program 'video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]' --lens-position 0.8 --ups-recover-after 0 --min-vbat-mv 3100 --start-vbat-mv 3150 --hours 6 --self-check"
 ```
-This line ran the PE condition 1 bench run (pool053's manifest `program_sha256` = `87ee096f158a…`). At that arm the Bar30
+This line ran the PE condition 1 bench run (pool053's manifest `program_sha256` = `87ee096f158a…`), without
+`--start-vbat-mv 3150`. That flag was added after it, as in the envelope rev 2 (rig owner, team PR #49): the 3250 mV
+default refused restarts on battery on 10/16, and Friday's run used 3150 (pool049 run_manifest `start_vbat_mv`). It
+changes only the battery start guard, not the program. At that arm the Bar30
 depth sensor did not answer on bus 1 (Errno 121; fail-soft, the loop then uses its run start). Add `--depth-bus N` if the Bar30 has moved to its own I²C bus (as on Friday's card).
 
 ```bash
@@ -168,7 +171,10 @@ Expect `armed: YES (… --program …)`, `crontab: 1 pool line(s)`, `dive flag: 
 
 As on Friday's card (`docs/FRIDAY_DIVE_CARD_nereus002.md` "At the pool"): switch ON and start the dive watch; read the LED
 for ~1 min; seal and dive; follow §3; switch OFF to stop; **pull everything before powering the rig for anything else**
-(`python -m host_tools.pool_pull --host pi@10.42.0.1 --no-dng`, then again without `--no-dng`).
+(as in the envelope rev 2: an optional fast pass `python -m host_tools.pool_pull --host pi@<rig's pool-Wi-Fi IP>
+--no-dng --dest ~/NereusData/nereus-camera-test-rig/2026-10-21_pool2` only if the pool Wi-Fi is good, never via the rig's
+own AP 10.42.0.1, which cuts the Mac's session; then the full pull on the home LAN, `--host pi@192.168.1.35`, same `--dest`,
+SHA256SUMS verified; `pool_mode.sh disarm` only after that).
 
 ## 10. Approval envelope: rig section (must do 15; the Lead drafts c_envelope_1021)
 
