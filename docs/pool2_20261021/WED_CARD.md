@@ -36,7 +36,8 @@ ran on it). Boards: firmware 1.28.0 (OpenMV v5.0.1), board scripts 7/7 hashes as
   yet cleared (deleting it is Nick's to do; SD free 30.5 GB).
 - **PE condition 1, bench run of the exact program: PASS** (Mon 10/19 2:34–2:56 PM, run `pool053_20261019T213448Z`,
   920e58f, armed with §8's line, program sha256 `87ee096f158a…`): all 11 clips at the times in §3; every clip 0 CMA alloc
-  errors, 0 kernel failure lines, no reset, 0 frames lost; boards at 4:2:0 ≥ 10.0 fps; 4:4:4 phases N6 7.03 fps (≥ 5) and
+  errors, 0 kernel failure lines, no reset, 0 board frames lost (the IMX708's lost count is only its shortfall from
+  30 fps); boards at 4:2:0 ≥ 10.0 fps; 4:4:4 phases N6 7.03 fps (≥ 5) and
   AE3 9.52 (≥ 9.27, rev 19.3–19.4); IMX708 26.4–27.8 fps, max gap 66.7 ms. IMX708 start ≤ 34 ms (report-only): 10 / 11
   (w_check 64.7 ms). The first run (pool052, rev 19 program) dropped W5, hence rev 19.5.
   `~/NereusData/nereus-camera-test-rig/2026-10-19_wed_program_bench/RESULTS.md`.
@@ -48,7 +49,7 @@ video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_
 ```
 
 sha256 of the string (no trailing newline): `87ee096f158ad85d99e851fc56216fe3190174afd5eb783291cd52af8ec34966`.
-**Clip times are the measured ones** (bench run pool052, Mon 10/19; each clip starts within ~1 s of its minute). A video
+**Clip times are the measured ones** (bench run pool053 with this program, Mon 10/19; each clip starts within ~1 s of its minute). A video
 phase's first clip lands one period after the phase starts, never at its start (`pool_capture.py:860–866`; post-Wed card
 c_pool_grid_late_start). That is why W5 is `2x60`: it records one 60 s clip, at T+20. Times count from switch-on; on
 Friday the first set began at 44 s uptime, so the control clip still lands at T+1.
