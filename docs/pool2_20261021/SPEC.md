@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 13, tier (a); rev 2–13 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60; rev 19.6 = W1 keeps OWLv2 + blind fallback, RF-DETR report-only; rev 19.7 = QE 009's 19.5/19.6 nits, text only; rev 19.8 = W1 not judged on Wed, no ruler values; rev 19.8.1 = F13 undetected on Wed, text only)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -513,3 +513,197 @@ check-pass setting; R2 W1 chain starts at 1.0 m) and nits N1–N5. No bar is loo
     the N6-vs-AE3 clips, and writes the scoring code (QE before results).
   - The PjM adds the program string's phases to the envelope's rig section. No new verbs; no manual commands.
   - Out of scope: detector accuracy on real urchins (E6); lens correction (d58); per-m² counts (d33).
+
+## Amendment rev 14 (PE 004, Sun 10/18 8:51 PM PT), rewritten in place as rev 15 (8:55 PM PT; QE 008's rev 14 FAIL R1–R3): CMA headroom before Wed (must do 19, F19). Binding, before any Wed data.
+- **Why:** B0 on nereus002, Sun 8:40–8:50 PM PT (build a9ac2af, lit bench), clip01 host_stats.csv (read by QE 008): CmaFree
+  31 → 3 MB in one second at camera start (mem_avail 167 → 138 MB), i.e. real buffer allocation, then drift to 0–2 MB with
+  mem_avail flat, i.e. page-cache borrowing (line 249). In-clip mem_avail 129–130 MB. No crash, no throttling. CmaFree alone is
+  therefore not headroom; the risk to measure is drivers running out of CMA (the 10/13 hard-reset pattern).
+- **Must do 19 (before the Tue 3 PM card; final build rig #125 + #126; the exact Wed program, N6 and AE3 at their Wed modes):**
+  three 30 s clips per setting, in order (a) IMX708 `--buffer-count 4` (tonight's), (b) `--buffer-count 2`. Per clip, record:
+  - driver-held CMA peak: `/sys/kernel/debug/cma/*/used` vs `count`, sampled ≥ 1 Hz (if debugfs isn't readable: "unknown",
+    say so on the card, and judge on the next two bars only);
+  - CMA / dma-buf allocation errors in `dmesg` for the clip window;
+  - lost frames, the rev 9 fps / max_gap per camera, any host reset (uptime), and mem_avail (report-only, rev 4 flag 150 MB).
+  - **The CMA bar for a setting, all 3 clips:** 0 CMA/dma-buf allocation errors AND driver-held CMA peak ≤ 90 % of the pool.
+    (unknown: the driver-held CMA at the 10/13 resets; the rig session looks for it in that run's logs. If found, the bar
+    becomes 10 % below that reading, written on the card before must do 19 runs.)
+  - **The capture bar, all 3 clips:** 0 lost frames, rev 9 fps / max_gap holds, no host reset.
+- **What happens (branch by the bar that failed):**
+  - Both bars pass at (a) or (b) → the Wed program uses the first that passes.
+  - Only the CMA bar fails at both → raise the CMA pool in the boot config (backup, restore command and the exact line on the
+    card), reboot, re-run (a) then (b). It lands by the Tue 6 PM rig freeze and is announced on the board (§10).
+  - The capture bar fails, or the CMA bar still fails after the raise → STOP: the data goes to the PE + Nick on the card. Any
+    change to E1 (N6 at HD, his ask) is Nick's call (§13).
+- **F19 (new row): CMA runs out during a Wed clip** → a hard reset or a lost clip. Detected: dmesg CMA/dma-buf errors and
+  driver-held CMA per clip; a reset shows as an uptime reset in the host log. Then: that pass is "lost", the next pass runs, and
+  the 30-min box (F14) holds.
+
+## Amendment rev 16 (PE 005, Sun 10/18 9:30 PM PT): tag ranges from undistorted tag corners. Binding, before any Wed data.
+- **Why:** pool-2 successor 3's dry run of the W scoring code on Friday's pool049 clips 099–103
+  (`~/NereusData/nereus-camera-test-rig/2026-10-18_pool2_wscore_dryrun/`, F10_DRYRUN.txt, MANIFEST.md): with raw corners, F10
+  flags 85 / 15 / 62 / 52 / 43 % of matched instants (≤ 50 ms), so 4 of 5 clips are past the 25 % "not measured" line; the N6
+  reads 5–11 % farther than the AE3 (medians). With the corners undistorted by bm #184's own dist_coeffs: N6/AE3 1.054 → 0.982
+  (clip100, n 278) and 1.110 → 0.985 (clip102, n 144); IMX708/AE3 0.996 → 0.997 (clip102, n 227). So the disagreement is the
+  N6's barrel distortion (k1 −0.42) on off-centre tags, not a wrong range, and F10 as written would void W1 for it. Friday's
+  board was not held as Wed's: this is evidence about the method, not Wed data.
+- **Change to "Range and speed":** before the pose, every decoded tag's corners are undistorted (`cv2.undistortPoints` or
+  equivalent) with the camera matrix and dist_coeffs of the same bm #184 fit whose fx/fy the Wed card cites (same file and
+  sha, written on the card before Tue noon). K is mapped to the Wed resolution by the existing scale / window rule; the
+  coefficients are unchanged (normalised coordinates). Range, speed, W2, F10 and the board pose use these corners.
+- **The image is never undistorted.** The detector, MTF50, colour and every pixel-size test (the 30 px gate) use the raw frame.
+  Sample boxes placed from the pose are projected back into raw-image pixels with the same K and coefficients
+  (`cv2.projectPoints` with dist_coeffs), and their px are measured there.
+- **Guard:** a camera whose Wed mode can't be mapped to the fit's K (a windowed mode with an unknown offset) keeps raw corners;
+  the card says so, and F10 judges it as written.
+- **Unchanged:** F10's 10 % and 25 % lines and every W1–W5 bar. F10 stays the check on the lens model, which is unvalidated in
+  the bottom ~40 % of each frame (c_charuco: B3/B5c FAIL): a bad extrapolation there shows as cross-camera disagreement and is
+  flagged.
+- **Report-only:** RESULTS gives each pass's F10 share and per-pair median range ratios both raw and undistorted. Decisions use
+  the undistorted ones.
+- **Tests (rig PR, before any W result):** (1) a synthetic tag projected with k1 = −0.42 at 1.0 m, off-centre, gives its true
+  range within 1 % after undistortion and is ≥ 5 % off without it; (2) a sample box projected back lands within 0.5 px of its
+  raw-image position; (3) the guard path keeps raw corners and labels the camera.
+
+## Amendment rev 17 (PE 005, Sun 10/18 9:43 PM PT): the W1 detector's checkpoint and threshold as values. Binding, before any Wed data.
+- **Gap (pool-2 successor 3):** N1 and the W1 detector line say "checkpoint and score threshold … from rig #123's merged pilot
+  config", but #123 (merged 4d6f7d9) has no single threshold: `edge_ml/urchin/pilot.py:51` `CAND_SCORES = (0.05, 0.3)` is a
+  pre-label floor and a "strong" line. E6's frozen threshold (F1-max on validation) won't exist before Tue noon.
+- **Pinned now:** checkpoint `google/owlv2-base-patch16-ensemble` at revision `cfd3195ba4ea9592eec887ded089f4c08eff231d` (the
+  only cached snapshot on this Mac, checked 9:43 PM; the scorer refuses any other revision); score threshold **0.3** =
+  `CAND_SCORES[1]` @ 4d6f7d9. Both go on the Wed card as values (N1). Why 0.3, not 0.05: at 0.05 OWLv2 "fires on nearly every
+  still" (pilot RESULTS @ e127321, line 69), so an IoU ≥ 0.5 hit on the reference box would say little. The same value for all
+  three cameras; W1 ranks N6 vs AE3, so the comparison doesn't hinge on the exact cut.
+- **Report-only:** RESULTS also gives each camera's chain at 0.05 and 0.5, next to the 0.3 result. Decisions use 0.3.
+- Unchanged: the 4-of-5 rule, IoU ≥ 0.5, the 30 px gate, the blind-viewer fallback, every bar.
+
+## Amendment rev 18 (PE 005, Sun 10/18 11:03 PM PT): readings 10–16 from rig #133 pinned. Binding, before any Wed data.
+Source: pool-2 successor 4's fix comment on rig #133 @ 305b81c (https://github.com/nickraymond/nereus-camera-test-rig/pull/133#issuecomment-6260772610),
+items 10–16, raised by QE 008 (N4, N6, reading 5, R6). Readings 1–9 in the PR body stay with QE.
+- **10, px across (30 px gate):** the **shortest** projected diameter of the sample's outline in raw pixels (strict; on a
+  tilted board the detector sees the foreshortened width). The longest is reported beside it. Changed from the PR's longest.
+- **11, frame-pick rounding:** half up, floor(x + 0.5).
+- **12, tie-break MTF50 median:** over the bin's W1 frames that have an MTF50 value; if fewer than 3 of the 5 have one, the
+  tie-break is "undecided (MTF50)".
+- **13, tag-limited ranges (F16):** a tag-limited range is a lower bound. N6 vs AE3: a tag-limited camera wins only if its
+  lower bound is longer than the other's range; otherwise the result is "undecided (tag-limited)", and a tie is never broken
+  by MTF50 when either side is tag-limited.
+- **14, F10 on 2-camera instants:** judged when the third camera has no ranged frame within 50 ms (> 10 % between the two
+  flags it). 1-camera instants are not judged; their count is reported, and they don't enter the 25 % denominator.
+- **15, IMX708 clip with no ScalerCrop:** full-sensor scale is assumed, and that clip's IMX708 ranges are flagged in RESULTS.
+- **16, guard principal point:** the frame centre (offset unknown), stated in the lens table in RESULTS.
+- **Files:** the card-values file and the box files live in `docs/pool2_20261021/` (`results/` is git-ignored, .gitignore:20),
+  as `.json` / `.md` / `.csv` only (TEAM_RULES §11).
+
+## Amendment rev 19 (PE 005, Mon 10/19 9:46 AM PT; sent by PE 006; rev 19.1 PE 006 9:58 AM = QE 009 nits N1–N3, text only): the Wed program pinned. Binding, before any Wed data.
+Source: pool-2 successor 4's draft (parses with `pool_capture.parse_program` @ 920e58f, sha256 a605ebf1a8be…), after the
+Mon 9:06–9:29 AM ladder + must do 19 run (`~/NereusData/nereus-camera-test-rig/2026-10-19_pool2_ladder/RESULTS.md`: n6_hd HOLDS 3/3,
+ae3_hd FAILS 3.17 fps so the AE3 stays 640×400 4:2:0, md19_buf4 PASS).
+- **Program (pinned; one line, copy it whole: sha256 of the string without a trailing newline = a605ebf1a8be…):**
+
+  `video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:1x60[--n6-framesize HD --ae3-subsampling 420]`
+
+  ~18 min from switch-on, IMX708 at 4 buffers (md19_buf4). The Wed card carries the string and its sha256 byte for byte.
+- **1, must do 13's n for the N6-vs-AE3 clips: n = 6 × 30 s** at both cameras' part-B settings, scored per clip (median and
+  range across the 6, never one clip).
+- **2, long clips:** one 120 s clip per swim pass is pinned. Must do 19 tested 30 s clips only, so the one bench run of the exact
+  program on the final build (before the Tue 6 PM rig freeze) also judges every clip, the 120 s and 60 s ones included, on must
+  do 19's two bars (CMA: 0 alloc errors; capture: the rev 9 fps / max_gap bars, no reset). Any long clip failing either bar →
+  that phase becomes 4 × 30 s (60 s → 2 × 30 s), and the bench run repeats. No separate md19 label. If that fallback fires, the new string and its sha256 are re-pinned (rev 19.x, QE re-check) before the Wed card is final.
+- **3, W5:** one 60 s clip holding both crossings, slow then fast; the crossings are separated in scoring by the measured speed.
+- **4, must do 14 (close ChArUco re-poses) is OUT for Wed.** Nick on d58 (board comment, Sat 10/17 3:39 PM, verbatim): "I can rerun
+  the test, but first I need a better mechanical mount and a way to get data from the rig to the surface to check the alignment.
+  So this is no an option for Wednesday. We should add to the backlock and check back in Nov" (c_calib_redive_nov).
+- **5, card values:** part-B N6 HD 4:2:0, AE3 640×400 4:2:0, so W1 = pass 2 (rev 13 R3); guard cameras none (the session's reading
+  that HD and VGA both map to the fit's K; QE checks it in the code); `first_bin` waits on Nick's board outline (blk_board_outline).
+- **SD:** the estimate is now ≈ 1.36 GB (measured 64.8 MB per 30 s) (was ~0.6 GB in the cost line); the SD rules stand: ≥ 2 GB free at every reading, and before
+  the dive SD free ≥ 2 GB + 2 × 1.36 GB (≈ 4.72 GB).
+
+## Amendment rev 19.2 (PE 006, Mon 10/19 10:01 AM PT): d57's "most clips usable" for Wed's 6 `best` clips. Binding, before any Wed data.
+- Asked by pool-2 successor 4 (rig #135 WED_CARD.md §6). d57 (Nick's "Approved.", thread 8b58f7d2, Sat 3:26 PM) says the N6 runs
+  the setting "where most clips are usable" (each ≥ 95 % of frames, d52); rev 7 pinned "most" as a strict majority (≥ 2 of 3).
+  Same rule on Wed: the N6's `best` phase is usable when **≥ 4 of its 6 clips** are usable, scored per clip (rev 19 item 1).
+  The AE3 keeps its own bars (rev 7: d57 names the N6 only).
+
+## Amendment rev 19.3 (PE 006, Mon 10/19 2:18 PM PT): which fps bar rev 19 item 2 applies to the full-colour (4:4:4) phases. No bar changes.
+- Asked by pool-2 successor 4 before scoring the exact-program bench run (pool052, build 920e58f, program a605ebf1a8be). Rev 19
+  item 2 says "the rev 9 fps / max_gap bars" for every clip. For `w_pass1` and `w_check` (the W4 full-colour passes) the spec
+  already set other fps bars before any of this data: W4 passes "may run below 9.5 fps: allowed here only, with fps logged"
+  (W4 line above); the N6 4:4:4 bar is **≥ 5 fps** over 30 s (F15); the AE3's fallback is **≤ 0.2 fps below its own 640×400
+  rate** (the part-B fps bar), here its B0 640×400 4:4:4 rate, quoted from the B0 results file with its path. Those bars apply
+  to those two phases. Item 2's other bars stay for every clip: 0 CMA alloc errors, AE3 0 frames lost, N6 usable (d52/d57),
+  IMX708 ≥ 26 fps and max_gap ≤ 100 ms, no reset. Every other phase keeps ≥ 9.5 fps.
+- This picks between bars already written before the run; it loosens no number. If QE reads it as a loosening, it goes to Nick.
+- **Rev 19.4 (PE 006, Mon 10/19 2:19 PM PT; QE 009's 19.3 nit, before pool052 is scored): the AE3 4:4:4 bar is ≥ 9.27 fps**, measured
+  as `fps_clip`. Source: the B0 4:4:4 rate 9.47 fps (`fps_clip`, rows 4 and 16, subsampling_measured 444, of
+  ~/NereusData/nereus-camera-test-rig/2026-10-17_pool2_prep/bench/B0_clip_table.csv; also rig #135 WED_CARD.md:25) − 0.2.
+
+## Amendment rev 19.5 (PE 006, Mon 10/19 2:29 PM PT): program re-pinned after the bench run (pool052). Binding, before any Wed data.
+- Pool-2 successor 4 found on pool052 (920e58f, program a605ebf1a8be) that every video phase starts one period late:
+  scripts/pool_capture.py:861–864 @ 920e58f puts the first clip at k = ceil(elapsed / period), so a set that begins even 1 s
+  after the phase start lands on k = 1 (PE 006 read the code). W5's only slot then fell on the program end and was lost.
+- **Fix, program only (no code change, so no gate re-run; rev 3 rule 4):** W5 becomes `w5:2x60`, whose k = 2 slot falls inside
+  its own phase: one 60 s clip. Every other phase is unchanged. The Wed card's table uses the measured clip start times. The
+  exact program is re-run once on the bench and judged on rev 19 item 2 / 19.3 / 19.4's bars before the card is final.
+- **Program (pinned; one line; sha256 of the string without a trailing newline = 87ee096f158a…):**
+
+  `video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_pass1:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w_pass2:1x120[--n6-framesize HD --ae3-subsampling 420],video@w_check:1x120[--n6-framesize HD --n6-subsampling 444 --ae3-subsampling 444],video@w5:2x60[--n6-framesize HD --ae3-subsampling 420]`
+
+  It replaces rev 19's a605ebf1a8be string. The late-start behaviour goes on a post-Wed card for pool_capture (not fixed now).
+
+## Amendment rev 19.6 (PE 006, Tue 10/20 2:11 PM PT): W1 detector after the in-air rehearsal. Binding, before any Wed data.
+- Rehearsal (pool-2 successor 4, nereus002, Nick's mounted board, in air, Tue 1:56–2:01 PM;
+  ~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/out/detect/detections.json, TEST_CARD.md there): the pinned OWLv2
+  (rev 17, threshold 0.3) tops out at 0.115 on the printed urchins, so W1 `score` takes rev 13's blind-viewer fallback on every
+  camera; at 0.05 the N6 hits u80a at ~0.9 m (IoU 0.56–0.64), so the layout is right.
+- **(a) No change to W1's decision:** the OWLv2 pin and threshold 0.3 stay, and W1 is judged by the rev 13 blind-viewer fallback
+  wherever OWLv2 doesn't reach 0.3. No bar moves.
+- **(b) Report-only, added:** Nick's RF-DETR, checkpoint ~/nereus_ml/runs/rfdetr_gate/checkpoint_best_total.pth (sha256
+  ae9aa853d9d7…), run through rig main's `edge_ml/urchin/rfdetr_prelabel.py` (rig #128 code; 560-px tiles, TILE_MAX = 560) on the
+  same W1 frames. Per camera and range bin it reports: max score, and hits (IoU ≥ 0.5 vs the layout box) at 0.3 and at 0.05,
+  next to OWLv2's same numbers. It changes no W1 verdict. Making it the W1 detector would be a change to a pinned method after
+  rehearsal data, so that is Nick's call (not asked here).
+
+## Amendment rev 19.7 (PE 007, Tue 10/20 6:05 PM PT): QE 009's rev 19.5 + 19.6 nits. Text only; no bar, program or method changes.
+Source: ~/NereusData/ops/qe_reviews/QE009_SPEC_pool2_prep_rev19_908ffbe4125b.md (gates 19.5 and 19.6).
+- **19.5 N1 (why no gate re-run), replaces rev 19.5's "(no code change, so no gate re-run; rev 3 rule 4)":** rev 3 order rule 4
+  still holds (any change after the gate re-runs it). The gate isn't re-run because gate009 records one 30 s clip per cold boot
+  with Wed's board settings and never runs the program string, so W5's clip count is outside what the gate tests. The
+  pinned string (87ee096f158a…) is unchanged by this rev.
+- **19.5 N2 (W5 clips), replaces "one 60 s clip":** W5 records **one or two** 60 s clips, at the measured starts. The k = 2
+  grid point is 1200 s (the w5 phase's end); a clip records there because the phase is taken at the set's start. If the
+  w_check set ends before 1080 s, k = 1 and W5 records at ~18:00 and ~20:00. The Wed card's table uses the measured start
+  times either way.
+- **19.6 N1 (fallback trigger), replaces "wherever OWLv2 doesn't reach 0.3":** W1 uses rev 13's fallback exactly as written:
+  if the detector hits in < 4 of 5 frames in the chain's first bin (1.0 m unless the Wed card says otherwise) **on every
+  camera**, it is replaced by the blind yes/no on shuffled crops (≥ 4 of 5 yes per sample) **for all cameras**, and
+  RESULTS says so. No camera is judged by the detector while another is judged blind.
+- **19.6 N2 (who names the blind viewer):** rev 13's "a fresh session the PjM names" is now **the Lead** (d59). The viewer
+  gets only the crops under neutral names, with no range, camera or frame order.
+- **19.6 N3 (source for the rehearsal line), replaces "at 0.05 the N6 hits u80a at ~0.9 m (IoU 0.56–0.64), so the layout is
+  right":** per ~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/RESULTS.md:18–20, u80a lines up (OWLv2 at 0.05:
+  IoU 0.56–0.64 on the N6), but **u80b's box is off** (IoU ~0.16 for both models), so the Wed layout needs Nick's ruler or a
+  straight-on photo (blk_board_outline). Supporting text only, not a bar; in-air rehearsal, n = 1, never compared with Wed.
+
+## Amendment rev 19.8 (PE 007, Tue 10/20 7:41 PM PT): W1 is not judged on Wed (no ruler values). Binding, before any Wed data.
+- **Nick's words** (board comment as "the user (owner)", thread 4d87cd3f on card blk_board_values_wed, whose ask was the ruler
+  values for board_layout_wed.yaml `measured: true`; Tue 10/20 7:38 PM, verbatim): "I am not going to do this, lets run with
+  what we have." So must do 16's print check, the measured sample positions and the measured tag edge won't exist on Wed.
+- **W1 gives no verdict on Wed.** R1's pass/fail, the N6-vs-AE3 W1 call and its MTF50 tie-break need the measured layout, so
+  they are **not judged**; RESULTS says "W1 not judged: layout not measured (Nick, thread 4d87cd3f)". No W1 pass is claimed
+  anywhere. No number is changed: this records that the bar can't be scored, it doesn't move it. Asked by pool-2 successor 5
+  (rig #135 @ ff77c72 WED_CARD §4).
+- **Still reported (report-only):** per camera and bin, px across each sample, detector hits (OWLv2 pin per rev 17/19.6, RF-DETR
+  per 19.6 (b)) or the blind viewer per 19.7, and the range chain. Layout: `board_layout_wed.yaml` with `measured: false` and a
+  `source:` per value; sample boxes fit by tag homography on the most face-on Wed frame, an overlay of all four boxes checked by
+  eye, a sample whose box misses dropped and listed; committed before `select` / `detect` (rev 13 order); `scan
+  --allow-template`, so RESULTS carries the TEMPLATE banner.
+- **Tag edge = the design value, 63 mm** (Nick's "~65 mm" estimate, handoff_4 line 88, is not a measurement). Range ∝ tag edge, so
+  if ~65 mm is right every range reads ~3 % short; RESULTS says so beside W1 and W2. `first_bin` uses the 600 × 400 mm outline.
+- **W5:** no slanted-edge square, so W5 reports tag-edge widths only (already report-only).
+- **F13 (print scale wrong) is undetected on Wed** (rev 19.8.1, QE 010's nit N1): must do 16.1's print check won't run, so the
+  samples' true 80 / 50 mm size is unverified and every report-only px-per-sample number carries an unknown print-scale error.
+  Ranges come from the tags, not the print, so they carry only the tag-edge note above. RESULTS says both.
+- **Unchanged:** every capture bar (rev 9, 19, 19.2–19.4), W2, W3, W4 and the stop rules.
+- **Afterwards:** turning these Wed numbers into a W1 verdict (e.g. scoring R1 on the homography layout) would be a method change
+  after data, so it is Nick's call; nobody proposes it unless he asks.
