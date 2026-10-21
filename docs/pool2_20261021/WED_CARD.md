@@ -85,12 +85,14 @@ going to do this, lets run with what we have.").** What we have: outline 600 × 
 pool-2 successor 4, handoff_4 line 88; design 63 mm); no ruler sample positions, no print check, no slanted-edge square.
 So must do 16's measured layout is not met, and **W1 is report-only on Wed**:
 - `edge_ml/pool2/board_layout_wed.yaml` with `measured: false` and its `source:` saying where each value came from;
-  `scan --allow-template`, so RESULTS.md carries the TEMPLATE banner and W1 has **no pass/fail and no N6-vs-AE3 W1 call**.
-  The ranges, px sizes and detector/blind hits per bin are still reported.
+  `scan --allow-template`, so RESULTS.md carries the TEMPLATE banner and says "W1 not judged: layout not measured (Nick,
+  thread 4d87cd3f)" (spec rev 19.8): **no pass/fail and no N6-vs-AE3 W1 call**. The ranges, px sizes and detector/blind hits
+  per bin are still reported.
 - Sample positions: fit by tag homography on the most face-on Wed frame (rev 13's "the rig session from a flat photo"), with
   an overlay image of all four boxes checked by eye; a sample whose box misses is dropped from W1 and listed. The layout is
   committed before `select` / `detect` (rev 13 order).
-- Tag edge: design 63 mm. If Nick's ~65 mm is right, every range reads ~3 % short (range ∝ tag edge); RESULTS says so.
+- Tag edge: design 63 mm (Nick's ~65 mm is an estimate, not a measurement). If ~65 mm is right, every range reads ~3 % short
+  (range ∝ tag edge); RESULTS says so beside W1 and W2.
 - `first_bin`: §5's 1.0 m fit check, run on the 600 × 400 mm outline.
 - W5: no slanted-edge square, so W5 reports tag-edge widths only.
 - Not affected: the per-clip capture bars (§6), W2, W3 (card patches located by its tags), W4 (Nick by eye).
@@ -199,7 +201,9 @@ python -m edge_ml.pool2.run select OUT --card $C --boxes $B      # then commit $
 python -m edge_ml.pool2.run detect OUT --card $C --boxes $B
 python -m edge_ml.pool2.run rfdetr OUT --card $C --boxes $B      # report only (rev 19.6 b)
 python -m edge_ml.pool2.run crops  OUT --boxes $B                # only if rev 13's fallback fires; the Lead names the viewer
-python -m edge_ml.pool2.run score  OUT --card $C --boxes $B [--blind answers.json]
+python -m edge_ml.pool2.run score  OUT --card $C --boxes $B [--blind answers.json] \
+  --not-judged "layout not measured (Nick, thread 4d87cd3f)" \
+  --range-note "tag edge = design 63 mm; if Nick's ~65 mm estimate is right, every range reads ~3 % short"
 ```
 
 ## 10. Approval envelope: rig section (must do 15; the Lead drafts c_envelope_1021)
