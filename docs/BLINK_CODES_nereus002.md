@@ -35,4 +35,4 @@ For engineers: `pool_capture.py run --self-check` (rig PR, 10/15, Nick's plan A)
 in `results/pool/<run>/pool.log` (`SELF-CHECK …`) and `run_manifest.json` (`self_check`).
 Every LED write is logged in `led_trace.csv` (mode `recording` = the clip pulse). No automatic power cycle.
 Recording pulse (Nick 10/20): firmware `LED_STATE 2` (pulsing), one write per clip start and one back to
-steady at its end; `pool_led.OK_BLINKS` = 3, `READY_SOLID_S` = 5 s. Demo: `pool_led.py demo SEQ`.
+steady at its end; `pool_led.OK_BLINKS` = 5, `READY_SOLID_S` = 5 s. Demo: `pool_led.py demo SEQ`.
