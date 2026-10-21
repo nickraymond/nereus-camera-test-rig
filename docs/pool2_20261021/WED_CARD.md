@@ -157,7 +157,8 @@ ssh pi@nereus002 "bash ~/nereus-rig-poolcam/scripts/pool_mode.sh arm --program '
 ```
 This line ran the PE condition 1 bench run (pool053's manifest `program_sha256` = `87ee096f158a…`), without
 `--start-vbat-mv 3150`. That flag was added after it, as in the envelope rev 2 (rig owner, team PR #49): the 3250 mV
-default refused restarts on battery on 10/16, and Friday's run used 3150 (pool049 run_manifest `start_vbat_mv`). It
+default refused restarts on battery on 10/16, and Friday's arm line used 3150 (rig owner's handoff
+`~/NereusData/ops/handoffs/2026-10-20_nereus002_rig_owner_handoff.md:29`; the pool049 run manifests don't record it). It
 changes only the battery start guard, not the program. At that arm the Bar30
 depth sensor did not answer on bus 1 (Errno 121; fail-soft, the loop then uses its run start). Add `--depth-bus N` if the Bar30 has moved to its own I²C bus (as on Friday's card).
 
@@ -180,7 +181,8 @@ SHA256SUMS verified; `pool_mode.sh disarm` only after that).
 
 - **Units:** nereus002 only (no field units, no Spotters).
 - **Verbs:** `gate_cycle.py disarm`; `pool_mode.sh arm` (the line in §8) / `status`; switch ON / OFF; `host_tools.pool_pull`; `pool_mode.sh disarm` only after the full pull verifies
-  (envelope rev 2). Recording only; no new verbs (spec rev 12).
+  (envelope rev 2). Recording only; no new verbs (spec rev 12): `pool_mode.sh disarm` is an existing verb
+  (`scripts/pool_mode.sh:215`), listed in envelope rev 2.
 - **Scripts:** `scripts/pool_mode.sh`, `scripts/pool_capture.py` (program above, sha256 `87ee096f158a…`),
   `scripts/sync_video.py`, `host_tools/pool_pull.py`, all at rig main 920e58f.
 - **Stop rules:** §7.
