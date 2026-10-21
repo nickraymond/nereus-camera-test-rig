@@ -80,20 +80,29 @@ Nick's AprilTag reference board: the v3 colour card with its corner tags (tag25h
 and taped: the four urchin samples (2 × 80 mm, 2 × 50 mm), 80 mm and 50 mm black-and-grey quartered disks, one
 slanted-edge square (black on mid-grey, ≥ 50 mm, rotated ~5°).
 
-Before the dive, **OPEN** (Nick, card blk_board_outline):
-- print check: the 10 cm bar and one 80 mm sample measured with a ruler, ±2 mm, else reprint; values here;
-- one tag's black-square edge in mm (sets the range): value here;
-- the mounted board's outline W × H mm and the samples' positions (ruler or a straight-on photo) →
-  `edge_ml/pool2/board_layout_wed.yaml` with `measured: true` (scoring refuses the template);
-- the print sheet's sha256 (debrief-doc PDF or a regenerated one) in the run MANIFEST.
+**No ruler values (Nick, board thread 4d87cd3f on card blk_board_values_wed, Tue 10/20 7:38 PM, verbatim: "I am not
+going to do this, lets run with what we have.").** What we have: outline 600 × 400 mm and a tag edge of "~65 mm" (Nick to
+pool-2 successor 4, handoff_4 line 88; design 63 mm); no ruler sample positions, no print check, no slanted-edge square.
+So must do 16's measured layout is not met, and **W1 is report-only on Wed**:
+- `edge_ml/pool2/board_layout_wed.yaml` with `measured: false` and its `source:` saying where each value came from;
+  `scan --allow-template`, so RESULTS.md carries the TEMPLATE banner and W1 has **no pass/fail and no N6-vs-AE3 W1 call**.
+  The ranges, px sizes and detector/blind hits per bin are still reported.
+- Sample positions: fit by tag homography on the most face-on Wed frame (rev 13's "the rig session from a flat photo"), with
+  an overlay image of all four boxes checked by eye; a sample whose box misses is dropped from W1 and listed. The layout is
+  committed before `select` / `detect` (rev 13 order).
+- Tag edge: design 63 mm. If Nick's ~65 mm is right, every range reads ~3 % short (range ∝ tag edge); RESULTS says so.
+- `first_bin`: §5's 1.0 m fit check, run on the 600 × 400 mm outline.
+- W5: no slanted-edge square, so W5 reports tag-edge widths only.
+- Not affected: the per-clip capture bars (§6), W2, W3 (card patches located by its tags), W4 (Nick by eye).
+- The print sheet's sha256 (debrief-doc PDF or a regenerated one) still goes in the run MANIFEST if known.
 
 ## 5. Values set before any Wed data
 
 - **Card values file:** [card_values_wed.json](card_values_wed.json), committed; every scoring stage checks it (rig #133).
   part-B chroma N6 4:2:0, AE3 4:2:0 → W1 uses pass 2 (rev 13 R3; rev 19 item 5); guard cameras none (HD and 640×400 both
   map to the fit's K); detector pinned (below). **`first_bin` OPEN:** 1.0 m for every camera unless the 1.0 m fit check
-  (Nick's outline + the N6→AE3 offset ≈ (−64, −69) mm at 1.08 m, `2026-10-18_pool2_wscore_dryrun/rev16/BASELINE_N6_AE3.txt`,
-  scaled by Nick's tag edge / 63) says a camera's whole board doesn't fit at 1.0 m.
+  (Nick's 600 × 400 mm outline + the N6→AE3 offset ≈ (−64, −69) mm at 1.08 m, `2026-10-18_pool2_wscore_dryrun/rev16/BASELINE_N6_AE3.txt`,
+  at the design tag edge, 63 mm; §4) says a camera's whole board doesn't fit at 1.0 m.
 - **Detector (spec rev 17):** OWLv2 `google/owlv2-base-patch16-ensemble` at revision
   `cfd3195ba4ea9592eec887ded089f4c08eff231d`, prompt "purple sea urchin", score threshold **0.3**; 0.05 and 0.5 reported
   beside it.
