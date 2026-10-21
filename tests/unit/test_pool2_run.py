@@ -558,3 +558,19 @@ def test_w5_one_clip_holds_both_crossings_split_by_speed(tmp_path):
     bands = {b["speed_ms"]: b["n"] for b in run.w5_summary(rows)}
     assert bands.get("0-0.1", 0) >= 9 and bands.get("0.6-inf", 0) >= 9
     assert "w5" in run.PHASES
+
+
+def test_w1_not_judged_keeps_the_rows_and_drops_the_verdict(repo, tmp_path):
+    """Spec rev 19.8: no measured layout on Wed -> W1 not judged; rows report-only; range note
+    beside W1 and W2."""
+    res0, out = _scored(tmp_path, hit_until_m=2.0, n6_px80_scale=0.7)
+    assert res0["n6_vs_ae3"] == "openmv_ae3"
+    why, note = "layout not measured (Nick, thread 4d87cd3f)", "tag edge = design 63 mm"
+    run.main(["score", str(out), "--card", str(repo / "card.json"), "--boxes",
+              str(tmp_path / "w1_boxes.json"), "--not-judged", why, "--range-note", note])
+    res = json.loads((out / "score" / "results.json").read_text())
+    assert "n6_vs_ae3" not in res and res["w1_not_judged"] == why
+    assert res["w1"] == res0["w1"]                     # the rows are still reported
+    md = (out / "score" / "RESULTS.md").read_text()
+    assert f"W1 not judged: {why}" in md and "N6 vs AE3" not in md
+    assert md.count(note) == 2 and "meaningless" not in md

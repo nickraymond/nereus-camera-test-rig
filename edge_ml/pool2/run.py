@@ -911,7 +911,9 @@ def cmd_score(a) -> int:
         res["w1_report"][card_values.tkey(t)] = {
             cam: {f"{s}mm": w1_score(out, cam, boxes["cameras"][cam], pt[cam], s, "hit")
                   for s in ("80", "50")} for cam in det_w1}
-    if "openmv_n6" in res["w1"] and "openmv_ae3" in res["w1"] \
+    res["w1_not_judged"] = a.not_judged   # rev 19.8: no W1 verdict, the rows stay report-only
+    res["range_note"] = a.range_note
+    if not a.not_judged and "openmv_n6" in res["w1"] and "openmv_ae3" in res["w1"] \
             and "80mm" in res["w1"]["openmv_n6"] and "80mm" in res["w1"]["openmv_ae3"]:
         res["n6_vs_ae3"] = wscore.n6_vs_ae3(res["w1"]["openmv_n6"]["80mm"],
                                             res["w1"]["openmv_ae3"]["80mm"])
@@ -958,9 +960,14 @@ def _fmt_range(x: dict) -> str:
 def results_md(res: dict) -> str:
     cv_ = res.get("card_values") or {}
     L = ["# Pool test 2 W1-W5 results", ""]
-    if res.get("layout_measured") is not True:
+    if res.get("w1_not_judged"):
+        L += [f"**W1 not judged: {res['w1_not_judged']}.** The W1 rows below are report-only "
+              "(spec rev 19.8)." + (" **TEMPLATE LAYOUT (not measured).**"
+                                    if res.get("layout_measured") is not True else ""), ""]
+    elif res.get("layout_measured") is not True:
         L += ["**TEMPLATE LAYOUT (not measured): the W1 numbers below are meaningless; a dry run "
               "only (QE 008 N3).**", ""]
+    note = [f"*{res['range_note']}*", ""] if res.get("range_note") else []
     L += [f"- code {res['code']['sha'][:12]}{' (dirty)' if res['code']['dirty'] else ''}; "
           f"box file sha256 {res['boxes_sha256'][:12]} (commit {str(res['boxes_commit'])[:12]}); "
           f"detections sha256 {str(res['detections_sha256'])[:12]}",
@@ -971,7 +978,8 @@ def results_md(res: dict) -> str:
           f"- detector: {res['detector']} (W1 decides at the threshold; 0.05 / 0.5 report-only)",
          "- W1 by: " + ("BLIND FALLBACK (detector < 4/5 in the first bin on every camera)"
                         if res["w1_fallback"] else "detector"),
-         "", "## W1: detectable range (80 mm; 50 mm reported)", "",
+         "", "## W1: detectable range (80 mm; 50 mm reported)"
+         + (" - not judged, report only" if res.get("w1_not_judged") else ""), "", *note,
          "| camera | pass | first bin | 80 mm range | end (reason) | 50 mm range | end (reason) |",
          "|---|---|---|---|---|---|---|"]
     for cam, r in res["w1"].items():
@@ -1011,7 +1019,7 @@ def results_md(res: dict) -> str:
             L.append(f"| {ph} | {label} | {g.get('instants')} ({g.get('two_camera_instants')}) | "
                      f"{g.get('single_camera_instants')} | {g.get('flagged')} | {g.get('share')} | "
                      f"{g.get('pass_unmeasured')} | {ratios} |")
-    L += ["", "## W2 camera Secchi + F12", "", "| camera | pass 1 (m) | check (m) | F12 |",
+    L += ["", "## W2 camera Secchi + F12", "", *note, "| camera | pass 1 (m) | check (m) | F12 |",
           "|---|---|---|---|"]
     for cam, r in res["w2"].items():
         L.append(f"| {cam} | {r['pass1_m']} | {r['check_m']} | {r['f12']} |")
@@ -1082,6 +1090,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--card", required=True)
     s.add_argument("--boxes", required=True)
     s.add_argument("--blind", default=None)
+    s.add_argument("--not-judged", default=None, metavar="REASON",
+                   help='rev 19.8: no W1 verdict; RESULTS says "W1 not judged: REASON"')
+    s.add_argument("--range-note", default=None,
+                   help="a note printed beside W1 and W2 (e.g. the tag edge used for range)")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     return {"scan": cmd_scan, "select": cmd_select, "detect": cmd_detect, "rfdetr": cmd_rfdetr,
