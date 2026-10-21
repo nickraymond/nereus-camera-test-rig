@@ -440,3 +440,158 @@ def test_results_flag_imx708_clips_without_scaler_crop():
                                                 "why": "no ScalerCrop recorded"}]}
     md = run.results_md(res)
     assert "FLAGGED: IMX708 ranges of pass1 video/clip004" in md
+
+
+# -- RF-DETR report only (spec rev 19.6 b) and W5 as one clip (rev 19 item 3) -------------------
+
+def _rfdetr_env(monkeypatch, tmp_path, dets_for, ck=None, min_score=0.05):
+    """Stub everything around `rfdetr` that needs real clips or Nick's venv: frames come from the
+    box file's picks (a 4 x 4 image each), the subprocess writes ``dets_for(still)`` per still."""
+    import numpy as np
+    from edge_ml.urchin import rfdetr_prelabel as rp
+    ck = ck or rp.CHECKPOINT_SHA256
+    monkeypatch.setattr(rp, "check_checkpoint", lambda path: ck)
+    monkeypatch.setattr(run, "committed_unchanged", lambda path: "c" * 40)
+    monkeypatch.setattr(run, "clip_dirs", lambda out: {"clip001": tmp_path})
+    monkeypatch.setattr(run.frames, "camera_frames",
+                        lambda cdir, cam: [{"index": i} for i in range(2000)])
+    monkeypatch.setattr(run.frames, "iter_images", lambda cdir, cam, want: (
+        (f, np.zeros((4, 4, 3), np.uint8)) for f in want))
+    calls = []
+
+    def fake_run(python, stills_txt, stills_dir, raw):
+        names = stills_txt.read_text().split()
+        calls.append(names)
+        assert all((stills_dir / n).is_file() for n in names)
+        raw.write_text(json.dumps({"model": "RF-DETR test", "checkpoint_sha256": ck,
+                                   "min_score": min_score,
+                                   "detections": {n: dets_for(n) for n in names}}))
+    monkeypatch.setattr(run, "run_rfdetr", fake_run)
+    return calls
+
+
+def _sample_dets(out: Path, score: float):
+    """One detection per still, on the first picked frame's u80a box, at ``score``."""
+    boxes = json.loads((out.parent / "w1_boxes.json").read_text())
+    box = next(p for e in boxes["cameras"].values() for ps in e["bins"].values() for p in ps or []
+               )["samples"]["u80a"]["box"]
+    return lambda _still: [{"box": box, "score": score}]
+
+
+def test_rfdetr_reports_next_to_owlv2_and_changes_no_w1_verdict(repo, tmp_path, monkeypatch):
+    res0, out = _scored(tmp_path, hit_until_m=2.0)
+    assert res0["rfdetr"] is None
+    assert all(r["rfdetr"] is None for b in res0["detector_report"].values() for r in b.values())
+    assert "**RF-DETR: not run.**" in (out / "score" / "RESULTS.md").read_text()
+    boxes, card = tmp_path / "w1_boxes.json", repo / "card.json"
+    calls = _rfdetr_env(monkeypatch, tmp_path, _sample_dets(out, 0.9))
+    run.main(["rfdetr", str(out), "--card", str(card), "--boxes", str(boxes)])
+    d = json.loads((out / "rfdetr" / "detections.json").read_text())
+    n_picks = sum(len(ps or []) for e in json.loads(boxes.read_text())["cameras"].values()
+                  for ps in e["bins"].values())
+    assert len(calls) == 1 and len(calls[0]) == len(d["frames"]) == n_picks
+    rep = (out / "rfdetr" / "report.md").read_text()   # readable before score's blind fallback
+    assert "| openmv_ae3 | 1.0 | rfdetr | 5 | 0.9 |" in rep
+    assert "| openmv_ae3 | 1.0 | owlv2 | 5 |" in rep
+    assert d["checkpoint_sha256"].startswith("ae9aa853d9d7")
+    assert d["detect_floor"] == 0.05
+    run.main(["score", str(out), "--card", str(card), "--boxes", str(boxes)])
+    res = json.loads((out / "score" / "results.json").read_text())
+    for k in ("w1", "w1_report", "w1_fallback", "n6_vs_ae3"):  # report only: verdicts unchanged
+        assert res[k] == res0[k]
+    row = res["detector_report"]["openmv_ae3"]["1.0"]
+    assert row["rfdetr"]["frames"] == 5 and row["rfdetr"]["max"] == 0.9
+    assert row["rfdetr"]["hits"]["80mm@0.3"][1] == 10   # 5 frames x 2 samples of 80 mm
+    assert row["owlv2"]["frames"] == 5 and row["owlv2"]["max"] is None  # the fake OWLv2 has no dets
+    md = (out / "score" / "RESULTS.md").read_text()
+    assert "RF-DETR checkpoint ae9aa853d9d7" in md
+    assert "| openmv_ae3 | 1.0 | rfdetr | 5 | 0.9 |" in md
+
+
+def test_detector_report_counts_hits_and_scores_on_samples():
+    p = {"clip": "c", "index": 0, "samples": {"u80a": {"box": [0, 0, 10, 10]},
+                                              "u80b": {"box": [50, 50, 60, 60]}}}
+    boxes = {"cameras": {"openmv_n6": {"bins": {"1.0": [p], "1.5": None}}}}
+    dets = [{"box": [0, 0, 10, 10], "score": 0.2}, {"box": [200, 200, 210, 210], "score": 0.7}]
+    rec = {"dets": dets, "hits": run.frame_hits(p["samples"], dets)}
+    r = run.detector_report(boxes, {"rfdetr": {"frames": {"openmv_n6/c/0": rec}}})
+    got = r["openmv_n6"]["1.0"]["rfdetr"]
+    assert got["max"] == 0.7 and got["max_on_sample"] == 0.2   # the 0.7 is off every sample
+    assert got["hits"]["80mm@0.05"] == [1, 2] and got["hits"]["80mm@0.3"] == [0, 2]
+    assert got["hits"]["50mm@0.3"] == [0, 0]
+    assert "1.5" not in r["openmv_n6"]
+
+
+def test_rfdetr_refuses_output_off_the_checkpoint_pin(repo, tmp_path, monkeypatch):
+    _, out = _scored(tmp_path, hit_until_m=2.0)
+    _rfdetr_env(monkeypatch, tmp_path, lambda s: [], min_score=0.3)
+    with pytest.raises(SystemExit, match="not the pin"):
+        run.main(["rfdetr", str(out), "--card", str(repo / "card.json"), "--boxes",
+                  str(tmp_path / "w1_boxes.json")])
+
+
+def test_score_refuses_rfdetr_detections_from_another_checkpoint(repo, tmp_path, monkeypatch):
+    _, out = _scored(tmp_path, hit_until_m=2.0)
+    _rfdetr_env(monkeypatch, tmp_path, lambda s: [], ck="a" * 64)
+    boxes = tmp_path / "w1_boxes.json"
+    run.main(["rfdetr", str(out), "--card", str(repo / "card.json"), "--boxes", str(boxes)])
+    with pytest.raises(SystemExit, match="another box file or checkpoint"):
+        run.main(["score", str(out), "--card", str(repo / "card.json"), "--boxes", str(boxes)])
+
+
+def test_rfdetr_refuses_an_uncommitted_box_file(repo, tmp_path):
+    _, out = _scored(tmp_path, hit_until_m=2.0)   # w1_boxes.json sits outside the repo
+    with pytest.raises(SystemExit, match="outside the rig repo"):
+        run.main(["rfdetr", str(out), "--card", str(repo / "card.json"), "--boxes",
+                  str(tmp_path / "w1_boxes.json")])
+
+
+def test_w5_one_clip_holds_both_crossings_split_by_speed(tmp_path):
+    """Rev 19 item 3 / rev 19.5: phase `w5` (one 60 s clip), crossings told apart by speed."""
+    out = tmp_path / "out"
+    slow = [_frame("w5clip", i, i * 0.1, 1.0, pos=[0.005 * i, 0.0, 1.0]) for i in range(10)]
+    fast = [_frame("w5clip", 10 + i, 30 + i * 0.1, 1.0, pos=[0.1 * i, 0.0, 1.0])
+            for i in range(10)]
+    _write_scan(out, "w5", "openmv_n6", slow + fast, "420")
+    rows = run.w5_table(out, "openmv_n6")
+    assert {r["crossing"] for r in rows} == {"w5"} and len(rows) == 20
+    bands = {b["speed_ms"]: b["n"] for b in run.w5_summary(rows)}
+    assert bands.get("0-0.1", 0) >= 9 and bands.get("0.6-inf", 0) >= 9
+    assert "w5" in run.PHASES
+
+
+def test_w1_not_judged_keeps_the_rows_and_drops_the_verdict(repo, tmp_path):
+    """Spec rev 19.8: no measured layout on Wed -> W1 not judged; rows report-only; range note
+    beside W1 and W2."""
+    res0, out = _scored(tmp_path, hit_until_m=2.0, n6_px80_scale=0.7)
+    assert res0["n6_vs_ae3"] == "openmv_ae3"
+    why, note = "layout not measured (Nick, thread 4d87cd3f)", "tag edge = design 63 mm"
+    run.main(["score", str(out), "--card", str(repo / "card.json"), "--boxes",
+              str(tmp_path / "w1_boxes.json"), "--not-judged", why, "--range-note", note])
+    res = json.loads((out / "score" / "results.json").read_text())
+    assert "n6_vs_ae3" not in res and res["w1_not_judged"] == why
+    assert res["w1"] == res0["w1"]                     # the rows are still reported
+    md = (out / "score" / "RESULTS.md").read_text()
+    assert f"W1 not judged: {why}" in md and "N6 vs AE3" not in md
+    assert md.count(note) == 2 and "meaningless" not in md
+
+
+def test_score_refuses_an_unmeasured_layout_without_not_judged(repo, tmp_path):
+    """QE 010 #137 N1: an unmeasured layout can't reach a W1 verdict by forgetting a flag."""
+    _, out = _scored(tmp_path, hit_until_m=2.0)
+    boxes = tmp_path / "w1_boxes.json"
+    b = json.loads(boxes.read_text())
+    b["layout_measured"] = False
+    boxes.write_text(json.dumps(b))
+    det = out / "detect" / "detections.json"
+    d = json.loads(det.read_text())
+    d["boxes_sha256"] = run.sha256_file(boxes)
+    det.write_text(json.dumps(d))
+    args = ["score", str(out), "--card", str(repo / "card.json"), "--boxes", str(boxes)]
+    with pytest.raises(SystemExit, match="--not-judged"):
+        run.main(args)
+    run.main([*args, "--dry-run"])
+    assert "meaningless" in (out / "score" / "RESULTS.md").read_text()
+    run.main([*args, "--not-judged", "layout not measured"])
+    md = (out / "score" / "RESULTS.md").read_text()
+    assert "W1 not judged: layout not measured" in md and "TEMPLATE LAYOUT" in md

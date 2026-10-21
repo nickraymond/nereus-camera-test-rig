@@ -11,15 +11,20 @@ Stages, in order; each reads the previous stage's saved output under OUT (a run 
   detect  refuses unless BOXES and CARD are committed and unchanged; OWLv2 "purple sea urchin"
           at the rev 17 pin, every box >= 0.05 kept; a sample is hit at threshold T when a
           detection >= T has IoU >= 0.5 with its reference box (T = 0.05, 0.3, 0.5) -> OUT/detect/
+  rfdetr  report only (spec rev 19.6 b): the same picked frames through Nick's RF-DETR, run by
+          edge_ml/urchin/rfdetr_prelabel.py (checkpoint pin, 560 px tiles) in its own venv;
+          hits as in detect. Changes no W1 verdict                              -> OUT/rfdetr/
   crops   (only if the fallback triggers) shuffled sample crops under neutral names for the blind
           viewer + a separate key                                               -> OUT/crops/
-  score   W1 per camera (80 + 50 mm), N6 vs AE3, fallback, W2 + F12, F10, W3, W4, W5 tables, and
-          RESULTS.md with every input's sha256                                  -> OUT/score/
+  score   W1 per camera (80 + 50 mm), N6 vs AE3, fallback, W2 + F12, F10, W3, W4, W5 tables, the
+          RF-DETR vs OWLv2 report table, and RESULTS.md with every input's sha256 -> OUT/score/
 
-Phases: --phase NAME=SPEC, NAME in pass1 | pass2 | check | w5_slow | w5_fast; SPEC = @label
+Phases: --phase NAME=SPEC, NAME in pass1 | pass2 | check | w5 | w5_slow | w5_fast; SPEC = @label
 (the clips whose sets.jsonl phase is "video@label") or comma-separated clip dirs relative to
 RUN_DIR. A clip is named by its path relative to RUN_DIR (QE 008 R5), so clips of two run folders
 never collide; a clip that failed (no video_sync.json) is listed as lost, not scanned (N1).
+W5 (rev 19 item 3, rev 19.5): one 60 s clip holding both crossings -> phase `w5`; the crossings are
+separated by the measured speed. w5_slow / w5_fast stay for runs with one clip per crossing.
 
 CARD = the Wed card's values (card_values.py: part-B chroma, first bins, guard cameras, detector
 pin), committed in the rig repo before the dive (QE 008 R4). Every stage checks it. The card and
@@ -28,6 +33,7 @@ box files live in docs/pool2_20261021/ (results/ is git-ignored). Usage:
   python -m edge_ml.pool2.run scan   RUN_DIR OUT --card CARD --layout L.yaml --phase pass1=@swim1 ..
   python -m edge_ml.pool2.run select OUT --card CARD --boxes docs/pool2_20261021/w1_boxes.json
   python -m edge_ml.pool2.run detect OUT --card CARD --boxes ...
+  python -m edge_ml.pool2.run rfdetr OUT --card CARD --boxes ...    (report only)
   python -m edge_ml.pool2.run score  OUT --card CARD --boxes ... [--blind answers.json]
 """
 
@@ -53,7 +59,8 @@ from edge_ml.pool2.layout import load_layout
 log = logging.getLogger("pool2.run")
 ROOT = Path(__file__).resolve().parents[2]
 REPO = ROOT                # the repo the box and card files must be committed in (tests: tmp)
-PHASES = ("pass1", "pass2", "check", "w5_slow", "w5_fast")
+PHASES = ("pass1", "pass2", "check", "w5", "w5_slow", "w5_fast")
+W5_PHASES = ("w5", "w5_slow", "w5_fast")  # w5 = both crossings in one clip (rev 19 item 3)
 MATCH_WINDOW_S = 0.050     # spec rev 5: three frames within 50 ms are "the same instant"
 W4_HOLDS_M = (3.0, 2.0, 1.0)
 CROP_PAD = 0.25            # blind crops: the reference box + 25 % each side
@@ -515,6 +522,139 @@ def cmd_detect(a) -> int:
     return 0
 
 
+# -- RF-DETR, report only (spec rev 19.6 b) -------------------------------------------------------
+
+RFDETR_PYTHON = Path.home() / "nereus_ml/venvs/rfdetr/bin/python"
+RFDETR_THRESHOLDS = (0.3, 0.05)  # rev 19.6 b: hits at 0.3 and at 0.05, next to OWLv2's
+
+
+def run_rfdetr(python: Path, stills_txt: Path, stills_dir: Path, raw: Path) -> None:
+    """rig main's edge_ml/urchin/rfdetr_prelabel.py, unchanged, in Nick's RF-DETR venv (its
+    `rfdetr` package isn't in the rig env). Indirection so tests can stub it."""
+    subprocess.run([str(python), "-m", "edge_ml.urchin.rfdetr_prelabel", str(stills_txt),
+                    str(stills_dir), str(raw), "--min-score", str(card_values.DETECT_FLOOR)],
+                   cwd=ROOT, check=True)
+
+
+def cmd_rfdetr(a) -> int:
+    """Rev 19.6 b: the picked frames as lossless PNGs (neutral names, a key to frame ids), the
+    pinned checkpoint checked first, RF-DETR down to DETECT_FLOOR, hits at every threshold."""
+    from edge_ml.urchin import rfdetr_prelabel as rp
+    out, bpath = Path(a.out), Path(a.boxes)
+    card, _ = load_card(a.card)
+    commit = committed_unchanged(bpath)
+    boxes = _read(bpath)
+    _same_card(card, boxes.get("card_values"), "the box file")
+    rdir = out / "rfdetr"
+    dpath = rdir / "detections.json"
+    if dpath.exists() and _read(dpath).get("boxes_sha256") != sha256_file(bpath):
+        raise SystemExit(f"{dpath} holds RF-DETR detections from another box file; move that "
+                         "run aside, don't overwrite it")
+    ck_sha = rp.check_checkpoint(Path(a.checkpoint or rp.CHECKPOINT))  # before any export
+    dirs = clip_dirs(out)
+    sdir = rdir / "stills"
+    sdir.mkdir(parents=True, exist_ok=True)
+    key, samples, skipped = {}, {}, []
+    for (cam, _ph, clip), picks in picked_frames(boxes).items():
+        cdir = dirs[clip]
+        fr = {f["index"]: f for f in frames.camera_frames(cdir, cam)}
+        for f, img in frames.iter_images(cdir, cam, [fr[p["index"]] for p in picks]):
+            fid = f"{cam}/{clip}/{f['index']}"
+            if img is None:
+                skipped.append(fid)
+                continue
+            name = f"{len(key):04d}.png"
+            if not cv2.imwrite(str(sdir / name), img):
+                raise SystemExit(f"could not write {sdir / name} ({fid})")
+            key[name] = fid
+            samples[fid] = next(p for p in picks if p["index"] == f["index"])["samples"]
+    stills_txt = rdir / "stills.txt"
+    stills_txt.write_text("".join(f"{n}\n" for n in key))
+    raw_path = rdir / "rfdetr_raw.json"
+    run_rfdetr(Path(a.python), stills_txt, sdir, raw_path)
+    raw = _read(raw_path)
+    if raw.get("checkpoint_sha256") != ck_sha or raw.get("min_score") != card_values.DETECT_FLOOR:
+        raise SystemExit(f"{raw_path}: checkpoint {raw.get('checkpoint_sha256')} / min_score "
+                         f"{raw.get('min_score')}, not the pin {ck_sha} / "
+                         f"{card_values.DETECT_FLOOR}")
+    if set(raw["detections"]) != set(key):
+        raise SystemExit(f"{raw_path} doesn't cover exactly the {len(key)} exported stills")
+    res = {"stage": "rfdetr", "report_only": "spec rev 19.6 b: changes no W1 verdict",
+           "boxes": str(bpath), "boxes_sha256": sha256_file(bpath), "boxes_commit": commit,
+           "card_values_sha256": card.sha256, "model": raw["model"],
+           "checkpoint_sha256": ck_sha, "tile_max": rp.TILE_MAX,
+           "detect_floor": card_values.DETECT_FLOOR,
+           "thresholds": list(card_values.THRESHOLDS), "iou_min": 0.5, "code": code_state(),
+           "raw_sha256": sha256_file(raw_path), "skipped_decode": skipped, "frames": {}}
+    for name, fid in key.items():
+        dets = raw["detections"][name]
+        res["frames"][fid] = {"still": name, "dets": dets, "hits": frame_hits(samples[fid], dets)}
+    _write(dpath, res)
+    owl = out / "detect" / "detections.json"   # OWLv2 beside it when detect has run
+    owl_d = _read(owl) if owl.exists() and _read(owl).get("boxes_sha256") == res["boxes_sha256"] \
+        else None
+    (rdir / "report.md").write_text("\n".join(detector_report_md(
+        detector_report(boxes, {"owlv2": owl_d, "rfdetr": res}), res)) + "\n")
+    print(f"rfdetr: {len(res['frames'])} frames -> {dpath}, {rdir / 'report.md'} (report only)")
+    return 0
+
+
+def detector_report(boxes: dict, dets: dict[str, dict | None]) -> dict:
+    """Rev 19.6 b table: per camera and bin, per detector: frames, the max score in those
+    frames, the max score of a detection with IoU >= 0.5 to a sample box, and sample hits at 0.3
+    and 0.05 per size as [hits, sample-frames]. ``dets``: detector name -> its detections file
+    (None = not run). Report only: nothing here feeds a W1 verdict."""
+    out: dict = {}
+    for cam, e in boxes["cameras"].items():
+        for c, picks in e["bins"].items():
+            if not picks:
+                continue
+            row = out.setdefault(cam, {}).setdefault(c, {})
+            for model, d in dets.items():
+                if d is None:
+                    row[model] = None
+                    continue
+                recs = [(p, d["frames"].get(f"{cam}/{p['clip']}/{p['index']}")) for p in picks]
+                recs = [(p, r) for p, r in recs if r is not None]
+                scores = [x["score"] for _p, r in recs for x in r["dets"]]
+                on = [x["score"] for p, r in recs for x in r["dets"]
+                      if any(board.iou(s["box"], x["box"]) >= 0.5 for s in p["samples"].values())]
+                hits = {}
+                for t in RFDETR_THRESHOLDS:
+                    tk = card_values.tkey(t)
+                    for size, names in wscore.SIZES.items():
+                        h = [r["hits"][tk][n]["hit"] for _p, r in recs for n in names
+                             if n in r["hits"][tk]]
+                        hits[f"{size}mm@{tk}"] = [sum(h), len(h)]
+                row[model] = {"frames": len(recs), "max": max(scores, default=None),
+                              "max_on_sample": max(on, default=None), "hits": hits}
+    return out
+
+
+def detector_report_md(report: dict, rf: dict | None) -> list[str]:
+    """The rev 19.6 b table as markdown lines (score's RESULTS.md and rfdetr's report.md)."""
+    rf_line = (f"RF-DETR checkpoint {rf['checkpoint_sha256'][:12]}" if rf
+               else "**RF-DETR: not run.**")
+    L = ["## W1 detectors, report only (spec rev 19.6 b): RF-DETR next to OWLv2", "",
+         "Changes no W1 verdict. Hits = samples with a detection >= T at IoU >= 0.5, as "
+         "hits / sample-frames. " + rf_line, "",
+         "| camera | bin (m) | detector | frames | max | max on a sample | 80 mm >= 0.3 | "
+         "80 mm >= 0.05 | 50 mm >= 0.3 | 50 mm >= 0.05 |",
+         "|---|---|---|---|---|---|---|---|---|---|"]
+    for cam, bins in report.items():
+        for c, row in bins.items():
+            for model, r in row.items():
+                if r is None:
+                    L.append(f"| {cam} | {c} | {model} | not run | | | | | | |")
+                    continue
+                h = r["hits"]
+                L.append(f"| {cam} | {c} | {model} | {r['frames']} | {r['max']} | "
+                         f"{r['max_on_sample']} | " + " | ".join(
+                             "{}/{}".format(*h[k]) for k in ("80mm@0.3", "80mm@0.05",
+                                                             "50mm@0.3", "50mm@0.05")) + " |")
+    return L
+
+
 # -- blind fallback crops ------------------------------------------------------------------------
 
 def cmd_crops(a) -> int:
@@ -665,9 +805,10 @@ def _median_of(rows: list[dict], key: str) -> float | None:
 
 
 def w5_summary(rows: list[dict]) -> list[dict]:
-    """W5 table: per crossing and speed band, n and the median edge widths (px)."""
+    """W5 table: per crossing (or the one `w5` clip) and speed band, n and the median edge
+    widths (px)."""
     out = []
-    for cr in ("w5_slow", "w5_fast"):
+    for cr in W5_PHASES:
         for lo, hi in zip(W5_SPEED_BINS[:-1], W5_SPEED_BINS[1:]):
             rs = [r for r in rows if r["crossing"] == cr and r["speed_ms"] is not None
                   and lo <= r["speed_ms"] < hi]
@@ -696,9 +837,10 @@ def w3_table(boxes: dict) -> dict:
 
 
 def w5_table(out: Path, cam: str) -> list[dict]:
-    """W5: per crossing frame with an edge width, the board speed and both widths (px)."""
+    """W5: per frame with an edge width, the board speed and both widths (px); rev 19 item 3's
+    single `w5` clip holds both crossings, which the speed bands separate."""
     rows = []
-    for ph in ("w5_slow", "w5_fast"):
+    for ph in W5_PHASES:
         fr = load_scan(out, ph, cam)
         for f, s in zip(fr, wscore.speeds(fr)):
             if f.get("edge_w_px") is None and f.get("tag_edge_w_px") is None:
@@ -728,6 +870,9 @@ def cmd_score(a) -> int:
     if got != pin or detections.get("detect_floor") != card_values.DETECT_FLOOR:
         raise SystemExit(f"detections.json used {got} (floor {detections.get('detect_floor')}), "
                          f"not the rev 17 pin {pin} (floor {card_values.DETECT_FLOOR})")
+    if boxes.get("layout_measured") is not True and not (a.not_judged or a.dry_run):
+        raise SystemExit("the layout isn't measured: pass --not-judged REASON (spec rev 19.8; no "
+                         "W1 verdict) or --dry-run (a dry run; W1 numbers meaningless)")
     blind = _read(Path(a.blind)) if a.blind else None
     picks = _attach(boxes, detections, blind)
     res = {"stage": "score", "code": code_state(), "boxes_sha256": sha256_file(bpath),
@@ -769,7 +914,9 @@ def cmd_score(a) -> int:
         res["w1_report"][card_values.tkey(t)] = {
             cam: {f"{s}mm": w1_score(out, cam, boxes["cameras"][cam], pt[cam], s, "hit")
                   for s in ("80", "50")} for cam in det_w1}
-    if "openmv_n6" in res["w1"] and "openmv_ae3" in res["w1"] \
+    res["w1_not_judged"] = a.not_judged   # rev 19.8: no W1 verdict, the rows stay report-only
+    res["range_note"] = a.range_note
+    if not a.not_judged and "openmv_n6" in res["w1"] and "openmv_ae3" in res["w1"] \
             and "80mm" in res["w1"]["openmv_n6"] and "80mm" in res["w1"]["openmv_ae3"]:
         res["n6_vs_ae3"] = wscore.n6_vs_ae3(res["w1"]["openmv_n6"]["80mm"],
                                             res["w1"]["openmv_ae3"]["80mm"])
@@ -789,6 +936,17 @@ def cmd_score(a) -> int:
         else:
             res["w4"][cam] = {"not_run": f"pass 1 {c1}, pass 2 {c2} (F15 / F18, or a pass "
                                          "with mixed chroma)"}
+    rpath = out / "rfdetr" / "detections.json"
+    rfd = _read(rpath) if rpath.exists() else None
+    if rfd is not None:
+        from edge_ml.urchin.rfdetr_prelabel import CHECKPOINT_SHA256
+        if rfd.get("boxes_sha256") != sha256_file(bpath) \
+                or rfd.get("checkpoint_sha256") != CHECKPOINT_SHA256:
+            raise SystemExit(f"{rpath} is from another box file or checkpoint: move it aside")
+    res["rfdetr"] = ({"detections_sha256": sha256_file(rpath),
+                      "checkpoint_sha256": rfd["checkpoint_sha256"], "model": rfd["model"]}
+                     if rfd else None)
+    res["detector_report"] = detector_report(boxes, {"owlv2": detections, "rfdetr": rfd})
     for cam in boxes["cameras"]:
         rows = w5_table(out, cam)
         res["w5"][cam] = {"rows": rows, "by_speed": w5_summary(rows)}
@@ -805,9 +963,14 @@ def _fmt_range(x: dict) -> str:
 def results_md(res: dict) -> str:
     cv_ = res.get("card_values") or {}
     L = ["# Pool test 2 W1-W5 results", ""]
-    if res.get("layout_measured") is not True:
+    if res.get("w1_not_judged"):
+        L += [f"**W1 not judged: {res['w1_not_judged']}.** The W1 rows below are report-only "
+              "(spec rev 19.8)." + (" **TEMPLATE LAYOUT (not measured).**"
+                                    if res.get("layout_measured") is not True else ""), ""]
+    elif res.get("layout_measured") is not True:
         L += ["**TEMPLATE LAYOUT (not measured): the W1 numbers below are meaningless; a dry run "
               "only (QE 008 N3).**", ""]
+    note = [f"*{res['range_note']}*", ""] if res.get("range_note") else []
     L += [f"- code {res['code']['sha'][:12]}{' (dirty)' if res['code']['dirty'] else ''}; "
           f"box file sha256 {res['boxes_sha256'][:12]} (commit {str(res['boxes_commit'])[:12]}); "
           f"detections sha256 {str(res['detections_sha256'])[:12]}",
@@ -818,7 +981,8 @@ def results_md(res: dict) -> str:
           f"- detector: {res['detector']} (W1 decides at the threshold; 0.05 / 0.5 report-only)",
          "- W1 by: " + ("BLIND FALLBACK (detector < 4/5 in the first bin on every camera)"
                         if res["w1_fallback"] else "detector"),
-         "", "## W1: detectable range (80 mm; 50 mm reported)", "",
+         "", "## W1: detectable range (80 mm; 50 mm reported)"
+         + (" - not judged, report only" if res.get("w1_not_judged") else ""), "", *note,
          "| camera | pass | first bin | 80 mm range | end (reason) | 50 mm range | end (reason) |",
          "|---|---|---|---|---|---|---|"]
     for cam, r in res["w1"].items():
@@ -858,7 +1022,7 @@ def results_md(res: dict) -> str:
             L.append(f"| {ph} | {label} | {g.get('instants')} ({g.get('two_camera_instants')}) | "
                      f"{g.get('single_camera_instants')} | {g.get('flagged')} | {g.get('share')} | "
                      f"{g.get('pass_unmeasured')} | {ratios} |")
-    L += ["", "## W2 camera Secchi + F12", "", "| camera | pass 1 (m) | check (m) | F12 |",
+    L += ["", "## W2 camera Secchi + F12", "", *note, "| camera | pass 1 (m) | check (m) | F12 |",
           "|---|---|---|---|"]
     for cam, r in res["w2"].items():
         L.append(f"| {cam} | {r['pass1_m']} | {r['check_m']} | {r['f12']} |")
@@ -880,6 +1044,7 @@ def results_md(res: dict) -> str:
     for cam, r in res["w4"].items():
         for img in r.get("images") or []:
             L.append(f"  - image: {img}")
+    L += [""] + detector_report_md(res.get("detector_report") or {}, res.get("rfdetr"))
     L += ["", "## W5 edge blur (10-90 %, px) vs board speed (every row in results.json)", "",
           "| camera | crossing | speed (m/s) | n | slanted edge | tag edges |",
           "|---|---|---|---|---|---|"]
@@ -913,6 +1078,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--card", required=True)
     s.add_argument("--boxes", required=True)
     s.add_argument("--device", default=None)
+    s = sub.add_parser("rfdetr", help="report only (spec rev 19.6 b)")
+    s.add_argument("out")
+    s.add_argument("--card", required=True)
+    s.add_argument("--boxes", required=True)
+    s.add_argument("--python", default=str(RFDETR_PYTHON), help="Nick's RF-DETR venv python")
+    s.add_argument("--checkpoint", default=None, help="default: rfdetr_prelabel's pinned path")
     s = sub.add_parser("crops")
     s.add_argument("out")
     s.add_argument("--boxes", required=True)
@@ -922,10 +1093,16 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--card", required=True)
     s.add_argument("--boxes", required=True)
     s.add_argument("--blind", default=None)
+    s.add_argument("--not-judged", default=None, metavar="REASON",
+                   help='rev 19.8: no W1 verdict; RESULTS says "W1 not judged: REASON"')
+    s.add_argument("--dry-run", action="store_true",
+                   help="allow an unmeasured layout without --not-judged (dry runs only)")
+    s.add_argument("--range-note", default=None,
+                   help="a note printed beside W1 and W2 (e.g. the tag edge used for range)")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    return {"scan": cmd_scan, "select": cmd_select, "detect": cmd_detect, "crops": cmd_crops,
-            "score": cmd_score}[a.cmd](a)
+    return {"scan": cmd_scan, "select": cmd_select, "detect": cmd_detect, "rfdetr": cmd_rfdetr,
+            "crops": cmd_crops, "score": cmd_score}[a.cmd](a)
 
 
 if __name__ == "__main__":
