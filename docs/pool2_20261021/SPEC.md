@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60; rev 19.6 = W1 keeps OWLv2 + blind fallback, RF-DETR report-only; rev 19.7 = QE 009's 19.5/19.6 nits, text only)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60; rev 19.6 = W1 keeps OWLv2 + blind fallback, RF-DETR report-only; rev 19.7 = QE 009's 19.5/19.6 nits, text only; rev 19.8 = W1 not judged on Wed, no ruler values; rev 19.8.1 = F13 undetected on Wed, text only)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -684,3 +684,26 @@ Source: ~/NereusData/ops/qe_reviews/QE009_SPEC_pool2_prep_rev19_908ffbe4125b.md 
   right":** per ~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/RESULTS.md:18–20, u80a lines up (OWLv2 at 0.05:
   IoU 0.56–0.64 on the N6), but **u80b's box is off** (IoU ~0.16 for both models), so the Wed layout needs Nick's ruler or a
   straight-on photo (blk_board_outline). Supporting text only, not a bar; in-air rehearsal, n = 1, never compared with Wed.
+
+## Amendment rev 19.8 (PE 007, Tue 10/20 7:41 PM PT): W1 is not judged on Wed (no ruler values). Binding, before any Wed data.
+- **Nick's words** (board comment as "the user (owner)", thread 4d87cd3f on card blk_board_values_wed, whose ask was the ruler
+  values for board_layout_wed.yaml `measured: true`; Tue 10/20 7:38 PM, verbatim): "I am not going to do this, lets run with
+  what we have." So must do 16's print check, the measured sample positions and the measured tag edge won't exist on Wed.
+- **W1 gives no verdict on Wed.** R1's pass/fail, the N6-vs-AE3 W1 call and its MTF50 tie-break need the measured layout, so
+  they are **not judged**; RESULTS says "W1 not judged: layout not measured (Nick, thread 4d87cd3f)". No W1 pass is claimed
+  anywhere. No number is changed: this records that the bar can't be scored, it doesn't move it. Asked by pool-2 successor 5
+  (rig #135 @ ff77c72 WED_CARD §4).
+- **Still reported (report-only):** per camera and bin, px across each sample, detector hits (OWLv2 pin per rev 17/19.6, RF-DETR
+  per 19.6 (b)) or the blind viewer per 19.7, and the range chain. Layout: `board_layout_wed.yaml` with `measured: false` and a
+  `source:` per value; sample boxes fit by tag homography on the most face-on Wed frame, an overlay of all four boxes checked by
+  eye, a sample whose box misses dropped and listed; committed before `select` / `detect` (rev 13 order); `scan
+  --allow-template`, so RESULTS carries the TEMPLATE banner.
+- **Tag edge = the design value, 63 mm** (Nick's "~65 mm" estimate, handoff_4 line 88, is not a measurement). Range ∝ tag edge, so
+  if ~65 mm is right every range reads ~3 % short; RESULTS says so beside W1 and W2. `first_bin` uses the 600 × 400 mm outline.
+- **W5:** no slanted-edge square, so W5 reports tag-edge widths only (already report-only).
+- **F13 (print scale wrong) is undetected on Wed** (rev 19.8.1, QE 010's nit N1): must do 16.1's print check won't run, so the
+  samples' true 80 / 50 mm size is unverified and every report-only px-per-sample number carries an unknown print-scale error.
+  Ranges come from the tags, not the print, so they carry only the tag-edge note above. RESULTS says both.
+- **Unchanged:** every capture bar (rev 9, 19, 19.2–19.4), W2, W3, W4 and the stop rules.
+- **Afterwards:** turning these Wed numbers into a W1 verdict (e.g. scoring R1 on the homography layout) would be a method change
+  after data, so it is Nick's call; nobody proposes it unless he asks.

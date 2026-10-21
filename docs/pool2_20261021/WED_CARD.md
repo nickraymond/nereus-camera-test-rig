@@ -1,7 +1,7 @@
 # nereus002 Wed dive card: pool test 2 (Wed 2026-10-21)
 
-**DRAFT** (part C of `SPEC_pool2_prep` rev 19.7, sha256 `aff5359e40bf…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
-19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60, 19.6 = RF-DETR report-only after the rehearsal, 19.7 = QE 009's 19.5/19.6 nits (text only); committed byte-identical on this PR
+**DRAFT** (part C of `SPEC_pool2_prep` rev 19.8.1, sha256 `24b61a8bdbc4…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
+19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60, 19.6 = RF-DETR report-only after the rehearsal, 19.7 = QE 009's 19.5/19.6 nits (text only), 19.8 = W1 not judged (no ruler values), 19.8.1 = F13 undetected; committed byte-identical on this PR
 as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
 before Wed. Open items are marked **OPEN**, with who closes them.
 
