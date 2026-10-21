@@ -188,6 +188,20 @@ for ~1 min; seal and dive; follow §3; switch OFF to stop; **pull everything bef
 own AP 10.42.0.1, which cuts the Mac's session; then the full pull on the home LAN, `--host pi@192.168.1.35`, same `--dest`,
 SHA256SUMS verified; `pool_mode.sh disarm` only after that).
 
+**Scoring (Mac, after the verified pull; rig #133 + #137, which must be merged first for `w5` and `rfdetr`).** `RUN` = the
+pulled run folder under `~/NereusData/nereus-camera-test-rig/2026-10-21_pool2/`, `OUT` = a new folder beside it; the layout
+is §4's (`measured: false`, committed), the box file is committed after `select` and before `detect` (rev 13):
+```
+C=docs/pool2_20261021/card_values_wed.json; B=docs/pool2_20261021/w1_boxes_wed.json
+python -m edge_ml.pool2.run scan RUN OUT --card $C --layout edge_ml/pool2/board_layout_wed.yaml --allow-template \
+  --phase pass1=@w_pass1 --phase pass2=@w_pass2 --phase check=@w_check --phase w5=@w5
+python -m edge_ml.pool2.run select OUT --card $C --boxes $B      # then commit $B
+python -m edge_ml.pool2.run detect OUT --card $C --boxes $B
+python -m edge_ml.pool2.run rfdetr OUT --card $C --boxes $B      # report only (rev 19.6 b)
+python -m edge_ml.pool2.run crops  OUT --boxes $B                # only if rev 13's fallback fires; the Lead names the viewer
+python -m edge_ml.pool2.run score  OUT --card $C --boxes $B [--blind answers.json]
+```
+
 ## 10. Approval envelope: rig section (must do 15; the Lead drafts c_envelope_1021)
 
 - **Units:** nereus002 only (no field units, no Spotters).
