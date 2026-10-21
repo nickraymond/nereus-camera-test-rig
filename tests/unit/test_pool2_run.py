@@ -574,3 +574,24 @@ def test_w1_not_judged_keeps_the_rows_and_drops_the_verdict(repo, tmp_path):
     md = (out / "score" / "RESULTS.md").read_text()
     assert f"W1 not judged: {why}" in md and "N6 vs AE3" not in md
     assert md.count(note) == 2 and "meaningless" not in md
+
+
+def test_score_refuses_an_unmeasured_layout_without_not_judged(repo, tmp_path):
+    """QE 010 #137 N1: an unmeasured layout can't reach a W1 verdict by forgetting a flag."""
+    _, out = _scored(tmp_path, hit_until_m=2.0)
+    boxes = tmp_path / "w1_boxes.json"
+    b = json.loads(boxes.read_text())
+    b["layout_measured"] = False
+    boxes.write_text(json.dumps(b))
+    det = out / "detect" / "detections.json"
+    d = json.loads(det.read_text())
+    d["boxes_sha256"] = run.sha256_file(boxes)
+    det.write_text(json.dumps(d))
+    args = ["score", str(out), "--card", str(repo / "card.json"), "--boxes", str(boxes)]
+    with pytest.raises(SystemExit, match="--not-judged"):
+        run.main(args)
+    run.main([*args, "--dry-run"])
+    assert "meaningless" in (out / "score" / "RESULTS.md").read_text()
+    run.main([*args, "--not-judged", "layout not measured"])
+    md = (out / "score" / "RESULTS.md").read_text()
+    assert "W1 not judged: layout not measured" in md and "TEMPLATE LAYOUT" in md

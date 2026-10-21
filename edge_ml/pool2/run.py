@@ -870,6 +870,9 @@ def cmd_score(a) -> int:
     if got != pin or detections.get("detect_floor") != card_values.DETECT_FLOOR:
         raise SystemExit(f"detections.json used {got} (floor {detections.get('detect_floor')}), "
                          f"not the rev 17 pin {pin} (floor {card_values.DETECT_FLOOR})")
+    if boxes.get("layout_measured") is not True and not (a.not_judged or a.dry_run):
+        raise SystemExit("the layout isn't measured: pass --not-judged REASON (spec rev 19.8; no "
+                         "W1 verdict) or --dry-run (a dry run; W1 numbers meaningless)")
     blind = _read(Path(a.blind)) if a.blind else None
     picks = _attach(boxes, detections, blind)
     res = {"stage": "score", "code": code_state(), "boxes_sha256": sha256_file(bpath),
@@ -1092,6 +1095,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--blind", default=None)
     s.add_argument("--not-judged", default=None, metavar="REASON",
                    help='rev 19.8: no W1 verdict; RESULTS says "W1 not judged: REASON"')
+    s.add_argument("--dry-run", action="store_true",
+                   help="allow an unmeasured layout without --not-judged (dry runs only)")
     s.add_argument("--range-note", default=None,
                    help="a note printed beside W1 and W2 (e.g. the tag edge used for range)")
     a = ap.parse_args(argv)
