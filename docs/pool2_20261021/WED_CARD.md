@@ -1,7 +1,7 @@
 # nereus002 Wed dive card: pool test 2 (Wed 2026-10-21)
 
-**DRAFT** (part C of `SPEC_pool2_prep` rev 19.6, sha256 `065cd74dd891…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
-19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60, 19.6 = RF-DETR report-only after the rehearsal; committed byte-identical on this PR
+**DRAFT** (part C of `SPEC_pool2_prep` rev 19.7, sha256 `aff5359e40bf…`; rev 19 QE 009 PASS-with-nits, 19.1 = its nits,
+19.2 = "most clips" on Wed, 19.3–19.4 = the 4:4:4 phases' fps bars, 19.5 = W5 → 2 × 60, 19.6 = RF-DETR report-only after the rehearsal, 19.7 = QE 009's 19.5/19.6 nits (text only); committed byte-identical on this PR
 as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this card at its commit sha
 before Wed. Open items are marked **OPEN**, with who closes them.
 
@@ -51,7 +51,7 @@ video@ctl:1x30,video@best:6x30[--n6-framesize HD --ae3-subsampling 420],video@w_
 sha256 of the string (no trailing newline): `87ee096f158ad85d99e851fc56216fe3190174afd5eb783291cd52af8ec34966`.
 **Clip times are the measured ones** (bench run pool053 with this program, Mon 10/19; each clip starts within ~1 s of its minute). A video
 phase's first clip lands one period after the phase starts, never at its start (`pool_capture.py:860–866`; post-Wed card
-c_pool_grid_late_start). That is why W5 is `2x60`: it records one 60 s clip, at T+20. Times count from switch-on; on
+c_pool_grid_late_start). That is why W5 is `2x60`: it records one or two 60 s clips (rev 19.7), at the measured starts (T+20 on pool053). Times count from switch-on; on
 Friday the first set began at 44 s uptime, so the control clip still lands at T+1.
 
 | T+ min (switch-on) | Phase | You (diver) | The rig (all three cameras, one fire per clip) |
@@ -99,11 +99,13 @@ Before the dive, **OPEN** (Nick, card blk_board_outline):
   beside it.
 - **In-air rehearsal (Tue 10/20 1:56–2:01 PM, Nick's mounted board, nereus002;
   `~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/`):** OWLv2 tops out at 0.115 on the printed urchins, so
-  W1 takes rev 13's **blind-viewer fallback** (spec rev 19.6 a; no bar moves). **Report-only (rev 19.6 b):** Nick's
+  W1 takes rev 13's **blind-viewer fallback** (spec rev 19.6 a; no bar moves): only if the detector hits < 4 of 5 in the
+  first bin on **every** camera, and then the blind yes/no judges **all** cameras (rev 19.7); the Lead names the viewer.
+  The rehearsal layout's u80b box was off (RESULTS.md:18–20), so Wed needs Nick's measured layout (§4). **Report-only (rev 19.6 b):** Nick's
   RF-DETR (`~/nereus_ml/runs/rfdetr_gate/checkpoint_best_total.pth`, sha256 `ae9aa853d9d7…`, via rig main
   `edge_ml/urchin/rfdetr_prelabel.py`, 560-px tiles) runs on the same W1 frames; per camera and bin: max score and IoU ≥ 0.5
   hits at 0.3 and 0.05, next to OWLv2's. In the rehearsal it scored 0.85–0.91 on the printed 80 mm urchin where OWLv2 scored
-  ≤ 0.12. **OPEN:** its scoring code (rig PR, QE) before any Wed result.
+  ≤ 0.12. **OPEN:** its scoring code, rig #137 (`run.py rfdetr`), at QE before any Wed result.
 - **Lens values (bm #184 pool049 fits, intrinsics_full; NOT VALIDATED as a lens model; rev 13 + rev 16)**, from
   `edge_ml/pool2/pose.py` @ 920e58f:
 

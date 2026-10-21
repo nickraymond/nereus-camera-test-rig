@@ -1,4 +1,4 @@
-# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60; rev 19.6 = W1 keeps OWLv2 + blind fallback, RF-DETR report-only)
+# Spec: pool test 2 prep (Wed 10/21): Friday video review + N6/AE3 resolution-at-10-fps bench study + Wed test card (PE rev 19, tier (a); rev 2–15 amendments at the end; rev 12 replaces the conditional revs 10–11 and is binding; rev 13 = QE 007's rev 12 fixes, in place; rev 14–15 = CMA headroom before Wed, appended; rev 15 = QE 008's rev 14 fixes, in place; rev 16 = undistorted tag corners for range, appended; rev 17 = W1 detector checkpoint + threshold 0.3 as values, appended; rev 18 = rig #133 readings 10–16, appended; rev 19 = the Wed program pinned, appended; rev 19.1 = its QE nits; rev 19.2 = "most clips" on Wed = ≥ 4 of 6; rev 19.3 = fps bars for the 4:4:4 phases; rev 19.4 = AE3 4:4:4 ≥ 9.27 fps; rev 19.5 = program re-pinned, W5 = w5:2x60; rev 19.6 = W1 keeps OWLv2 + blind fallback, RF-DETR report-only; rev 19.7 = QE 009's 19.5/19.6 nits, text only)
 
 Tier (a): part B runs on nereus002 hardware and part C sets a field-day card. QE spec PASS before the chip; home after
 PASS: nereus-camera-test-rig `docs/pool2_20261021/SPEC.md`, the session's first commit. Board: c_pool1016_video_review,
@@ -663,3 +663,24 @@ ae3_hd FAILS 3.17 fps so the AE3 stays 640×400 4:2:0, md19_buf4 PASS).
   same W1 frames. Per camera and range bin it reports: max score, and hits (IoU ≥ 0.5 vs the layout box) at 0.3 and at 0.05,
   next to OWLv2's same numbers. It changes no W1 verdict. Making it the W1 detector would be a change to a pinned method after
   rehearsal data, so that is Nick's call (not asked here).
+
+## Amendment rev 19.7 (PE 007, Tue 10/20 6:05 PM PT): QE 009's rev 19.5 + 19.6 nits. Text only; no bar, program or method changes.
+Source: ~/NereusData/ops/qe_reviews/QE009_SPEC_pool2_prep_rev19_908ffbe4125b.md (gates 19.5 and 19.6).
+- **19.5 N1 (why no gate re-run), replaces rev 19.5's "(no code change, so no gate re-run; rev 3 rule 4)":** rev 3 order rule 4
+  still holds (any change after the gate re-runs it). The gate isn't re-run because gate009 records one 30 s clip per cold boot
+  with Wed's board settings and never runs the program string, so W5's clip count is outside what the gate tests. The
+  pinned string (87ee096f158a…) is unchanged by this rev.
+- **19.5 N2 (W5 clips), replaces "one 60 s clip":** W5 records **one or two** 60 s clips, at the measured starts. The k = 2
+  grid point is 1200 s (the w5 phase's end); a clip records there because the phase is taken at the set's start. If the
+  w_check set ends before 1080 s, k = 1 and W5 records at ~18:00 and ~20:00. The Wed card's table uses the measured start
+  times either way.
+- **19.6 N1 (fallback trigger), replaces "wherever OWLv2 doesn't reach 0.3":** W1 uses rev 13's fallback exactly as written:
+  if the detector hits in < 4 of 5 frames in the chain's first bin (1.0 m unless the Wed card says otherwise) **on every
+  camera**, it is replaced by the blind yes/no on shuffled crops (≥ 4 of 5 yes per sample) **for all cameras**, and
+  RESULTS says so. No camera is judged by the detector while another is judged blind.
+- **19.6 N2 (who names the blind viewer):** rev 13's "a fresh session the PjM names" is now **the Lead** (d59). The viewer
+  gets only the crops under neutral names, with no range, camera or frame order.
+- **19.6 N3 (source for the rehearsal line), replaces "at 0.05 the N6 hits u80a at ~0.9 m (IoU 0.56–0.64), so the layout is
+  right":** per ~/NereusData/nereus-camera-test-rig/2026-10-20_w1_rehearsal/RESULTS.md:18–20, u80a lines up (OWLv2 at 0.05:
+  IoU 0.56–0.64 on the N6), but **u80b's box is off** (IoU ~0.16 for both models), so the Wed layout needs Nick's ruler or a
+  straight-on photo (blk_board_outline). Supporting text only, not a bar; in-air rehearsal, n = 1, never compared with Wed.
