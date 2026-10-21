@@ -212,6 +212,7 @@ def _seq(monkeypatch, on=0.03, off=0.03, solid=0.2):
 
 def test_ok_blinks_play_three_times_then_steady_once(monkeypatch):
     """Nick 10/20: one blink sequence after a fresh boot, then steady (no 10-min blink)."""
+    assert led.OK_BLINKS == 5 and led.READY_SOLID_S == 5.0  # Nick 10/20 PM: 5 blinks
     w, d = _seq(monkeypatch)
     d.start()
     time.sleep(0.6)

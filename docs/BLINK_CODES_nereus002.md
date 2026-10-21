@@ -5,8 +5,9 @@ The check never fixes anything itself. The program always runs, with whichever c
 
 | You see | It means | You do |
 |---|---|---|
-| Breathing, or steady ON, in the first ~1 min (before the 3 slow blinks) | Booting or checking: no result yet | Wait |
-| **3 SLOW BLINKS** (2 s on, 2 s off), then **steady ON** | **All 3 cameras OK** | Seal and dive |
+| Breathing, or steady ON, in the first ~1 min (before the 5 slow blinks) | Booting or checking: no result yet | Wait |
+| **5 SLOW BLINKS** (2 s on, 2 s off, ~20 s), then **steady ON** | **All 3 cameras OK** | Seal and dive |
+| **Steady ON** after the blinks | All OK, waiting for the next clip | Nothing |
 | After that: **breathing** (slow pulse) | **Recording a video clip** (all OK) | Nothing: it goes back to steady ON between clips |
 | **1 quick flash** + 4 s dark, repeating | **IMX708** (main camera) failed | Switch OFF, wait 10 s, switch ON. Watch again |
 | **2 quick flashes** + 4 s dark, repeating | **N6** failed | Switch OFF, wait 10 s, switch ON. Watch again |
@@ -18,9 +19,9 @@ The check never fixes anything itself. The program always runs, with whichever c
 | No result after 3 min (still breathing or steady) | The check did not run | Switch OFF, wait 10 s, switch ON |
 | LED off | Rig off | Switch ON |
 
-**Breathing means two things; the order tells them apart.** Breathing *before* the 3 slow blinks =
+**Breathing means two things; the order tells them apart.** Breathing *before* the 5 slow blinks =
 booting. Breathing *after* the blinks and at least 5 s of steady ON = recording. The first clip (~1 min
-after switch-on) can start a few seconds before its breathing does. A fault code keeps showing while the
+after switch-on) starts ~15 s before its breathing does (the 5 blinks + 5 s steady come first). A fault code keeps showing while the
 other cameras record (no breathing then).
 
 **Watch three or four groups; the highest count is the camera.** The 4 s dark gap separates the

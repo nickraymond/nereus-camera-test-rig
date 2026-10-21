@@ -73,7 +73,8 @@ FIRMWARE_DEFAULT = LED_ON
 # wedge the shared bus, and then the LiFePO4wered misbehaves). All in one place:
 A_ON_S, A_OFF_S = 0.25, 3.75          # pattern A: 2 LED writes per 4 s = 0.5 writes/s max
 OK_ON_S, OK_OFF_S = 2.0, 2.0          # self-check OK: slow blink, 0.5 writes/s
-OK_BLINKS = 3                         # the OK blink plays this many times, once per boot (12 s)
+OK_BLINKS = 5                         # the OK blink plays this many times, once per boot (20 s;
+                                      # Nick 10/20: 5, more time to get into position)
 READY_SOLID_S = 5.0                   # steady ON shown at least this long before REC pulsing
 F_ON_S, F_OFF_S, F_DARK_S = 0.2, 0.3, 4.0   # self-check fault code: N flashes, then dark
 BAR30_MIN_INTERVAL_S = 3.0            # >= 3 s between any two Bar30 sessions (pool: ~2 per set)

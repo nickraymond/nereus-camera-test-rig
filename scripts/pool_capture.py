@@ -1074,7 +1074,7 @@ def main() -> int:
     r.add_argument("--led-codes", action="store_true",
                    help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
     r.add_argument("--self-check", action="store_true",
-                   help="boot camera self-check before set 1, verdict on the UPS LED: 3 slow "
+                   help="boot camera self-check before set 1, verdict on the UPS LED: 5 slow "
                         "blinks then steady = all OK (pulsing while a video clip records), N "
                         "quick flashes = camera N failed (1 IMX708, 2 N6, 3 AE3). Read-only: no "
                         "power cycle, no retries (Nick 10/15, plan A; REC pulsing 10/20)")

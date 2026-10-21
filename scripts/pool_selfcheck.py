@@ -126,7 +126,7 @@ def summary(result: dict) -> str:
     """The pool.log line."""
     if result["ok"]:
         return (f"SELF-CHECK OK 3/3 ({result['seconds']:.0f} s) -> LED slow blink "
-                "(2 s on / 2 s off) x3, then steady; pulsing while a clip records")
+                "(2 s on / 2 s off) x5, then steady; pulsing while a clip records")
     parts = [f"{c} ({result['cameras'][c]['why']})" for c in result["faults"]]
     codes = " then ".join(f"{n} flashes" for n in result["codes"])
     return (f"SELF-CHECK FAULT {3 - len(result['faults'])}/3 ok: {', '.join(parts)} "
