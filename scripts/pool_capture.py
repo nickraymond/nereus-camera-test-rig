@@ -540,6 +540,19 @@ def append_pose(run_dir: Path, n: int, block: str, line: dict) -> None:
                 + ",".join(files[c] for c in CAMERAS) + "\n")
 
 
+def clip_with_led(led, verdict_mode: str | None, led_low: bool, record):
+    """Nick 10/20: the LED pulses while a clip records (OK verdict only; a fault code or low
+    battery keeps showing), and goes back to the verdict's steady ON afterwards, even if
+    ``record`` raises. No self-check verdict (no --self-check) = the LED is left alone."""
+    if not (led and verdict_mode):
+        return record()
+    led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low, True))
+    try:
+        return record()
+    finally:
+        led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low))
+
+
 def run_video_clip(run_dir: Path, n: int, seconds: float, extra: list[str] | None = None) -> dict:
     """One synchronized clip (scripts/sync_video.py) into <run>/video/clipNNN; its summary.
     ``extra``: the phase's own sync_video args (pool 2); the summary records them, each board's
@@ -865,11 +878,9 @@ def run(args) -> int:
             if 0 < wait < phase["period_s"]:
                 time.sleep(wait)
             line["clip_grid_s"] = round(phase["start_min"] * 60 + k * phase["period_s"], 1)
-            if led and verdict_mode:  # Nick 10/20: the LED pulses while a clip records
-                led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low, True))
-            line["video"] = run_video_clip(run_dir, n, phase["clip_s"], phase.get("args"))
-            if led and verdict_mode:
-                led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low))
+            line["video"] = clip_with_led(  # the LED pulses while the clip records
+                led, verdict_mode, led_low,
+                lambda: run_video_clip(run_dir, n, phase["clip_s"], phase.get("args")))
         elif phase and phase["name"] in ("cal_a", "cal_b"):
             line.update(run_one_set(n, run_dir, cal_config, run_id, cams_now,
                                     ("--sync-raw-only",)))

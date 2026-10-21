@@ -14,6 +14,7 @@ The check never fixes anything itself. The program always runs, with whichever c
 | Two counts taking turns (e.g. 2 … 3 …) | Both of those cameras failed | Switch OFF, wait 10 s, switch ON. Watch again |
 | The **same code again** after the off/on | It did not clear | Your call: dive anyway (the other cameras record) or stop |
 | **Fast flashing, no pauses** | **Low battery** | Charge it |
+| **Breathing that does not go back to steady ON** within ~4 min (longest clip 2 min + 2 min) | Stuck: the program stopped mid-clip (crash, power dip) and left the pulse on | Switch OFF, wait 10 s, switch ON. Watch again |
 | No result after 3 min (still breathing or steady) | The check did not run | Switch OFF, wait 10 s, switch ON |
 | LED off | Rig off | Switch ON |
 
