@@ -6,8 +6,8 @@ as [SPEC.md](SPEC.md)). Pool-2 prep successor 4, Mon 10/19. Nick approves this c
 before Wed. Open items are marked **OPEN**, with who closes them.
 
 Rig: Pi Zero 2 W + IMX708 + OpenMV N6 + OpenMV AE3 in one housing, LiFePO4wered/Pi+ UPS, the physical switch (= the UPS
-button). Code: `~/nereus-rig-poolcam` = **f6cdfa2** (rig #138 LED build; envelope rev 3 @ b1756a3, Nick 7:37 PM; arm line,
-program and scripts unchanged). The gate and the bench run ran on rig main 920e58f (`2026-10-19_pool2_ladder/BUILD.md`). Boards: firmware 1.28.0 (OpenMV v5.0.1), board scripts 7/7 hashes as in BUILD.md.
+button). Code: `~/nereus-rig-poolcam` = **f6cdfa2** (rig #138 LED build; envelope rev 3 @ b1756a3, Nick 7:37 PM; arm line and
+program unchanged; `pool_capture.py`, `pool_led.py`, `pool_selfcheck.py` differ from 920e58f by rig #138's LED change). The gate and the bench run ran on rig main 920e58f (`2026-10-19_pool2_ladder/BUILD.md`). Boards: firmware 1.28.0 (OpenMV v5.0.1), board scripts 7/7 hashes as in BUILD.md.
 
 ## 1. Question (Nick)
 
@@ -213,6 +213,7 @@ python -m edge_ml.pool2.run score  OUT --card $C --boxes $B [--blind answers.jso
   (envelope rev 2). Recording only; no new verbs (spec rev 12): `pool_mode.sh disarm` is an existing verb
   (`scripts/pool_mode.sh:215`), listed in envelope rev 2.
 - **Scripts:** `scripts/pool_mode.sh`, `scripts/pool_capture.py` (program above, sha256 `87ee096f158a…`),
-  `scripts/sync_video.py`, `host_tools/pool_pull.py`, at f6cdfa2 (envelope rev 3 @ b1756a3).
+  `scripts/sync_video.py`, `host_tools/pool_pull.py`, at f6cdfa2 (envelope rev 3 @ b1756a3; `pool_capture.py` differs from
+  920e58f by rig #138's LED change: it pulses the LED while a clip records).
 - **Stop rules:** §7.
 - **Freeze:** Tue 10/20 6 PM (§10).
