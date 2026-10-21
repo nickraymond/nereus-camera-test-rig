@@ -93,6 +93,8 @@ So must do 16's measured layout is not met, and **W1 is report-only on Wed**:
   committed before `select` / `detect` (rev 13 order).
 - Tag edge: design 63 mm (Nick's ~65 mm is an estimate, not a measurement). If ~65 mm is right, every range reads ~3 % short
   (range ∝ tag edge); RESULTS says so beside W1 and W2.
+- No print check, so F13 (print scale) is undetected: every px-per-sample number carries an unknown print-scale error;
+  ranges come from the tags, not the print (spec rev 19.8.1). RESULTS says both.
 - `first_bin`: §5's 1.0 m fit check, run on the 600 × 400 mm outline.
 - W5: no slanted-edge square, so W5 reports tag-edge widths only.
 - Not affected: the per-clip capture bars (§6), W2, W3 (card patches located by its tags), W4 (Nick by eye).
@@ -203,7 +205,8 @@ python -m edge_ml.pool2.run rfdetr OUT --card $C --boxes $B      # report only (
 python -m edge_ml.pool2.run crops  OUT --boxes $B                # only if rev 13's fallback fires; the Lead names the viewer
 python -m edge_ml.pool2.run score  OUT --card $C --boxes $B [--blind answers.json] \
   --not-judged "layout not measured (Nick, thread 4d87cd3f)" \
-  --range-note "tag edge = design 63 mm; if Nick's ~65 mm estimate is right, every range reads ~3 % short"
+  --range-note "tag edge = design 63 mm; if Nick's ~65 mm estimate is right, every range reads ~3 % short. \
+No print check (F13): px per sample carry an unknown print-scale error; ranges come from the tags"
 ```
 
 ## 10. Approval envelope: rig section (must do 15; the Lead drafts c_envelope_1021)
