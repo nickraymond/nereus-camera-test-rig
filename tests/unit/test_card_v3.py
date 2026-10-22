@@ -91,7 +91,8 @@ def test_roles_and_surround_are_consistent(v3):
     roles = spec["roles"]
     assert set(roles["wb_anchors"]) <= ids and set(roles["ramp"]) <= ids and roles["haze"] in ids
     assert len([g for g in roles["ramp"] if g != roles["haze"]]) >= 3  # review: >= 3 non-black greys
-    assert list(card.patch("gray_mid").truth) == spec["layout"]["surround_rgb"]
+    gm = card.patch("gray_mid")
+    assert list(gm.design or gm.truth) == spec["layout"]["surround_rgb"]  # the print ink
 
 
 def test_rendered_front_decodes_as_its_own_block_only(v3):
@@ -159,7 +160,7 @@ def test_c1_reference_template_matches_the_yaml():
     assert np.array_equal(committed, to_raster(front(card, spec), spec["canonical"]["px_per_mm"]))
     for p in card.patches:
         b = p.box
-        assert tuple(committed[b.y + b.h // 2, b.x + b.w // 2]) == p.truth, p.id
+        assert tuple(committed[b.y + b.h // 2, b.x + b.w // 2]) == (p.design or p.truth), p.id
 
 
 def test_c1_example_frame_ground_truth_matches_detection():

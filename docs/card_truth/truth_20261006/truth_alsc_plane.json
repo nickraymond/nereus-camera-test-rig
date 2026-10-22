@@ -1,0 +1,2169 @@
+{
+ "flat": false,
+ "cams": {
+  "imx708": {
+   "tags": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cc_visible": [
+    "dark_skin",
+    "light_skin",
+    "blue_sky",
+    "foliage",
+    "blue_flower",
+    "bluish_green",
+    "orange",
+    "purplish_blue",
+    "moderate_red",
+    "purple",
+    "yellow_green",
+    "orange_yellow",
+    "blue",
+    "green",
+    "red",
+    "yellow",
+    "magenta",
+    "cyan",
+    "white",
+    "neutral_8",
+    "neutral_65",
+    "neutral_5",
+    "neutral_35",
+    "black"
+   ],
+   "cc_coverage": "24/24",
+   "flat_frames": [],
+   "shading": "rpi.alsc from imx708_wide_vc4.json, luminance at full strength, 5300 K",
+   "stops": {
+    "stop_+0": {
+     "cc_used": 24,
+     "cc_per_patch": {
+      "dark_skin": {
+       "ref_L": 37.5,
+       "fit_L": 38.9,
+       "loo_de": 2.09
+      },
+      "light_skin": {
+       "ref_L": 64.7,
+       "fit_L": 65.9,
+       "loo_de": 1.53
+      },
+      "blue_sky": {
+       "ref_L": 49.3,
+       "fit_L": 48.6,
+       "loo_de": 0.98
+      },
+      "foliage": {
+       "ref_L": 43.5,
+       "fit_L": 42.7,
+       "loo_de": 1.57
+      },
+      "blue_flower": {
+       "ref_L": 54.9,
+       "fit_L": 54.5,
+       "loo_de": 1.55
+      },
+      "bluish_green": {
+       "ref_L": 70.5,
+       "fit_L": 69.6,
+       "loo_de": 1.08
+      },
+      "orange": {
+       "ref_L": 62.7,
+       "fit_L": 61.9,
+       "loo_de": 3.35
+      },
+      "purplish_blue": {
+       "ref_L": 39.4,
+       "fit_L": 38.8,
+       "loo_de": 0.69
+      },
+      "moderate_red": {
+       "ref_L": 50.6,
+       "fit_L": 50.6,
+       "loo_de": 0.22
+      },
+      "purple": {
+       "ref_L": 30.1,
+       "fit_L": 30.1,
+       "loo_de": 0.66
+      },
+      "yellow_green": {
+       "ref_L": 71.8,
+       "fit_L": 72.1,
+       "loo_de": 0.57
+      },
+      "orange_yellow": {
+       "ref_L": 71.5,
+       "fit_L": 71.3,
+       "loo_de": 1.28
+      },
+      "blue": {
+       "ref_L": 28.4,
+       "fit_L": 28.7,
+       "loo_de": 1.49
+      },
+      "green": {
+       "ref_L": 54.4,
+       "fit_L": 54.8,
+       "loo_de": 1.51
+      },
+      "red": {
+       "ref_L": 42.4,
+       "fit_L": 42.3,
+       "loo_de": 0.49
+      },
+      "yellow": {
+       "ref_L": 81.8,
+       "fit_L": 81.3,
+       "loo_de": 1.05
+      },
+      "magenta": {
+       "ref_L": 50.6,
+       "fit_L": 50.5,
+       "loo_de": 0.44
+      },
+      "cyan": {
+       "ref_L": 49.6,
+       "fit_L": 50.2,
+       "loo_de": 2.51
+      },
+      "white": {
+       "ref_L": 95.2,
+       "fit_L": 95.3,
+       "loo_de": 0.9
+      },
+      "neutral_8": {
+       "ref_L": 81.3,
+       "fit_L": 80.1,
+       "loo_de": 1.86
+      },
+      "neutral_65": {
+       "ref_L": 66.9,
+       "fit_L": 66.1,
+       "loo_de": 1.47
+      },
+      "neutral_5": {
+       "ref_L": 50.8,
+       "fit_L": 49.7,
+       "loo_de": 1.83
+      },
+      "neutral_35": {
+       "ref_L": 35.6,
+       "fit_L": 35.2,
+       "loo_de": 0.75
+      },
+      "black": {
+       "ref_L": 20.6,
+       "fit_L": 22.0,
+       "loo_de": 1.39
+      }
+     },
+     "frames": [
+      "stop_+0_r0.dng",
+      "stop_+0_r1.dng",
+      "stop_+0_r2.dng"
+     ],
+     "matrix": [
+      [
+       0.149649,
+       -0.027972,
+       -0.121198
+      ],
+      [
+       -0.071717,
+       0.410962,
+       -0.335928
+      ],
+      [
+       0.119533,
+       -0.032952,
+       0.698136
+      ],
+      [
+       0.517239,
+       0.346194,
+       0.312653
+      ],
+      [
+       -0.064794,
+       -0.061732,
+       -0.041893
+      ],
+      [
+       -0.110454,
+       -0.062487,
+       0.021886
+      ]
+     ],
+     "light_plane": {
+      "log_slope_per_1000px": [
+       0.00996,
+       -0.14185
+      ],
+      "pct_across_chart_y": 21.4,
+      "pct_across_chart_x": 2.3
+     },
+     "v3_srgb8": {
+      "gray_black": [
+       74.5,
+       76.2,
+       76.8
+      ],
+      "gray_light": [
+       173.0,
+       173.9,
+       174.9
+      ],
+      "gray_light2": [
+       148.7,
+       149.0,
+       152.0
+      ],
+      "gray_mid": [
+       130.6,
+       133.9,
+       136.2
+      ],
+      "red": [
+       155.2,
+       54.2,
+       57.3
+      ],
+      "red_orange": [
+       182.2,
+       72.7,
+       47.9
+      ],
+      "orange": [
+       192.0,
+       116.3,
+       54.1
+      ],
+      "yellow": [
+       200.4,
+       165.0,
+       66.5
+      ],
+      "green": [
+       96.2,
+       147.5,
+       108.2
+      ],
+      "cyan": [
+       65.9,
+       156.7,
+       193.5
+      ],
+      "blue": [
+       56.4,
+       88.3,
+       155.9
+      ],
+      "magenta": [
+       179.8,
+       67.5,
+       130.5
+      ]
+     },
+     "out_of_srgb": [],
+     "over_range": [],
+     "clipped": [],
+     "fit": {
+      "linear3x3": {
+       "n": 24,
+       "median": 1.67,
+       "p90": 2.62,
+       "max": 4.08
+      },
+      "rootpoly2": {
+       "n": 24,
+       "median": 1.33,
+       "p90": 2.02,
+       "max": 3.35
+      }
+     },
+     "model": "rootpoly2",
+     "v3_lab": {
+      "gray_black": [
+       32.27,
+       -0.64,
+       -0.61
+      ],
+      "gray_light": [
+       71.0,
+       -0.19,
+       -0.66
+      ],
+      "gray_light2": [
+       61.76,
+       0.33,
+       -1.64
+      ],
+      "gray_mid": [
+       55.67,
+       -0.93,
+       -1.65
+      ],
+      "red": [
+       38.24,
+       42.99,
+       22.01
+      ],
+      "red_orange": [
+       46.11,
+       44.24,
+       38.03
+      ],
+      "orange": [
+       56.63,
+       26.78,
+       46.26
+      ],
+      "yellow": [
+       69.62,
+       5.6,
+       54.22
+      ],
+      "green": [
+       56.68,
+       -24.37,
+       15.18
+      ],
+      "cyan": [
+       60.37,
+       -19.16,
+       -27.6
+      ],
+      "blue": [
+       37.75,
+       5.43,
+       -41.18
+      ],
+      "magenta": [
+       46.4,
+       50.93,
+       -11.12
+      ]
+     },
+     "grey_ab_3x3": {
+      "white": [
+       -1.4,
+       2.91
+      ],
+      "neutral_8": [
+       -1.92,
+       0.77
+      ],
+      "neutral_65": [
+       -1.85,
+       0.76
+      ],
+      "neutral_5": [
+       -1.15,
+       1.06
+      ],
+      "neutral_35": [
+       -1.01,
+       -0.12
+      ],
+      "black": [
+       -0.16,
+       0.22
+      ]
+     },
+     "red_snr_db": {
+      "cc_red": 32.5,
+      "cc_neutral_5": 33.0,
+      "cc_neutral_35": 29.4,
+      "v3_red": 33.3
+     },
+     "level_gray_light": 0.651
+    },
+    "stop_-0.5": {
+     "cc_used": 24,
+     "cc_per_patch": {
+      "dark_skin": {
+       "ref_L": 37.5,
+       "fit_L": 38.9,
+       "loo_de": 2.04
+      },
+      "light_skin": {
+       "ref_L": 64.7,
+       "fit_L": 65.9,
+       "loo_de": 1.45
+      },
+      "blue_sky": {
+       "ref_L": 49.3,
+       "fit_L": 48.6,
+       "loo_de": 1.01
+      },
+      "foliage": {
+       "ref_L": 43.5,
+       "fit_L": 42.8,
+       "loo_de": 1.45
+      },
+      "blue_flower": {
+       "ref_L": 54.9,
+       "fit_L": 54.5,
+       "loo_de": 1.43
+      },
+      "bluish_green": {
+       "ref_L": 70.5,
+       "fit_L": 69.6,
+       "loo_de": 1.11
+      },
+      "orange": {
+       "ref_L": 62.7,
+       "fit_L": 61.8,
+       "loo_de": 3.33
+      },
+      "purplish_blue": {
+       "ref_L": 39.4,
+       "fit_L": 38.8,
+       "loo_de": 0.67
+      },
+      "moderate_red": {
+       "ref_L": 50.6,
+       "fit_L": 50.5,
+       "loo_de": 0.24
+      },
+      "purple": {
+       "ref_L": 30.1,
+       "fit_L": 30.0,
+       "loo_de": 0.64
+      },
+      "yellow_green": {
+       "ref_L": 71.8,
+       "fit_L": 72.1,
+       "loo_de": 0.54
+      },
+      "orange_yellow": {
+       "ref_L": 71.5,
+       "fit_L": 71.3,
+       "loo_de": 1.3
+      },
+      "blue": {
+       "ref_L": 28.4,
+       "fit_L": 28.7,
+       "loo_de": 1.33
+      },
+      "green": {
+       "ref_L": 54.4,
+       "fit_L": 54.8,
+       "loo_de": 1.44
+      },
+      "red": {
+       "ref_L": 42.4,
+       "fit_L": 42.3,
+       "loo_de": 0.58
+      },
+      "yellow": {
+       "ref_L": 81.8,
+       "fit_L": 81.3,
+       "loo_de": 0.87
+      },
+      "magenta": {
+       "ref_L": 50.6,
+       "fit_L": 50.5,
+       "loo_de": 0.44
+      },
+      "cyan": {
+       "ref_L": 49.6,
+       "fit_L": 50.2,
+       "loo_de": 2.39
+      },
+      "white": {
+       "ref_L": 95.2,
+       "fit_L": 95.3,
+       "loo_de": 0.75
+      },
+      "neutral_8": {
+       "ref_L": 81.3,
+       "fit_L": 80.1,
+       "loo_de": 2.16
+      },
+      "neutral_65": {
+       "ref_L": 66.9,
+       "fit_L": 66.1,
+       "loo_de": 1.31
+      },
+      "neutral_5": {
+       "ref_L": 50.8,
+       "fit_L": 49.7,
+       "loo_de": 1.89
+      },
+      "neutral_35": {
+       "ref_L": 35.6,
+       "fit_L": 35.2,
+       "loo_de": 0.65
+      },
+      "black": {
+       "ref_L": 20.6,
+       "fit_L": 21.9,
+       "loo_de": 1.55
+      }
+     },
+     "frames": [
+      "stop_-0.5_r0.dng",
+      "stop_-0.5_r1.dng",
+      "stop_-0.5_r2.dng"
+     ],
+     "matrix": [
+      [
+       0.210031,
+       -0.038123,
+       -0.168883
+      ],
+      [
+       -0.107927,
+       0.581356,
+       -0.476186
+      ],
+      [
+       0.166501,
+       -0.044274,
+       0.974404
+      ],
+      [
+       0.734761,
+       0.485067,
+       0.434801
+      ],
+      [
+       -0.082942,
+       -0.090123,
+       -0.04552
+      ],
+      [
+       -0.161928,
+       -0.089166,
+       0.03189
+      ]
+     ],
+     "light_plane": {
+      "log_slope_per_1000px": [
+       0.0095,
+       -0.14308
+      ],
+      "pct_across_chart_y": 21.6,
+      "pct_across_chart_x": 2.2
+     },
+     "v3_srgb8": {
+      "gray_black": [
+       74.3,
+       76.2,
+       76.7
+      ],
+      "gray_light": [
+       172.4,
+       173.9,
+       174.6
+      ],
+      "gray_light2": [
+       148.3,
+       149.0,
+       151.8
+      ],
+      "gray_mid": [
+       130.3,
+       133.8,
+       135.9
+      ],
+      "red": [
+       154.9,
+       54.0,
+       57.5
+      ],
+      "red_orange": [
+       181.8,
+       72.7,
+       48.0
+      ],
+      "orange": [
+       191.7,
+       116.1,
+       53.7
+      ],
+      "yellow": [
+       200.1,
+       164.9,
+       65.7
+      ],
+      "green": [
+       96.1,
+       147.4,
+       108.1
+      ],
+      "cyan": [
+       65.3,
+       156.7,
+       193.3
+      ],
+      "blue": [
+       56.0,
+       88.4,
+       155.6
+      ],
+      "magenta": [
+       179.3,
+       67.6,
+       130.5
+      ]
+     },
+     "out_of_srgb": [],
+     "over_range": [],
+     "clipped": [],
+     "fit": {
+      "linear3x3": {
+       "n": 24,
+       "median": 1.57,
+       "p90": 2.67,
+       "max": 4.01
+      },
+      "rootpoly2": {
+       "n": 24,
+       "median": 1.3,
+       "p90": 2.13,
+       "max": 3.33
+      }
+     },
+     "model": "rootpoly2",
+     "v3_lab": {
+      "gray_black": [
+       32.23,
+       -0.68,
+       -0.62
+      ],
+      "gray_light": [
+       70.95,
+       -0.43,
+       -0.55
+      ],
+      "gray_light2": [
+       61.71,
+       0.13,
+       -1.58
+      ],
+      "gray_mid": [
+       55.62,
+       -1.03,
+       -1.61
+      ],
+      "red": [
+       38.16,
+       42.92,
+       21.79
+      ],
+      "red_orange": [
+       46.04,
+       44.1,
+       37.87
+      ],
+      "orange": [
+       56.54,
+       26.78,
+       46.32
+      ],
+      "yellow": [
+       69.57,
+       5.52,
+       54.48
+      ],
+      "green": [
+       56.64,
+       -24.4,
+       15.22
+      ],
+      "cyan": [
+       60.35,
+       -19.35,
+       -27.51
+      ],
+      "blue": [
+       37.75,
+       5.19,
+       -41.0
+      ],
+      "magenta": [
+       46.36,
+       50.73,
+       -11.2
+      ]
+     },
+     "grey_ab_3x3": {
+      "white": [
+       -1.71,
+       3.14
+      ],
+      "neutral_8": [
+       -2.23,
+       1.02
+      ],
+      "neutral_65": [
+       -1.76,
+       0.84
+      ],
+      "neutral_5": [
+       -1.23,
+       1.07
+      ],
+      "neutral_35": [
+       -0.92,
+       -0.23
+      ],
+      "black": [
+       0.37,
+       -0.25
+      ]
+     },
+     "red_snr_db": {
+      "cc_red": 31.3,
+      "cc_neutral_5": 31.7,
+      "cc_neutral_35": 28.0,
+      "v3_red": 31.9
+     },
+     "level_gray_light": 0.459
+    }
+   },
+   "shading_gain_green": {
+    "chart": [
+     1.032,
+     1.227
+    ],
+    "card": [
+     1.004,
+     1.078
+    ]
+   },
+   "flat_spread_pct_p95_p5": 214.7,
+   "processed": {
+    "jpeg": "imx708_image_20261006T223939Z.jpg",
+    "patches": 24,
+    "de2000_median": 8.77,
+    "de2000_colours": 9.51,
+    "grey_ab": {
+     "neutral_8": [
+      -3.6,
+      -4.5
+     ],
+     "neutral_65": [
+      -4.8,
+      -6.1
+     ],
+     "neutral_5": [
+      -4.7,
+      -7.5
+     ],
+     "neutral_35": [
+      -3.7,
+      -6.7
+     ]
+    },
+    "per_patch": {
+     "dark_skin": 4.11,
+     "light_skin": 12.08,
+     "blue_sky": 9.57,
+     "foliage": 9.45,
+     "blue_flower": 7.98,
+     "bluish_green": 9.62,
+     "orange": 12.87,
+     "purplish_blue": 9.63,
+     "moderate_red": 5.0,
+     "purple": 10.95,
+     "yellow_green": 7.83,
+     "orange_yellow": 13.36,
+     "blue": 11.63,
+     "green": 10.47,
+     "red": 4.24,
+     "yellow": 8.1,
+     "magenta": 8.03,
+     "cyan": 9.18,
+     "white": 4.67,
+     "neutral_8": 6.14,
+     "neutral_65": 8.31,
+     "neutral_5": 8.36,
+     "neutral_35": 9.3,
+     "black": 8.05
+    },
+    "clipped_jpeg": [
+     "white"
+    ],
+    "clipped_raw_normal": [],
+    "exposure_normal": {
+     "AfState": 2,
+     "AnalogueGain": 2.0,
+     "ColourGains": [
+      2.042977,
+      1.925729
+     ],
+     "ColourTemperature": 5006,
+     "DigitalGain": 1.00078,
+     "ExposureTime": 31785,
+     "FocusFoM": 29989,
+     "FrameDuration": 69669,
+     "LensPosition": 1.365074,
+     "Lux": 265.131134,
+     "SensorTemperature": 32.0
+    }
+   }
+  },
+  "n6": {
+   "tags": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cc_visible": [
+    "dark_skin",
+    "light_skin",
+    "blue_sky",
+    "foliage",
+    "blue_flower",
+    "bluish_green",
+    "orange",
+    "purplish_blue",
+    "moderate_red",
+    "purple",
+    "yellow_green",
+    "orange_yellow"
+   ],
+   "cc_coverage": "12/24",
+   "flat_frames": [],
+   "shading": "none (OpenMV RAW: on-chip lens shading correction is on, OQ-54)",
+   "stops": {
+    "stop_+0": {
+     "cc_used": 12,
+     "cc_per_patch": {
+      "dark_skin": {
+       "ref_L": 37.5,
+       "fit_L": 38.4,
+       "loo_de": 1.38
+      },
+      "light_skin": {
+       "ref_L": 64.7,
+       "fit_L": 64.4,
+       "loo_de": 0.7
+      },
+      "blue_sky": {
+       "ref_L": 49.3,
+       "fit_L": 49.1,
+       "loo_de": 0.46
+      },
+      "foliage": {
+       "ref_L": 43.5,
+       "fit_L": 43.2,
+       "loo_de": 0.91
+      },
+      "blue_flower": {
+       "ref_L": 54.9,
+       "fit_L": 54.2,
+       "loo_de": 1.14
+      },
+      "bluish_green": {
+       "ref_L": 70.5,
+       "fit_L": 70.9,
+       "loo_de": 1.98
+      },
+      "orange": {
+       "ref_L": 62.7,
+       "fit_L": 61.2,
+       "loo_de": 4.61
+      },
+      "purplish_blue": {
+       "ref_L": 39.4,
+       "fit_L": 39.6,
+       "loo_de": 1.88
+      },
+      "moderate_red": {
+       "ref_L": 50.6,
+       "fit_L": 51.3,
+       "loo_de": 1.85
+      },
+      "purple": {
+       "ref_L": 30.1,
+       "fit_L": 30.0,
+       "loo_de": 1.08
+      },
+      "yellow_green": {
+       "ref_L": 71.8,
+       "fit_L": 72.5,
+       "loo_de": 1.55
+      },
+      "orange_yellow": {
+       "ref_L": 71.5,
+       "fit_L": 71.2,
+       "loo_de": 2.18
+      }
+     },
+     "frames": [
+      "stop_+0_r0.bayer",
+      "stop_+0_r1.bayer",
+      "stop_+0_r2.bayer"
+     ],
+     "matrix": [
+      [
+       0.508553,
+       0.113049,
+       -0.044299
+      ],
+      [
+       0.13174,
+       0.508426,
+       -0.185214
+      ],
+      [
+       0.020225,
+       -0.216967,
+       0.99874
+      ]
+     ],
+     "light_plane": {
+      "log_slope_per_1000px": [
+       -0.00508,
+       -0.20605
+      ],
+      "pct_across_chart_y": 10.0,
+      "pct_across_chart_x": 1.2
+     },
+     "v3_srgb8": {
+      "gray_black": [
+       72.9,
+       73.3,
+       73.5
+      ],
+      "gray_light": [
+       160.2,
+       160.5,
+       161.4
+      ],
+      "gray_light2": [
+       139.4,
+       139.9,
+       141.7
+      ],
+      "gray_mid": [
+       120.4,
+       124.4,
+       124.2
+      ],
+      "red": [
+       142.6,
+       50.3,
+       54.1
+      ],
+      "red_orange": [
+       166.3,
+       67.5,
+       45.1
+      ],
+      "orange": [
+       172.4,
+       106.7,
+       43.8
+      ],
+      "yellow": [
+       178.9,
+       149.5,
+       53.7
+      ],
+      "green": [
+       99.2,
+       144.0,
+       109.1
+      ],
+      "cyan": [
+       76.0,
+       152.6,
+       188.4
+      ],
+      "blue": [
+       55.9,
+       88.7,
+       152.6
+      ],
+      "magenta": [
+       177.0,
+       64.7,
+       126.7
+      ]
+     },
+     "out_of_srgb": [],
+     "over_range": [],
+     "clipped": [],
+     "fit": {
+      "linear3x3": {
+       "n": 12,
+       "median": 1.46,
+       "p90": 2.16,
+       "max": 4.61
+      },
+      "rootpoly2": {
+       "n": 12,
+       "median": 2.06,
+       "p90": 5.24,
+       "max": 5.74
+      }
+     },
+     "model": "linear3x3",
+     "v3_lab": {
+      "gray_black": [
+       31.12,
+       -0.16,
+       -0.21
+      ],
+      "gray_light": [
+       66.05,
+       0.01,
+       -0.55
+      ],
+      "gray_light2": [
+       58.21,
+       0.09,
+       -1.03
+      ],
+      "gray_mid": [
+       51.81,
+       -1.59,
+       -0.43
+      ],
+      "red": [
+       35.21,
+       39.96,
+       19.63
+      ],
+      "red_orange": [
+       42.41,
+       40.59,
+       34.68
+      ],
+      "orange": [
+       51.67,
+       23.15,
+       45.09
+      ],
+      "yellow": [
+       63.3,
+       3.69,
+       52.46
+      ],
+      "green": [
+       55.79,
+       -21.59,
+       13.52
+      ],
+      "cyan": [
+       59.31,
+       -16.46,
+       -26.3
+      ],
+      "blue": [
+       37.69,
+       4.08,
+       -39.29
+      ],
+      "magenta": [
+       45.39,
+       50.86,
+       -10.39
+      ]
+     },
+     "grey_ab_3x3": {},
+     "red_snr_db": {
+      "v3_red": 36.9
+     },
+     "level_gray_light": 0.597
+    },
+    "stop_-0.5": {
+     "cc_used": 12,
+     "cc_per_patch": {
+      "dark_skin": {
+       "ref_L": 37.5,
+       "fit_L": 38.1,
+       "loo_de": 1.04
+      },
+      "light_skin": {
+       "ref_L": 64.7,
+       "fit_L": 65.0,
+       "loo_de": 0.63
+      },
+      "blue_sky": {
+       "ref_L": 49.3,
+       "fit_L": 49.1,
+       "loo_de": 0.31
+      },
+      "foliage": {
+       "ref_L": 43.5,
+       "fit_L": 42.9,
+       "loo_de": 1.09
+      },
+      "blue_flower": {
+       "ref_L": 54.9,
+       "fit_L": 54.3,
+       "loo_de": 0.99
+      },
+      "bluish_green": {
+       "ref_L": 70.5,
+       "fit_L": 71.0,
+       "loo_de": 2.35
+      },
+      "orange": {
+       "ref_L": 62.7,
+       "fit_L": 61.4,
+       "loo_de": 5.29
+      },
+      "purplish_blue": {
+       "ref_L": 39.4,
+       "fit_L": 39.7,
+       "loo_de": 1.61
+      },
+      "moderate_red": {
+       "ref_L": 50.6,
+       "fit_L": 51.3,
+       "loo_de": 1.7
+      },
+      "purple": {
+       "ref_L": 30.1,
+       "fit_L": 29.9,
+       "loo_de": 1.22
+      },
+      "yellow_green": {
+       "ref_L": 71.8,
+       "fit_L": 72.5,
+       "loo_de": 1.42
+      },
+      "orange_yellow": {
+       "ref_L": 71.5,
+       "fit_L": 71.3,
+       "loo_de": 2.62
+      }
+     },
+     "frames": [
+      "stop_-0.5_r0.bayer",
+      "stop_-0.5_r1.bayer",
+      "stop_-0.5_r2.bayer"
+     ],
+     "matrix": [
+      [
+       0.75368,
+       0.174464,
+       -0.060811
+      ],
+      [
+       0.191339,
+       0.742331,
+       -0.280302
+      ],
+      [
+       0.038329,
+       -0.311997,
+       1.49352
+      ]
+     ],
+     "light_plane": {
+      "log_slope_per_1000px": [
+       -0.00163,
+       -0.19491
+      ],
+      "pct_across_chart_y": 9.4,
+      "pct_across_chart_x": 0.4
+     },
+     "v3_srgb8": {
+      "gray_black": [
+       73.7,
+       73.6,
+       74.5
+      ],
+      "gray_light": [
+       163.6,
+       163.3,
+       165.2
+      ],
+      "gray_light2": [
+       141.1,
+       142.0,
+       143.6
+      ],
+      "gray_mid": [
+       121.6,
+       125.8,
+       125.5
+      ],
+      "red": [
+       144.3,
+       51.8,
+       54.9
+      ],
+      "red_orange": [
+       168.7,
+       69.0,
+       47.0
+      ],
+      "orange": [
+       175.2,
+       108.8,
+       45.2
+      ],
+      "yellow": [
+       182.2,
+       152.5,
+       53.3
+      ],
+      "green": [
+       100.3,
+       145.5,
+       109.8
+      ],
+      "cyan": [
+       75.0,
+       154.3,
+       191.4
+      ],
+      "blue": [
+       57.3,
+       88.9,
+       153.6
+      ],
+      "magenta": [
+       177.7,
+       65.9,
+       127.6
+      ]
+     },
+     "out_of_srgb": [],
+     "over_range": [],
+     "clipped": [],
+     "fit": {
+      "linear3x3": {
+       "n": 12,
+       "median": 1.32,
+       "p90": 2.59,
+       "max": 5.29
+      },
+      "rootpoly2": {
+       "n": 12,
+       "median": 2.17,
+       "p90": 5.25,
+       "max": 5.77
+      }
+     },
+     "model": "linear3x3",
+     "v3_lab": {
+      "gray_black": [
+       31.31,
+       0.2,
+       -0.53
+      ],
+      "gray_light": [
+       67.17,
+       0.37,
+       -0.95
+      ],
+      "gray_light2": [
+       58.99,
+       -0.15,
+       -0.97
+      ],
+      "gray_mid": [
+       52.36,
+       -1.68,
+       -0.43
+      ],
+      "red": [
+       35.81,
+       39.99,
+       19.95
+      ],
+      "red_orange": [
+       43.1,
+       40.88,
+       34.52
+      ],
+      "orange": [
+       52.56,
+       23.24,
+       45.47
+      ],
+      "yellow": [
+       64.42,
+       3.62,
+       53.83
+      ],
+      "green": [
+       56.33,
+       -21.85,
+       13.85
+      ],
+      "cyan": [
+       59.89,
+       -16.77,
+       -27.08
+      ],
+      "blue": [
+       37.87,
+       4.59,
+       -39.61
+      ],
+      "magenta": [
+       45.71,
+       50.69,
+       -10.47
+      ]
+     },
+     "grey_ab_3x3": {},
+     "red_snr_db": {
+      "v3_red": 34.8
+     },
+     "level_gray_light": 0.429
+    }
+   },
+   "processed": {
+    "jpeg": "openmv_n6_image_20261006T223939Z.jpg",
+    "patches": 12,
+    "de2000_median": 7.64,
+    "de2000_colours": 7.64,
+    "grey_ab": {},
+    "per_patch": {
+     "dark_skin": 6.8,
+     "light_skin": 3.88,
+     "blue_sky": 5.64,
+     "foliage": 9.59,
+     "blue_flower": 8.82,
+     "bluish_green": 7.44,
+     "orange": 7.13,
+     "purplish_blue": 4.66,
+     "moderate_red": 8.15,
+     "purple": 9.33,
+     "yellow_green": 8.99,
+     "orange_yellow": 7.84
+    },
+    "clipped_jpeg": [],
+    "clipped_raw_normal": [
+     "chart_r1c2",
+     "chart_r1c6",
+     "chart_r2c5",
+     "chart_r2c6",
+     "cyan",
+     "gray_light",
+     "gray_light2",
+     "gray_mid",
+     "green",
+     "orange",
+     "yellow"
+    ],
+    "exposure_normal": {
+     "exposure_us": 16648,
+     "framesize": "HD",
+     "gain_db": 8.58697,
+     "jpeg_quality": 90,
+     "mount_rotation_deg": 0,
+     "pixel_format": "RGB565"
+    }
+   },
+   "v3_de_vs_imx708": {
+    "median": 3.03,
+    "max": 5.27,
+    "per_patch": {
+     "gray_black": 1.21,
+     "gray_light": 3.91,
+     "gray_light2": 3.19,
+     "gray_mid": 4.02,
+     "red": 2.87,
+     "red_orange": 3.74,
+     "orange": 5.15,
+     "yellow": 5.27,
+     "green": 1.72,
+     "cyan": 1.73,
+     "blue": 0.45,
+     "magenta": 1.03
+    }
+   }
+  },
+  "ae3": {
+   "tags": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cc_visible": [
+    "dark_skin",
+    "light_skin",
+    "blue_sky",
+    "foliage",
+    "blue_flower",
+    "bluish_green",
+    "orange",
+    "purplish_blue",
+    "moderate_red",
+    "purple",
+    "yellow_green",
+    "orange_yellow",
+    "blue",
+    "green",
+    "red",
+    "yellow",
+    "magenta",
+    "cyan",
+    "white",
+    "neutral_8",
+    "neutral_65",
+    "neutral_5",
+    "neutral_35"
+   ],
+   "cc_coverage": "23/24",
+   "flat_frames": [],
+   "shading": "none (OpenMV RAW: on-chip lens shading correction is on, OQ-54)",
+   "stops": {
+    "stop_+0": {
+     "cc_used": 23,
+     "cc_per_patch": {
+      "dark_skin": {
+       "ref_L": 37.5,
+       "fit_L": 37.9,
+       "loo_de": 0.96
+      },
+      "light_skin": {
+       "ref_L": 64.7,
+       "fit_L": 65.3,
+       "loo_de": 1.21
+      },
+      "blue_sky": {
+       "ref_L": 49.3,
+       "fit_L": 49.0,
+       "loo_de": 0.5
+      },
+      "foliage": {
+       "ref_L": 43.5,
+       "fit_L": 42.4,
+       "loo_de": 1.25
+      },
+      "blue_flower": {
+       "ref_L": 54.9,
+       "fit_L": 54.6,
+       "loo_de": 1.23
+      },
+      "bluish_green": {
+       "ref_L": 70.5,
+       "fit_L": 71.4,
+       "loo_de": 1.34
+      },
+      "orange": {
+       "ref_L": 62.7,
+       "fit_L": 61.2,
+       "loo_de": 4.03
+      },
+      "purplish_blue": {
+       "ref_L": 39.4,
+       "fit_L": 39.0,
+       "loo_de": 0.76
+      },
+      "moderate_red": {
+       "ref_L": 50.6,
+       "fit_L": 51.4,
+       "loo_de": 1.12
+      },
+      "purple": {
+       "ref_L": 30.1,
+       "fit_L": 29.1,
+       "loo_de": 1.4
+      },
+      "yellow_green": {
+       "ref_L": 71.8,
+       "fit_L": 71.8,
+       "loo_de": 0.49
+      },
+      "orange_yellow": {
+       "ref_L": 71.5,
+       "fit_L": 70.6,
+       "loo_de": 3.28
+      },
+      "blue": {
+       "ref_L": 28.4,
+       "fit_L": 28.4,
+       "loo_de": 1.5
+      },
+      "green": {
+       "ref_L": 54.4,
+       "fit_L": 55.6,
+       "loo_de": 2.06
+      },
+      "red": {
+       "ref_L": 42.4,
+       "fit_L": 43.3,
+       "loo_de": 2.35
+      },
+      "yellow": {
+       "ref_L": 81.8,
+       "fit_L": 81.3,
+       "loo_de": 2.48
+      },
+      "magenta": {
+       "ref_L": 50.6,
+       "fit_L": 51.3,
+       "loo_de": 1.15
+      },
+      "cyan": {
+       "ref_L": 49.6,
+       "fit_L": 51.6,
+       "loo_de": 4.94
+      },
+      "white": {
+       "ref_L": 95.2,
+       "fit_L": 95.9,
+       "loo_de": 1.27
+      },
+      "neutral_8": {
+       "ref_L": 81.3,
+       "fit_L": 80.9,
+       "loo_de": 1.9
+      },
+      "neutral_65": {
+       "ref_L": 66.9,
+       "fit_L": 66.6,
+       "loo_de": 0.78
+      },
+      "neutral_5": {
+       "ref_L": 50.8,
+       "fit_L": 49.9,
+       "loo_de": 1.32
+      },
+      "neutral_35": {
+       "ref_L": 35.6,
+       "fit_L": 34.4,
+       "loo_de": 1.98
+      }
+     },
+     "frames": [
+      "stop_+0_r0.bayer",
+      "stop_+0_r1.bayer",
+      "stop_+0_r2.bayer"
+     ],
+     "matrix": [
+      [
+       0.518524,
+       0.122175,
+       -0.026369
+      ],
+      [
+       0.180482,
+       0.61182,
+       -0.236109
+      ],
+      [
+       0.051336,
+       -0.234581,
+       1.272361
+      ]
+     ],
+     "light_plane": {
+      "log_slope_per_1000px": [
+       0.00774,
+       -0.15411
+      ],
+      "pct_across_chart_y": 23.4,
+      "pct_across_chart_x": 1.8
+     },
+     "v3_srgb8": {
+      "gray_black": [
+       74.7,
+       73.5,
+       75.0
+      ],
+      "gray_light": [
+       169.2,
+       171.1,
+       167.9
+      ],
+      "gray_light2": [
+       146.8,
+       147.7,
+       147.1
+      ],
+      "gray_mid": [
+       128.6,
+       131.6,
+       131.5
+      ],
+      "red": [
+       152.2,
+       53.3,
+       58.2
+      ],
+      "red_orange": [
+       176.4,
+       72.9,
+       50.1
+      ],
+      "orange": [
+       183.0,
+       113.7,
+       48.3
+      ],
+      "yellow": [
+       190.3,
+       160.0,
+       54.0
+      ],
+      "green": [
+       100.9,
+       145.8,
+       107.7
+      ],
+      "cyan": [
+       79.2,
+       157.1,
+       192.9
+      ],
+      "blue": [
+       57.2,
+       89.2,
+       155.0
+      ],
+      "magenta": [
+       182.2,
+       69.3,
+       130.2
+      ]
+     },
+     "out_of_srgb": [],
+     "over_range": [],
+     "clipped": [],
+     "fit": {
+      "linear3x3": {
+       "n": 23,
+       "median": 1.32,
+       "p90": 3.12,
+       "max": 4.94
+      },
+      "rootpoly2": {
+       "n": 23,
+       "median": 1.35,
+       "p90": 1.98,
+       "max": 2.51
+      }
+     },
+     "model": "linear3x3",
+     "v3_lab": {
+      "gray_black": [
+       31.39,
+       0.75,
+       -0.73
+      ],
+      "gray_light": [
+       69.8,
+       -1.14,
+       1.38
+      ],
+      "gray_light2": [
+       61.12,
+       -0.45,
+       0.19
+      ],
+      "gray_mid": [
+       54.72,
+       -1.17,
+       -0.35
+      ],
+      "red": [
+       37.56,
+       42.34,
+       20.48
+      ],
+      "red_orange": [
+       45.17,
+       42.03,
+       35.48
+      ],
+      "orange": [
+       54.77,
+       24.14,
+       46.63
+      ],
+      "yellow": [
+       67.22,
+       3.32,
+       56.58
+      ],
+      "green": [
+       56.41,
+       -22.05,
+       15.17
+      ],
+      "cyan": [
+       60.94,
+       -16.89,
+       -26.32
+      ],
+      "blue": [
+       38.02,
+       4.82,
+       -40.21
+      ],
+      "magenta": [
+       47.09,
+       50.91,
+       -9.9
+      ]
+     },
+     "grey_ab_3x3": {
+      "white": [
+       -1.55,
+       2.12
+      ],
+      "neutral_8": [
+       -1.73,
+       -0.31
+      ],
+      "neutral_65": [
+       -1.24,
+       -0.14
+      ],
+      "neutral_5": [
+       -0.56,
+       0.59
+      ],
+      "neutral_35": [
+       0.44,
+       -1.19
+      ]
+     },
+     "red_snr_db": {
+      "cc_red": 37.4,
+      "cc_neutral_5": 33.5,
+      "cc_neutral_35": 28.3,
+      "v3_red": 37.7
+     },
+     "level_gray_light": 0.595
+    },
+    "stop_-0.5": {
+     "cc_used": 23,
+     "cc_per_patch": {
+      "dark_skin": {
+       "ref_L": 37.5,
+       "fit_L": 37.9,
+       "loo_de": 1.12
+      },
+      "light_skin": {
+       "ref_L": 64.7,
+       "fit_L": 66.0,
+       "loo_de": 1.49
+      },
+      "blue_sky": {
+       "ref_L": 49.3,
+       "fit_L": 48.7,
+       "loo_de": 0.87
+      },
+      "foliage": {
+       "ref_L": 43.5,
+       "fit_L": 42.4,
+       "loo_de": 1.54
+      },
+      "blue_flower": {
+       "ref_L": 54.9,
+       "fit_L": 55.4,
+       "loo_de": 1.63
+      },
+      "bluish_green": {
+       "ref_L": 70.5,
+       "fit_L": 70.5,
+       "loo_de": 1.33
+      },
+      "orange": {
+       "ref_L": 62.7,
+       "fit_L": 61.4,
+       "loo_de": 2.03
+      },
+      "purplish_blue": {
+       "ref_L": 39.4,
+       "fit_L": 39.4,
+       "loo_de": 0.25
+      },
+      "moderate_red": {
+       "ref_L": 50.6,
+       "fit_L": 50.9,
+       "loo_de": 1.29
+      },
+      "purple": {
+       "ref_L": 30.1,
+       "fit_L": 29.3,
+       "loo_de": 1.98
+      },
+      "yellow_green": {
+       "ref_L": 71.8,
+       "fit_L": 72.3,
+       "loo_de": 0.64
+      },
+      "orange_yellow": {
+       "ref_L": 71.5,
+       "fit_L": 72.0,
+       "loo_de": 1.23
+      },
+      "blue": {
+       "ref_L": 28.4,
+       "fit_L": 28.5,
+       "loo_de": 0.38
+      },
+      "green": {
+       "ref_L": 54.4,
+       "fit_L": 54.2,
+       "loo_de": 1.61
+      },
+      "red": {
+       "ref_L": 42.4,
+       "fit_L": 42.0,
+       "loo_de": 1.45
+      },
+      "yellow": {
+       "ref_L": 81.8,
+       "fit_L": 82.6,
+       "loo_de": 1.84
+      },
+      "magenta": {
+       "ref_L": 50.6,
+       "fit_L": 51.5,
+       "loo_de": 2.35
+      },
+      "cyan": {
+       "ref_L": 49.6,
+       "fit_L": 50.1,
+       "loo_de": 2.49
+      },
+      "white": {
+       "ref_L": 95.2,
+       "fit_L": 96.3,
+       "loo_de": 1.07
+      },
+      "neutral_8": {
+       "ref_L": 81.3,
+       "fit_L": 81.4,
+       "loo_de": 1.34
+      },
+      "neutral_65": {
+       "ref_L": 66.9,
+       "fit_L": 67.2,
+       "loo_de": 1.11
+      },
+      "neutral_5": {
+       "ref_L": 50.8,
+       "fit_L": 50.4,
+       "loo_de": 1.02
+      },
+      "neutral_35": {
+       "ref_L": 35.6,
+       "fit_L": 34.6,
+       "loo_de": 2.37
+      }
+     },
+     "frames": [
+      "stop_-0.5_r0.bayer",
+      "stop_-0.5_r1.bayer",
+      "stop_-0.5_r2.bayer"
+     ],
+     "matrix": [
+      [
+       0.179549,
+       -0.218968,
+       -0.380651
+      ],
+      [
+       -0.264081,
+       0.448971,
+       -0.507291
+      ],
+      [
+       0.379497,
+       -0.173268,
+       2.222364
+      ],
+      [
+       1.292588,
+       0.886212,
+       0.860081
+      ],
+      [
+       -0.154056,
+       -0.04053,
+       -0.518675
+      ],
+      [
+       -0.39183,
+       -0.197583,
+       -0.279687
+      ]
+     ],
+     "light_plane": {
+      "log_slope_per_1000px": [
+       -0.00192,
+       -0.15947
+      ],
+      "pct_across_chart_y": 24.3,
+      "pct_across_chart_x": 0.4
+     },
+     "v3_srgb8": {
+      "gray_black": [
+       74.2,
+       72.6,
+       73.6
+      ],
+      "gray_light": [
+       170.8,
+       170.9,
+       168.0
+      ],
+      "gray_light2": [
+       147.8,
+       148.1,
+       146.6
+      ],
+      "gray_mid": [
+       130.0,
+       132.7,
+       131.6
+      ],
+      "red": [
+       148.5,
+       50.4,
+       54.1
+      ],
+      "red_orange": [
+       174.4,
+       70.8,
+       48.0
+      ],
+      "orange": [
+       185.3,
+       113.7,
+       56.8
+      ],
+      "yellow": [
+       195.6,
+       160.4,
+       67.8
+      ],
+      "green": [
+       96.2,
+       144.7,
+       104.1
+      ],
+      "cyan": [
+       65.0,
+       155.0,
+       190.2
+      ],
+      "blue": [
+       58.4,
+       88.9,
+       155.4
+      ],
+      "magenta": [
+       179.8,
+       69.7,
+       128.5
+      ]
+     },
+     "out_of_srgb": [],
+     "over_range": [],
+     "clipped": [],
+     "fit": {
+      "linear3x3": {
+       "n": 23,
+       "median": 1.42,
+       "p90": 3.67,
+       "max": 5.12
+      },
+      "rootpoly2": {
+       "n": 23,
+       "median": 1.34,
+       "p90": 2.28,
+       "max": 2.49
+      }
+     },
+     "model": "rootpoly2",
+     "v3_lab": {
+      "gray_black": [
+       31.03,
+       0.87,
+       -0.35
+      ],
+      "gray_light": [
+       69.86,
+       -0.42,
+       1.47
+      ],
+      "gray_light2": [
+       61.29,
+       -0.32,
+       0.72
+      ],
+      "gray_mid": [
+       55.17,
+       -1.19,
+       0.22
+      ],
+      "red": [
+       36.32,
+       42.06,
+       21.29
+      ],
+      "red_orange": [
+       44.42,
+       42.2,
+       35.68
+      ],
+      "orange": [
+       55.14,
+       25.43,
+       43.05
+      ],
+      "yellow": [
+       67.95,
+       6.0,
+       51.74
+      ],
+      "green": [
+       55.74,
+       -23.68,
+       16.23
+      ],
+      "cyan": [
+       59.72,
+       -19.37,
+       -26.74
+      ],
+      "blue": [
+       38.03,
+       5.34,
+       -40.4
+      ],
+      "magenta": [
+       46.7,
+       49.81,
+       -9.45
+      ]
+     },
+     "grey_ab_3x3": {
+      "white": [
+       -1.26,
+       1.64
+      ],
+      "neutral_8": [
+       -1.43,
+       -0.5
+      ],
+      "neutral_65": [
+       -1.37,
+       -0.31
+      ],
+      "neutral_5": [
+       -0.48,
+       0.28
+      ],
+      "neutral_35": [
+       0.82,
+       -1.24
+      ]
+     },
+     "red_snr_db": {
+      "cc_red": 34.8,
+      "cc_neutral_5": 30.3,
+      "cc_neutral_35": 25.4,
+      "v3_red": 35.3
+     },
+     "level_gray_light": 0.422
+    }
+   },
+   "processed": {
+    "jpeg": "openmv_ae3_image_20261006T223939Z.jpg",
+    "patches": 23,
+    "de2000_median": 9.47,
+    "de2000_colours": 9.89,
+    "grey_ab": {
+     "neutral_8": [
+      -6.2,
+      -5.1
+     ],
+     "neutral_65": [
+      -5.6,
+      -2.9
+     ],
+     "neutral_5": [
+      -5.0,
+      -0.0
+     ],
+     "neutral_35": [
+      -4.2,
+      -0.8
+     ]
+    },
+    "per_patch": {
+     "dark_skin": 9.47,
+     "light_skin": 12.01,
+     "blue_sky": 7.39,
+     "foliage": 6.35,
+     "blue_flower": 11.41,
+     "bluish_green": 10.79,
+     "orange": 8.91,
+     "purplish_blue": 7.04,
+     "moderate_red": 10.84,
+     "purple": 11.4,
+     "yellow_green": 11.15,
+     "orange_yellow": 9.76,
+     "blue": 4.93,
+     "green": 10.02,
+     "red": 8.89,
+     "yellow": 12.04,
+     "magenta": 12.22,
+     "cyan": 9.52,
+     "white": 1.9,
+     "neutral_8": 8.82,
+     "neutral_65": 6.74,
+     "neutral_5": 6.6,
+     "neutral_35": 6.67
+    },
+    "clipped_jpeg": [],
+    "clipped_raw_normal": [
+     "chart_r1c6",
+     "chart_r3c4",
+     "chart_r4c1",
+     "chart_r4c2",
+     "cyan",
+     "gray_light",
+     "gray_light2",
+     "yellow"
+    ],
+    "exposure_normal": {
+     "exposure_us": 16648,
+     "framesize": "HD",
+     "gain_db": 1.0230504,
+     "jpeg_quality": 90,
+     "mount_rotation_deg": 0,
+     "pixel_format": "RGB565"
+    }
+   },
+   "v3_de_vs_imx708": {
+    "median": 1.46,
+    "max": 2.59,
+    "per_patch": {
+     "gray_black": 2.17,
+     "gray_light": 2.57,
+     "gray_light2": 2.17,
+     "gray_mid": 1.58,
+     "red": 0.97,
+     "red_orange": 1.34,
+     "orange": 2.44,
+     "yellow": 2.59,
+     "green": 1.26,
+     "cyan": 1.32,
+     "blue": 0.31,
+     "magenta": 0.88
+    }
+   }
+  }
+ },
+ "imx708_stop_consistency": 0.11
+}

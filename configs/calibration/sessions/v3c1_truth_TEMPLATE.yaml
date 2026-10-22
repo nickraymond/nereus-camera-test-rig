@@ -1,0 +1,24 @@
+# Card truth session — copy to v3c1_truth_<condition>_<date>.yaml and fill in after the shoot.
+# Procedure: docs/v3_card_truth_capture.md. Run: python -m host_tools.card_truth <this file>
+
+session: v3c1_truth_dry_YYYYMMDD
+condition: dry                         # dry -> `measured:`; wet -> `measured_wet:`
+card: configs/cards/nereus_v3_c1.yaml
+date_utc: null                         # e.g. '2026-10-05T03:10Z' (capture time); null = now
+frames: data/v3_truth/c1_dry_YYYYMMDD/cards     # the 5 locked DNGs
+flat: data/v3_truth/c1_dry_YYYYMMDD/flat        # optional flat-field DNGs (matte board); null = none
+light: {name: '2x 5300 K LED panels', cct_k: 5300, cri: null, setup: '45 deg left/right, ~1 m'}
+
+chart:
+  config: configs/charts/colorchecker_classic_24.yaml           # Nick's ColorChecker Classic (10/6)
+  reference: configs/charts/colorchecker_classic_24_post2014_lab_d50.csv   # published, Lab D50
+  # Reference patch names row by row as the chart is FRAMED (top-left first). Leave null to use
+  # the CSV's own order (only right if the CSV is row-major in the framed orientation).
+  order: null
+  # Where to look for the chart: a box in the V3 card's canonical px (10 px/mm from the card's
+  # top-left). ColorChecker landscape LEFT of the card, ~2 cm gap, vertically centred on it
+  # (see docs/card_truth/LADDER_colorchecker.md for why not below the card).
+  region: [-3300, -400, -100, 3100]
+  # Fallback if it is not found: the 4 corner-patch centres in RAW px, order r1c1, r1c6, r4c6, r4c1
+  # (read them off the overlay PNG). When set, `region` is ignored.
+  quad_raw: null
