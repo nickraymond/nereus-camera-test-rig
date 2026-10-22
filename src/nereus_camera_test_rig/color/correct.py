@@ -93,7 +93,7 @@ COLUMNS = {  # method → the name used in sheets and reports
     "raw_card_wb": "RAW + card WB",
     "raw_card_slope_wb": "RAW + card slope WB",
     "raw_card_wb_haze": "RAW + card WB − haze",
-    "raw_depth_wb_haze": "RAW + depth WB − haze (no card)",
+    "raw_depth_wb_haze": "RAW + depth WB − haze (no card, default)",
     "grvi_cheeca_v3": "GRVI cheeca_v3 (backend)",
     "raw_depth_wb_haze_loso": "RAW + depth WB − haze (no card, leave-one-sweep-out)",
     "raw_card_wb_ccm": "RAW + card WB + depth matrix (v0.3)",
