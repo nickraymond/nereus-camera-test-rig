@@ -540,6 +540,19 @@ def append_pose(run_dir: Path, n: int, block: str, line: dict) -> None:
                 + ",".join(files[c] for c in CAMERAS) + "\n")
 
 
+def clip_with_led(led, verdict_mode: str | None, led_low: bool, record):
+    """Nick 10/20: the LED pulses while a clip records (OK verdict only; a fault code or low
+    battery keeps showing), and goes back to the verdict's steady ON afterwards, even if
+    ``record`` raises. No self-check verdict (no --self-check) = the LED is left alone."""
+    if not (led and verdict_mode):
+        return record()
+    led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low, True))
+    try:
+        return record()
+    finally:
+        led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low))
+
+
 def run_video_clip(run_dir: Path, n: int, seconds: float, extra: list[str] | None = None) -> dict:
     """One synchronized clip (scripts/sync_video.py) into <run>/video/clipNNN; its summary.
     ``extra``: the phase's own sync_video args (pool 2); the summary records them, each board's
@@ -787,12 +800,12 @@ def run(args) -> int:
             f"{ph['start_min']:g}-{ph['end_min']:g}"
             f"{' ' + ' '.join(ph['args']) if ph.get('args') else ''}" for ph in program)
             + f" (sha256 {manifest['program_sha256'][:12]})")
-    verdict_mode, verdict_t = None, 0.0
+    verdict_mode, led_low = None, False
     if args.self_check:
         say("  self-check: IMX708 (1), N6 (2), AE3 (3); read-only, no fixes "
             "(on a fault Nick switches off/on)")
         sc = pool_selfcheck.run_check(SERIALS)
-        verdict_mode, verdict_t = pool_selfcheck.led_mode(sc), time.monotonic()
+        verdict_mode = pool_selfcheck.led_mode(sc)
         manifest["self_check"] = sc
         atomic_json(run_dir / "run_manifest.json", manifest)
         led.set_mode(verdict_mode)
@@ -865,7 +878,9 @@ def run(args) -> int:
             if 0 < wait < phase["period_s"]:
                 time.sleep(wait)
             line["clip_grid_s"] = round(phase["start_min"] * 60 + k * phase["period_s"], 1)
-            line["video"] = run_video_clip(run_dir, n, phase["clip_s"], phase.get("args"))
+            line["video"] = clip_with_led(  # the LED pulses while the clip records
+                led, verdict_mode, led_low,
+                lambda: run_video_clip(run_dir, n, phase["clip_s"], phase.get("args")))
         elif phase and phase["name"] in ("cal_a", "cal_b"):
             line.update(run_one_set(n, run_dir, cal_config, run_id, cams_now,
                                     ("--sync-raw-only",)))
@@ -920,10 +935,9 @@ def run(args) -> int:
         else:
             vbat_hist.clear()
         if led and verdict_mode:  # --self-check: the boot verdict, only low battery overrides
-            low = pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")), None,
-                                  args.low_vbat_mv) == "lowbatt"
-            led.set_mode(pool_selfcheck.verdict_led_mode(
-                verdict_mode, time.monotonic() - verdict_t, low))
+            led_low = pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")), None,
+                                      args.low_vbat_mv) == "lowbatt"
+            led.set_mode(pool_selfcheck.verdict_led_mode(verdict_mode, led_low))
             line["led"] = led.mode
         elif led:
             led.set_mode(pool_led.decide(led.mode, vbat_hist, bool(p_now.get("on_battery")),
@@ -1060,9 +1074,10 @@ def main() -> int:
     r.add_argument("--led-codes", action="store_true",
                    help="drive Nick's LED codes A/B/C (off by default: LED left to the firmware)")
     r.add_argument("--self-check", action="store_true",
-                   help="boot camera self-check before set 1, verdict on the UPS LED: slow "
-                        "blink = all OK, N quick flashes = camera N failed (1 IMX708, 2 N6, "
-                        "3 AE3). Read-only: no power cycle, no retries (Nick 10/15, plan A)")
+                   help="boot camera self-check before set 1, verdict on the UPS LED: 5 slow "
+                        "blinks then steady = all OK (pulsing while a video clip records), N "
+                        "quick flashes = camera N failed (1 IMX708, 2 N6, 3 AE3). Read-only: no "
+                        "power cycle, no retries (Nick 10/15, plan A; REC pulsing 10/20)")
     r.add_argument("--sync", action="store_true",
                    help="synchronized sets: all three cameras shoot the same moment")
     r.add_argument("--program", default="",

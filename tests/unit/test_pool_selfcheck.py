@@ -97,12 +97,13 @@ def test_check_imx708_listed_open_in_use():
     assert sc.check_imx708(run=run_busy)["why"] == "in_use"
 
 
-def test_verdict_led_mode_low_battery_wins_ok_turns_steady_fault_stays():
-    assert sc.verdict_led_mode("verdict_ok", 10, True) == "lowbatt"
-    assert sc.verdict_led_mode("fault:3", 10, True) == "lowbatt"
-    assert sc.verdict_led_mode("verdict_ok", 599, False) == "verdict_ok"
-    assert sc.verdict_led_mode("verdict_ok", 600, False) == "ok"
-    assert sc.verdict_led_mode("fault:3", 7200, False) == "fault:3"
+def test_verdict_led_mode_low_battery_wins_recording_pulses_fault_stays():
+    assert sc.verdict_led_mode("verdict_ok", True) == "lowbatt"
+    assert sc.verdict_led_mode("fault:3", True) == "lowbatt"
+    assert sc.verdict_led_mode("verdict_ok", True, recording=True) == "lowbatt"   # B beats REC
+    assert sc.verdict_led_mode("verdict_ok", False) == "verdict_ok"  # driver: blinks, steady
+    assert sc.verdict_led_mode("verdict_ok", False, recording=True) == "recording"
+    assert sc.verdict_led_mode("fault:3", False, recording=True) == "fault:3"  # code stays
 
 
 class FakeWriter:
@@ -152,7 +153,7 @@ def test_ok_blink_then_steady(monkeypatch):
     d = led.LedDriver(writer=w, mode="verdict_ok")
     d.start()
     time.sleep(0.45)
-    d.set_mode("ok")                                # the loop's 10-min switch to steady
+    d.set_mode("ok")                                # a non-OK-family mode cuts the blinks
     time.sleep(0.3)
     d.stop(final=None)
     states = [s for _, s in w.writes]
@@ -198,3 +199,69 @@ def test_led_writes_wait_only_briefly_for_the_shared_lock(monkeypatch):
     monkeypatch.setattr(led, "ups_cli", lambda *a, **k: seen.update(k) or "")
     led.set_led(led.LED_ON)
     assert seen["lock_timeout_s"] == led.LED_LOCK_WAIT_S <= 0.25
+
+
+def _seq(monkeypatch, on=0.03, off=0.03, solid=0.2):
+    monkeypatch.setattr(led, "OK_ON_S", on)
+    monkeypatch.setattr(led, "OK_OFF_S", off)
+    monkeypatch.setattr(led, "OK_BLINKS", 3)
+    monkeypatch.setattr(led, "READY_SOLID_S", solid)
+    w = FakeWriter()
+    return w, led.LedDriver(writer=w, mode="verdict_ok")
+
+
+def test_ok_blinks_play_n_times_then_steady_once(monkeypatch):
+    """Nick 10/20: one blink sequence after a fresh boot, then steady (no 10-min blink)."""
+    assert led.OK_BLINKS == 5 and led.READY_SOLID_S == 5.0  # Nick 10/20 PM: 5 blinks
+    w, d = _seq(monkeypatch)
+    d.start()
+    time.sleep(0.6)
+    d.stop(final=None)
+    assert [s for _, s in w.writes] == [led.LED_ON, led.LED_OFF] * 3 + [led.LED_ON]
+
+
+def test_recording_waits_for_the_blinks_and_5s_steady_then_pulses_once(monkeypatch):
+    """A clip starting mid-sequence does not cut the blinks; pulsing follows READY_SOLID_S of
+    steady ON, is written once, and the end of the clip goes back to steady once."""
+    w, d = _seq(monkeypatch)
+    d.start()
+    time.sleep(0.05)
+    d.set_mode("recording")                         # the T+1 clip starts mid-sequence
+    time.sleep(0.6)
+    d.set_mode("verdict_ok")                        # clip done: the loop's call after the clip
+    time.sleep(0.15)
+    d.set_mode("recording")                         # the next clip: steady was > 0.2 s already?
+    time.sleep(0.3)
+    d.stop(final=None)
+    states = [s for _, s in w.writes]
+    assert states[:7] == [led.LED_ON, led.LED_OFF] * 3 + [led.LED_ON]
+    assert states[7:] == [led.LED_PULSING, led.LED_ON, led.LED_PULSING]
+    t_steady, t_pulse = w.writes[6][0], w.writes[7][0]
+    assert t_pulse - t_steady >= 0.19               # >= READY_SOLID_S of steady first
+    assert w.writes[9][0] - w.writes[8][0] >= 0.19  # between clips too
+
+
+def test_blinks_play_once_per_driver_not_after_every_set(monkeypatch):
+    w, d = _seq(monkeypatch, solid=0.05)
+    d.start()
+    time.sleep(0.4)
+    for _ in range(3):                              # the loop re-sets the verdict after each set
+        d.set_mode("recording")
+        time.sleep(0.1)
+        d.set_mode("verdict_ok")
+        time.sleep(0.1)
+    d.stop(final=None)
+    states = [s for _, s in w.writes]
+    assert states.count(led.LED_OFF) == 3           # only the boot blinks ever write OFF
+
+
+def test_low_battery_overrides_recording(monkeypatch):
+    w, d = _seq(monkeypatch, solid=0.05)
+    d.start()
+    d.set_mode("recording")
+    time.sleep(0.4)
+    d.set_mode("lowbatt")
+    time.sleep(0.1)
+    d.stop(final=None)
+    states = [s for _, s in w.writes]
+    assert led.LED_PULSING in states and states[-1] == led.LED_FLASHING

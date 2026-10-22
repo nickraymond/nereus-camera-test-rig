@@ -345,3 +345,41 @@ def test_video_clip_passes_the_phase_args_and_records_what_the_boards_sent(tmp_p
     # a phase without args runs the same command as before
     pool_capture.run_video_clip(tmp_path, 8, 30.0)
     assert seen["cmd"][-4:] == ["--seconds", "30.0", "--out", str(tmp_path / "video" / "clip008")]
+
+
+class _FakeLed:
+    def __init__(self):
+        self.modes: list[str] = []
+
+    def set_mode(self, mode: str) -> None:
+        self.modes.append(mode)
+
+
+def test_clip_with_led_pulses_during_the_clip_then_steady():
+    """Nick 10/20 (rig #138): recording around the clip, verdict_ok after; fault / low battery
+    / no self-check never pulse."""
+    led = _FakeLed()
+    seen = []
+    out = pool_capture.clip_with_led(led, "verdict_ok", False,
+                                     lambda: seen.append(list(led.modes)) or {"ok": 1})
+    assert out == {"ok": 1} and seen == [["recording"]]
+    assert led.modes == ["recording", "verdict_ok"]
+    led = _FakeLed()
+    pool_capture.clip_with_led(led, "fault:3", False, dict)
+    assert led.modes == ["fault:3", "fault:3"]                    # the code keeps showing
+    led = _FakeLed()
+    pool_capture.clip_with_led(led, "verdict_ok", True, dict)
+    assert led.modes == ["lowbatt", "lowbatt"]                    # B beats REC
+    assert pool_capture.clip_with_led(None, "verdict_ok", False, lambda: 7) == 7
+    led = _FakeLed()
+    assert pool_capture.clip_with_led(led, None, False, lambda: 8) == 8 and led.modes == []
+
+
+def test_clip_with_led_restores_steady_when_the_clip_raises():
+    led = _FakeLed()
+
+    def boom():
+        raise RuntimeError("rpicam-vid died")
+    with pytest.raises(RuntimeError):
+        pool_capture.clip_with_led(led, "verdict_ok", False, boom)
+    assert led.modes == ["recording", "verdict_ok"]

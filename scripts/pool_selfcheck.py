@@ -111,16 +111,14 @@ def led_mode(result: dict) -> str:
     return "verdict_ok" if result["ok"] else "fault:" + ",".join(map(str, result["codes"]))
 
 
-OK_SHOW_S = 600.0              # the OK slow blink shows 10 min, then steady ON
-
-
-def verdict_led_mode(verdict_mode: str, verdict_age_s: float, low_battery: bool) -> str:
-    """The LED mode after a set: low battery (Nick's B) > the boot verdict. The OK blink turns
-    to steady ON ("ok") after OK_SHOW_S; a fault code stays until switch-off."""
+def verdict_led_mode(verdict_mode: str, low_battery: bool, recording: bool = False) -> str:
+    """The LED mode: low battery (Nick's B) > the boot verdict. An OK verdict plays its blinks
+    once and then holds steady (the driver times that, pool_led.OK_BLINKS), and pulses while a
+    clip records (Nick 10/20); a fault code stays until switch-off, recording or not."""
     if low_battery:
         return "lowbatt"
-    if verdict_mode == "verdict_ok" and verdict_age_s >= OK_SHOW_S:
-        return "ok"
+    if verdict_mode == "verdict_ok" and recording:
+        return "recording"
     return verdict_mode
 
 
@@ -128,7 +126,7 @@ def summary(result: dict) -> str:
     """The pool.log line."""
     if result["ok"]:
         return (f"SELF-CHECK OK 3/3 ({result['seconds']:.0f} s) -> LED slow blink "
-                "(2 s on / 2 s off) for 10 min, then steady")
+                "(2 s on / 2 s off) x5, then steady; pulsing while a clip records")
     parts = [f"{c} ({result['cameras'][c]['why']})" for c in result["faults"]]
     codes = " then ".join(f"{n} flashes" for n in result["codes"])
     return (f"SELF-CHECK FAULT {3 - len(result['faults'])}/3 ok: {', '.join(parts)} "
