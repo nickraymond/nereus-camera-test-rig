@@ -60,6 +60,8 @@ from nereus_camera_test_rig.cameras.openmv_usb import OpenMvError, OpenMvUsbCame
 BOARDS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c14000000000"}
 # Per-frame stream timing from the board (start_stream "timing", pool 2 B0, 2026-10-17).
 TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
+# Per-frame 3A from the board (start_stream "meta", SPEC_n6_eval must do 2, 2026-10-23).
+META_KEYS = ("exposure_us", "gain_db")
 
 
 def sha256(path: Path) -> str:
@@ -161,7 +163,7 @@ class BoardVideo:
                                  "host_rx_mono": round(time.monotonic(), 4),
                                  "bytes": len(data), "width": fr["width"],
                                  "height": fr["height"],
-                                 **{k: fr.get(k) for k in TIMING_KEYS}})
+                                 **{k: fr.get(k) for k in TIMING_KEYS + META_KEYS}})
                     q.put(data)
                 elif msg.get("status") == "completed":
                     self.rec["board_done"] = msg.get("output") or {}
@@ -175,7 +177,7 @@ class BoardVideo:
         self.rows = rows
         with (self.out / f"{self.name}_frames.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["seq", "ticks_ms", "host_rx_mono", "bytes",
-                                              "width", "height", *TIMING_KEYS])
+                                              "width", "height", *TIMING_KEYS, *META_KEYS])
             w.writeheader()
             w.writerows(rows)
 
@@ -407,6 +409,10 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
         s["subsampling"] = pick("subsampling")
     if a.timing:
         s["timing"] = True
+    if a.meta:
+        s["meta"] = True
+    if a.lock_3a:
+        s["lock_3a"] = True
     return s
 
 
@@ -480,6 +486,14 @@ def build_parser() -> argparse.ArgumentParser:
         ap.add_argument(f"--{key}-subsampling", default=None, choices=SUBSAMPLINGS)
     ap.add_argument("--timing", action="store_true",
                     help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
+    ap.add_argument("--meta", action="store_true",
+                    help="boards report per-frame exposure_us / gain_db (frames.csv)")
+    ap.add_argument("--lock-3a", action="store_true",
+                    help="boards lock AE, gain and AWB after the warm-up (board_done.locked_3a "
+                         "says which locked)")
+    ap.add_argument("--n6-serial", default=None,
+                    help="N6 USB serial (default: nereus002's N6); nereus001's spare N6 is "
+                         "020023000450433547373200")
     return ap
 
 
@@ -494,8 +508,9 @@ def main() -> int:
     if "imx708" in cams:
         devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
                              buffers=a.imx_buffers, seconds=a.seconds))
+    serials = {**BOARDS, **({"openmv_n6": a.n6_serial} if a.n6_serial else {})}
     devs += [BoardVideo(n, s, out, board_settings(a, n), seconds=a.seconds)
-             for n, s in BOARDS.items() if n in cams]
+             for n, s in serials.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
 
     stop = threading.Event()
