@@ -418,6 +418,7 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
         s["lock_3a"] = True
     if getattr(a, "apriltags", False):
         s["apriltags"] = True
+        s["tag_family"] = a.tag_family
     return s
 
 
@@ -499,6 +500,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--apriltags", action="store_true",
                     help="boards run find_apriltags (tag25h9) on every streamed frame; tags, "
                          "tag_ids and detect_ms go in frames.csv")
+    ap.add_argument("--tag-family", default="TAG25H9",
+                    help="image module constant for --apriltags (stock v5.0.1 N6: TAG36H11 only)")
     ap.add_argument("--n6-serial", default=None,
                     help="N6 USB serial (default: nereus002's N6); nereus001's spare N6 is "
                          "020023000450433547373200")

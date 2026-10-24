@@ -485,17 +485,17 @@ def stream_frames(usb, command_id, board_config, settings):
     meta = bool(settings.get("meta"))
     # On-board AprilTags on every streamed frame (SPEC_n6_eval must do 17's "stream + detect"
     # power mode, Nick 10/23 DOE): tag count, ids and detect ms go in the frame header. The
-    # tag25h9 constant is looked up by name, never assumed; a missing one is a stream error.
+    # family constant is looked up by name (``tag_family``, default TAG25H9 = card V3), never
+    # assumed: stock v5.0.1 on the N6 defines only TAG36H11 (10/23), so a missing name is a stream
+    # error, not a silent 0 tags.
     tag_family = None
     if settings.get("apriltags"):
         import image
 
-        for name in ("TAG25H9", "APRILTAG_25H9"):
-            tag_family = getattr(image, name, None)
-            if tag_family is not None:
-                break
+        fam_name = settings.get("tag_family") or "TAG25H9"
+        tag_family = getattr(image, fam_name, None)
         if tag_family is None:
-            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "no tag25h9 family in image module")
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "no %s family in image module" % fam_name)
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)

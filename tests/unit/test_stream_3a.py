@@ -187,5 +187,18 @@ def test_apriltags_error_is_reported_not_fatal(run, monkeypatch):
 
 def test_apriltags_without_a_family_constant_fails_the_stream(run, monkeypatch):
     monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace())
-    with pytest.raises(Exception, match="tag25h9"):
+    with pytest.raises(Exception, match="TAG25H9"):
         run({"apriltags": True})
+
+
+def test_apriltags_family_by_name(run, monkeypatch):
+    monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace(TAG36H11=8))
+    orig = FakeSensor.snapshot
+
+    def snap(self):
+        img = orig(self)
+        img.find_apriltags = lambda families=None: [] if families == 8 else None
+        return img
+    monkeypatch.setattr(FakeSensor, "snapshot", snap)
+    frames, _, _ = run({"apriltags": True, "tag_family": "TAG36H11"})
+    assert frames[0]["tags"] == 0
