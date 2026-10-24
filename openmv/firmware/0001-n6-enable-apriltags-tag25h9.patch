@@ -1,0 +1,11 @@
+--- a/boards/OPENMV_N6/imlib_config.h	2026-10-23 20:07:58
++++ b/boards/OPENMV_N6/imlib_config.h	2026-10-23 20:07:58
+@@ -97,6 +97,8 @@
+ // Enable find_apriltags() (64 KB)
+ #define IMLIB_ENABLE_APRILTAGS
+ #define IMLIB_ENABLE_APRILTAGS_TAG36H11
++// Nereus: card V3 uses tag25h9 (N6 eval, 10/23); stock v5.0.1 builds only tag36h11.
++#define IMLIB_ENABLE_APRILTAGS_TAG25H9
+ 
+ // Enable fine find_apriltags() - (8-way connectivity versus 4-way connectivity)
+ // #define IMLIB_ENABLE_FINE_APRILTAGS
