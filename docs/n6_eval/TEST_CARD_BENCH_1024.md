@@ -32,3 +32,19 @@ so there is no SD arm. n is small (a map, not a recommendation).
 - The N6 drops off USB twice, or once without coming back in 60 s: stop, report, ask Nick.
 - A RAM allocation fails (MemoryError): report it, shorten the capture, never retry in a loop.
 - No sleep or deep-sleep calls in this card. They wait for the researched procedure and their own card.
+
+## Bench 4: deep-sleep retry (Nick, chat 10/24 ~8:35 AM: "Run the deep-sleep retry now, one change per run as planned. I'm near the rig and can press SW2 or replug if it sticks.")
+- Basis: OpenMV v5.0.1 `scripts/examples/50-OpenMV-Boards/53-N6-Boards/80-Low-Power/deep_sleep.py` (set the RTC with
+  `rtc.datetime(...)`, then `machine.deepsleep(ms)`), plus the research notes in the run folder's RESULTS.md.
+- Runs, in this order, **one change each**, and only if the one before came back by itself. Each starts from a hard reset
+  (`mpremote reset`, so the sensor has never started), then 10 s of baseline:
+  1. `official`: set the RTC, `deepsleep(20000)`, nothing else.
+  2. `csi_sleep`: (1) + start the sensor for 1 s, then `csi.sleep(True)` before deep sleep.
+  3. `csi_shutdown`: (1) + start the sensor, then `csi.shutdown(True)` before deep sleep.
+  4. `lightsleep`: set the RTC, `lightsleep(20000)`, then log "woke".
+- The board writes each step to `/flash/ds_log.txt` (fsync) before it sleeps. The Pi logs CH1 at 10 Hz and polls the
+  board's USB node (gone / back times). After the wake it reads `machine.reset_cause()` and the log.
+- Metric: mean mA / mW from 2 s after USB goes away to 1 s before the 20 s timer ends; wake time = USB back − USB gone.
+  n = 1 per variant (a map). Raw INA3221 (not validated).
+- **Stop:** the board is not back on USB within 60 s of leaving → stop the sequence, ask Nick for SW2, and record whether
+  SW2 wakes it.
