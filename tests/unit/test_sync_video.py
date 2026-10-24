@@ -45,7 +45,7 @@ def test_missing_or_garbage_metadata_is_empty(tmp_path):
 def _args(**kw):
     import argparse
     base = dict(seconds=30.0, board_framesize="VGA", board_quality=70, board_fps=10.0,
-                board_subsampling="auto", timing=False,
+                board_subsampling="auto", timing=False, meta=False, lock_3a=False,
                 n6_framesize=None, n6_quality=None, n6_fps=None, n6_subsampling=None,
                 ae3_framesize=None, ae3_quality=None, ae3_fps=None, ae3_subsampling=None)
     base.update(kw)
@@ -149,7 +149,9 @@ def test_combined_decode_byte_loss_costs_one_frame_and_keeps_timing_columns(tmp_
     assert bv.rows[0]["prev_write_ms"] is None and bv.rows[-1]["snap_ms"] == 16
     import csv
     rows = list(csv.DictReader((tmp_path / "openmv_ae3_frames.csv").open()))
-    assert list(rows[0])[-3:] == ["snap_ms", "jpeg_ms", "prev_write_ms"] and rows[3]["seq"] == "4"
+    # timing columns keep their order; the per-frame 3A columns (SPEC_n6_eval) follow, empty here
+    assert list(rows[0])[-9:-4] == ["snap_ms", "jpeg_ms", "prev_write_ms", "exposure_us", "gain_db"]
+    assert rows[3]["seq"] == "4" and rows[0]["exposure_us"] == ""
     assert (tmp_path / "openmv_ae3.mjpeg").stat().st_size == sum(len(frames[i])
                                                                  for i in (0, 1, 2, 4, 5, 6))
 
