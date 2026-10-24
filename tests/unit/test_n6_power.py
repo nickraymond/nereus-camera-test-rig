@@ -80,3 +80,23 @@ def test_bench2_plan_cells():
     names = [sw.cell_name(c) for c in sw.cells("bench2")]
     assert names == ["HD_notags_30fps", "HD_tags_30fps", "HD_tags_every3_30fps", "HD_tags_every6_30fps",
                      "HD_tags_every10_30fps", "HD_tags_roi_30fps", "HD_tags_every3_roi_30fps"]
+
+
+def test_bigsizes_plan_uses_the_n6_flag_for_n6_only_sizes(tmp_path, monkeypatch):
+    names = [sw.cell_name(c) for c in sw.cells("bigsizes")]
+    assert names == ["HD_notags_30fps", "1280x960_notags_30fps", "1920x1080_notags_30fps",
+                     "2560x1440_notags_30fps", "2592x1944_notags_30fps"]
+    seen = []
+
+    def fake_run(args, **kw):
+        seen.append(args)
+        return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(sw.subprocess, "run", fake_run)
+    for i, c in enumerate(sw.cells("bigsizes")[:2]):
+        out = tmp_path / str(i)
+        out.mkdir()
+        sw.run_cell(c, out, 1.0)
+    assert seen[0][seen[0].index("--board-framesize") + 1] == "HD"          # unchanged path
+    assert seen[1][seen[1].index("--n6-framesize") + 1] == "1280x960"
+    assert "--board-framesize" not in seen[1]

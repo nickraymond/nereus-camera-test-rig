@@ -33,6 +33,14 @@ FRAMESIZES = {
     "VGA": "VGA",     # 640x400
     "960x600": (960, 600),  # ISP-scaled from HD (see above)
     "HD": "HD",       # 1280x800 (max)
+    # PS5520 only (2592x1944 array, Nick 10/24): the sensor reads its full array and the ISP crops to
+    # aspect + scales (drivers/sensors/ps5520.c, ports/stm32/stm_isp.c). Measured on the board 10/24
+    # (openmv/probes/n6_bigsize_fps_probe_v5.py): all four snapshot at 29.4 fps. On the PAG7936 they
+    # exceed its 1280x800 array, so set_framesize fails ("Sensor control failed").
+    "1280x960": "SXGAM",
+    "1920x1080": "FHD",
+    "2560x1440": "QHD",
+    "2592x1944": "WQXGA2",
 }
 DEFAULT_FRAMESIZE = "HD"
 

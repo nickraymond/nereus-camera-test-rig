@@ -44,6 +44,9 @@ def cells(plan: str = "doe") -> list[dict]:
     """doe = Nick's 10/23 matrix; bench2 = TEST_CARD_BENCH_1024 bench 2 (HD q70, 30 fps asked)."""
     if plan == "bench3":  # RAM-buffered vs live USB, HD q70 10 fps (TEST_CARD_BENCH_1024 bench 3)
         return [{"size": "HD", "tags": False, "fps": 10}, {"size": "HD", "tags": False, "fps": 10, "buffer": True}]
+    if plan == "bigsizes":  # PS5520 large sizes over USB, tags off (TEST_CARD_PS5520_USB_FPS); HD = reference
+        return [{"size": s, "tags": False, "fps": 30, "n6_only": s != "HD"}
+                for s in ("HD", "1280x960", "1920x1080", "2560x1440", "2592x1944")]
     if plan == "bench2":
         out = [{"size": "HD", "tags": False, "fps": 30}]
         out += [{"size": "HD", "tags": True, "fps": 30, "every": n} for n in (1, 3, 6, 10)]
@@ -101,7 +104,8 @@ def frame_stats(csv_path: Path, seconds: float) -> dict:
 
 def run_cell(c: dict, out: Path, seconds: float) -> dict:
     args = [sys.executable, str(ROOT / "scripts/sync_video.py"), "--cameras", "openmv_n6",
-            "--n6-serial", N6, "--seconds", str(seconds), "--board-framesize", c["size"],
+            "--n6-serial", N6, "--seconds", str(seconds),
+            "--n6-framesize" if c.get("n6_only") else "--board-framesize", c["size"],
             "--board-quality", "70", "--board-fps", str(c["fps"]), "--meta", "--timing",
             "--out", str(out)]
     if c["tags"]:
@@ -133,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=float, default=20.0)
     ap.add_argument("--reps", type=int, default=2)
-    ap.add_argument("--plan", choices=("doe", "bench2", "bench3"), default="doe")
+    ap.add_argument("--plan", choices=("doe", "bench2", "bench3", "bigsizes"), default="doe")
     a = ap.parse_args(argv)
     out = Path(a.out).expanduser()
     out.mkdir(parents=True, exist_ok=False)  # never overwrite a run
