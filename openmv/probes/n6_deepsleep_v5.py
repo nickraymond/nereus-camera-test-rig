@@ -4,6 +4,9 @@
 file and runs it with mpremote. The base is OpenMV's own N6 example (v5.0.1
 ``53-N6-Boards/80-Low-Power/deep_sleep.py``): set the RTC, then ``machine.deepsleep(ms)``.
 Every step is appended to /flash/ds_log.txt and synced before the next, because USB goes away in sleep.
+
+Measured 10/24 on nereus001: deepsleep 15 mW, wakes on its RTC timer (3/3). **lightsleep hangs**: it leaves
+USB, sits at ~69 mA, does not wake on the timer or the buttons, and needs a replug (or P12 RESET). Do not use it.
 """
 import machine
 import os
