@@ -10,6 +10,11 @@ import time
 import image
 import sensor
 
+
+def val(a):
+    return a() if callable(a) else a  # method on some firmware, property on others (QE N2)
+
+
 SIZE = sensor.HD
 FAMILY = "TAG36H11"  # stock v5.0.1 on the N6 defines only TAG36H11 (dir(image), 10/23); no tag25h9
 family = getattr(image, FAMILY)
@@ -23,10 +28,10 @@ tags = img.find_apriltags(families=family)
 ms = time.ticks_diff(time.ticks_ms(), t0)
 out = []
 for t in tags:
-    c = t.corners()
+    c = val(t.corners)
     for i in range(4):
         a, b = c[i], c[(i + 1) % 4]
         img.draw_line(a[0], a[1], b[0], b[1], color=(0, 255, 0), thickness=4)
-    out.append({"id": t.id(), "cx": t.cx(), "cy": t.cy(), "corners": [list(p) for p in c]})
+    out.append({"id": val(t.id), "cx": val(t.cx), "cy": val(t.cy), "corners": [list(p) for p in c]})
 img.save("/flash/tags.jpg", quality=90)
 print("#T", json.dumps({"w": img.width(), "h": img.height(), "detect_ms": ms, "tags": out}))

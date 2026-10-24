@@ -209,6 +209,11 @@ def _lock_3a():
     return out
 
 
+def _val(attr):
+    """A tag field that is a method on some firmware and a property on others (QE 010 N2)."""
+    return attr() if callable(attr) else attr
+
+
 def _finite(v):
     """JSON-safe float: the AE3 reports ``rgb_gain_db()`` as (-inf, 0, -inf)."""
     v = float(v)
@@ -533,7 +538,7 @@ def stream_frames(usb, command_id, board_config, settings):
         if tag_family is not None:
             try:
                 tags = img.find_apriltags(families=tag_family)
-                tag_extra = {"tags": len(tags), "tag_ids": [t.id() for t in tags]}
+                tag_extra = {"tags": len(tags), "tag_ids": [_val(t.id) for t in tags]}
             except Exception as exc:  # e.g. MemoryError at HD: reported per frame, stream goes on
                 tag_extra = {"tags": None, "tag_error": repr(exc)}
             tag_extra["detect_ms"] = time.ticks_diff(time.ticks_ms(), t_snap)

@@ -17,6 +17,11 @@ import time
 import image
 import sensor
 
+
+def val(a):
+    return a() if callable(a) else a  # method on some firmware, property on others (QE N2)
+
+
 N_FRAMES = 10
 FAMILY_NAMES = ("TAG25H9", "APRILTAG_25H9", "AprilTag25h9")
 SIZES = ("HD", "VGA", (960, 600))
@@ -53,8 +58,8 @@ def main():
                     ms.append(time.ticks_diff(time.ticks_ms(), t0))
                     decodes.append(len(tags))
                     for t in tags:
-                        if t.id() not in ids:
-                            ids.append(t.id())
+                        if val(t.id) not in ids:
+                            ids.append(val(t.id))
                     w, h = img.width(), img.height()
                     del img, tags
                     gc.collect()
