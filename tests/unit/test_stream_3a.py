@@ -244,3 +244,23 @@ def test_tag_roi_tracks_then_falls_back_to_full_frame(run, monkeypatch):
     assert [f["tag_mode"] for f in frames] == ["full", "roi", "roi+full", "roi"]
     assert all(f["tags"] == 2 for f in frames)
     assert (2, (60, 60, 140, 140)) in calls   # box = corners +/- 40 px around the frame-1 tag
+
+
+def test_buffer_frames_sends_nothing_but_keepalives_until_the_end(monkeypatch):
+    sensor = FakeSensor()
+    monkeypatch.setitem(sys.modules, "sensor", sensor)
+    monkeypatch.setitem(sys.modules, "command_protocol",
+                        _load("command_protocol", "openmv/common/command_protocol.py"))
+    svc = _load("capture_service_buf", "openmv/common/capture_service.py")
+    svc.time = FakeTime()
+    n6 = _load("n6_board_config_buf", "openmv/n6/board_config.py")
+    usb = FakeUsb(frames=10 ** 9)          # never stops: the max_seconds deadline ends the clip
+    usb.any = lambda: 0
+    svc.stream_frames(usb, "c1", n6, {"framesize": "HD", "buffer_frames": True, "max_seconds": 1})
+    msgs = usb.msgs()
+    kinds = [m["status"] for m in msgs]
+    first_frame = kinds.index("frame")
+    assert "buffering" in kinds[:first_frame] and "buffering" not in kinds[first_frame:]
+    done = msgs[-1]["output"]
+    assert done["buffered"]["frames"] == kinds.count("frame") == done["frames"] > 0
+    assert done["buffered"]["error"] is None

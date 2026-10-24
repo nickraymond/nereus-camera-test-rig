@@ -170,6 +170,8 @@ class BoardVideo:
                 elif msg.get("status") == "completed":
                     self.rec["board_done"] = msg.get("output") or {}
                     break
+                elif msg.get("status") == "buffering":  # --buffer-frames keepalive, not a resync
+                    self.rec["buffering_frames"] = msg.get("frames")
                 else:
                     self.rec["resyncs"] = self.rec.get("resyncs", 0) + 1
         except Exception as exc:  # noqa: BLE001 - recorded, never silent
@@ -185,6 +187,7 @@ class BoardVideo:
             w.writerows(rows)
 
     def stop(self) -> None:
+        self.rec["stop_host_mono"] = time.monotonic()
         try:
             # Any byte ends the stream; a bare newline because a board whose stream already
             # ended (trigger timeout, max_seconds) is back in its line loop, where "\n" is
@@ -416,6 +419,8 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
         s["meta"] = True
     if a.lock_3a:
         s["lock_3a"] = True
+    if getattr(a, "buffer_frames", False):
+        s["buffer_frames"] = True
     if getattr(a, "apriltags", False):
         s["apriltags"] = True
         s["tag_family"] = a.tag_family
@@ -506,6 +511,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "tag_ids and detect_ms go in frames.csv")
     ap.add_argument("--tag-family", default="TAG25H9",
                     help="image module constant for --apriltags (stock v5.0.1 N6: TAG36H11 only)")
+    ap.add_argument("--buffer-frames", action="store_true",
+                    help="boards keep frames in RAM during the clip and send them in one burst after "
+                         "it (power test; board_done.buffered has the burst ms)")
     ap.add_argument("--tag-every", type=int, default=1,
                     help="with --apriltags: detect on every Nth frame only (video keeps its rate)")
     ap.add_argument("--tag-roi", action="store_true",

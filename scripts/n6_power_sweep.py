@@ -42,6 +42,8 @@ FPS = (10, 15, 30)
 
 def cells(plan: str = "doe") -> list[dict]:
     """doe = Nick's 10/23 matrix; bench2 = TEST_CARD_BENCH_1024 bench 2 (HD q70, 30 fps asked)."""
+    if plan == "bench3":  # RAM-buffered vs live USB, HD q70 10 fps (TEST_CARD_BENCH_1024 bench 3)
+        return [{"size": "HD", "tags": False, "fps": 10}, {"size": "HD", "tags": False, "fps": 10, "buffer": True}]
     if plan == "bench2":
         out = [{"size": "HD", "tags": False, "fps": 30}]
         out += [{"size": "HD", "tags": True, "fps": 30, "every": n} for n in (1, 3, 6, 10)]
@@ -53,7 +55,7 @@ def cells(plan: str = "doe") -> list[dict]:
 def cell_name(c: dict) -> str:
     tag = "notags" if not c["tags"] else "tags" + (f"_every{c['every']}" if c.get("every", 1) > 1 else "") \
         + ("_roi" if c.get("roi") else "")
-    return f"{c['size']}_{tag}_{c['fps']}fps"
+    return f"{c['size']}_{tag}_{c['fps']}fps" + ("_ram" if c.get("buffer") else "")
 
 
 def logger(bus, rows: list, stop: threading.Event, hz: float = 10.0) -> None:
@@ -108,9 +110,22 @@ def run_cell(c: dict, out: Path, seconds: float) -> dict:
             args += ["--tag-every", str(c["every"])]
         if c.get("roi"):
             args += ["--tag-roi"]
+    if c.get("buffer"):
+        args += ["--buffer-frames"]
     p = subprocess.run(args, capture_output=True, text=True, timeout=seconds + 120)
     (out / "sync_video.log").write_text(p.stdout + p.stderr)
-    return {"sync_video_rc": p.returncode, **frame_stats(out / "openmv_n6_frames.csv", seconds)}
+    r = {"sync_video_rc": p.returncode, **frame_stats(out / "openmv_n6_frames.csv", seconds)}
+    if c.get("buffer"):
+        # Frames arrive in one burst after the stop, so the capture window comes from the host's
+        # fire and stop times (video_sync.json), and the burst gets its own window.
+        try:
+            cam = json.loads((out / "video_sync.json").read_text())["cameras"]["openmv_n6"]
+            fire, stop = cam["fire_host_mono"], cam["stop_host_mono"]
+            r.update({"burst_t0": stop, "burst_t1": r.get("t1"), "t0": fire + 1.0, "t1": stop,
+                      "buffered": (cam.get("board_done") or {}).get("buffered")})
+        except (KeyError, OSError, ValueError) as exc:
+            r["window_error"] = repr(exc)
+    return r
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=float, default=20.0)
     ap.add_argument("--reps", type=int, default=2)
-    ap.add_argument("--plan", choices=("doe", "bench2"), default="doe")
+    ap.add_argument("--plan", choices=("doe", "bench2", "bench3"), default="doe")
     a = ap.parse_args(argv)
     out = Path(a.out).expanduser()
     out.mkdir(parents=True, exist_ok=False)  # never overwrite a run
@@ -151,6 +166,10 @@ def main(argv: list[str] | None = None) -> int:
                      **run_cell(c, out / name, a.seconds)}
             if "t0" in r:
                 r.update(window_stats(rows, r["t0"], r["t1"]))
+            if r.get("burst_t0") and r.get("burst_t1"):
+                b = window_stats(rows, r["burst_t0"], r["burst_t1"])
+                r.update({"burst_s": round(r["burst_t1"] - r["burst_t0"], 2),
+                          "burst_mw_mean": b.get("mw_mean"), "burst_n_power": b.get("n_power")})
             results.append(r)
             print(json.dumps({k: r.get(k) for k in ("cell", "fps_delivered", "ma_mean", "mw_mean",
                                                      "detect_ms_median", "tags_mean", "n_power",
@@ -165,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     keys = ["cell", "rep", "size", "tags", "fps", "fps_delivered", "fps_clip", "frames",
             "v_mean", "ma_mean", "ma_sd", "mw_mean", "n_power", "read_errors",
             "detect_ms_median", "tags_mean", "bytes_mean", "sync_video_rc", "every", "roi",
-            "detections_per_s", "roi_share"]
+            "detections_per_s", "roi_share", "buffer", "burst_s", "burst_mw_mean", "burst_n_power"]
     with (out / "sweep.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
         w.writeheader()

@@ -536,6 +536,11 @@ def stream_frames(usb, command_id, board_config, settings):
 
     seq = 0
     write_ms = None
+    # Bench 3 (10/24, Nick: power with frames kept in RAM vs streamed): keep each JPEG in RAM and
+    # send nothing but a 1 s "buffering" keepalive until the stop; then the whole burst. A full
+    # heap ends the capture (reported), it never crashes the stream.
+    buffering = bool(settings.get("buffer_frames"))
+    buf, buffer_error, t_keep = [], None, time.ticks_ms()
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
     while True:
         # Any inbound byte is the host's stop signal; drain it and exit.
@@ -590,11 +595,23 @@ def stream_frames(usb, command_id, board_config, settings):
             extra = extra or {}
             extra.update(tag_extra)
         t_write = time.ticks_ms()
-        usb.write(cp.encode_message(
+        header = cp.encode_message(
             cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
                               ticks_ms=t_snap if trigger else None, extra=extra)
-        ))
-        usb.write(data)
+        )
+        if buffering:
+            try:
+                buf.append((header, bytes(data)))
+            except MemoryError as exc:
+                buffer_error = repr(exc)
+                break
+            if time.ticks_diff(time.ticks_ms(), t_keep) >= 1000:
+                t_keep = time.ticks_ms()
+                usb.write(cp.encode_message({"version": cp.PROTOCOL_VERSION, "command_id": command_id,
+                                             "status": "buffering", "frames": len(buf)}))
+        else:
+            usb.write(header)
+            usb.write(data)
         write_ms = time.ticks_diff(time.ticks_ms(), t_write)
         seq += 1
         if period_ms:
@@ -606,7 +623,16 @@ def stream_frames(usb, command_id, board_config, settings):
                     break
                 time.sleep_ms(min(rest, 50))
 
+    if buffering:
+        t_burst = time.ticks_ms()
+        for header, data in buf:
+            usb.write(header)
+            usb.write(data)
+        del buf
     out = {"frames": seq}
+    if buffering:
+        out["buffered"] = {"frames": seq, "burst_ms": time.ticks_diff(time.ticks_ms(), t_burst),
+                           "error": buffer_error}
     if sync is not None:
         out["sync"] = sync
     if locked is not None:
