@@ -2,7 +2,8 @@
 
 Run ``mpremote connect <port> run openmv/probes/n6_apriltag_snapshot_v5.py``, then copy
 ``:tags.jpg`` off and ``fs rm :tags.jpg`` + ``reset``. Prints ``#T {json}``: per tag id, corners,
-centre and the detect ms. The N6 draws the tag outlines; ids and ms are printed (draw_string raised a TypeError on v5.0.1, 10/23).
+centre and the detect ms. The frame is saved unannotated; the N6's own ids + corners are printed and drawn on the Mac
+(draw_string and draw_line both raised TypeError on v5.0.1 with the v4 call style, 10/23).
 """
 import json
 import time
@@ -16,7 +17,7 @@ def val(a):
 
 
 SIZE = sensor.HD
-FAMILY = "TAG36H11"  # stock v5.0.1 on the N6 defines only TAG36H11 (dir(image), 10/23); no tag25h9
+FAMILY = "TAG25H9"  # card V3; needs the N6 build with IMLIB_ENABLE_APRILTAGS_TAG25H9 (openmv/firmware/0001); stock v5.0.1 has only TAG36H11
 family = getattr(image, FAMILY)
 sensor.reset()
 sensor.set_pixformat(sensor.RGB565)
@@ -29,9 +30,6 @@ ms = time.ticks_diff(time.ticks_ms(), t0)
 out = []
 for t in tags:
     c = val(t.corners)
-    for i in range(4):
-        a, b = c[i], c[(i + 1) % 4]
-        img.draw_line(a[0], a[1], b[0], b[1], color=(0, 255, 0), thickness=4)
     out.append({"id": val(t.id), "cx": val(t.cx), "cy": val(t.cy), "corners": [list(p) for p in c]})
 img.save("/flash/tags.jpg", quality=90)
 print("#T", json.dumps({"w": img.width(), "h": img.height(), "detect_ms": ms, "tags": out}))
