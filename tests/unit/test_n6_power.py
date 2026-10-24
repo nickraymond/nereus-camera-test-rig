@@ -58,3 +58,19 @@ def test_frame_stats(tmp_path):
     s = sw.frame_stats(p, seconds=1.0)
     assert s["frames"] == 3 and s["fps_delivered"] == 10.0 and s["detect_ms_median"] == 90.0
     assert s["tags_mean"] == 3.67 and (s["t0"], s["t1"]) == (10.0, 10.2)
+
+
+def test_sleep_phase_windows_skip_settling_and_the_reboot():
+    import n6_sleep_power as sp
+    marks = [{"t": 0, "name": "awake_sensor_on", "what": "start"},
+             {"t": 20, "name": "sensor_sleep", "what": "start"},
+             {"t": 40, "name": "sensor_shutdown", "what": "error OSError"},
+             {"t": 40.1, "name": "lightsleep", "what": "start"},
+             {"t": 60.2, "name": "lightsleep", "what": "woke"},
+             {"t": 60.3, "name": "deepsleep", "what": "start"},
+             {"t": 60.6, "name": "mpremote_exit", "what": "rc 1"},
+             {"t": 90, "name": "service_idle_after", "what": "start"}]
+    w = {n: (round(a, 1), round(b, 1)) for n, a, b in sp.phase_windows(marks, end=110)}
+    assert w["awake_sensor_on"] == (2.0, 19.0) and w["sensor_sleep"] == (22.0, 39.0)
+    assert w["deepsleep"] == (62.3, 79.3)          # capped at the hold: the reboot is excluded
+    assert w["service_idle_after"] == (92.0, 109.0) and "sensor_shutdown" not in w

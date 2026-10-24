@@ -22,3 +22,14 @@ Board service: this branch at 280b693, all 7 files hash-matched.
 - **Cost:** ~15 min unattended on nereus001; nothing from Nick.
 
 Command: `python scripts/n6_power_sweep.py --out ~/n6_eval/power_doe_<ts>`
+
+## Addendum: low-power states (Nick, chat 10/23 ~8:50 PM: "what is the low idle state? OpenMV says it goes to miliwatts" → "run it please")
+- Question: what does the N6 draw in each low-power state the firmware offers?
+- Phases, 20 s each (`openmv/probes/n6_sleep_probe_v5.py`, run by `scripts/n6_sleep_power.py`): sensor on with the
+  processor idle → `sensor.sleep(True)` → `sensor.shutdown(True)` → `machine.lightsleep(20000)` → `machine.deepsleep(20000)`
+  (the board leaves USB and reboots) → the rig service idle after the reboot. A control the firmware lacks is reported, not
+  a failure.
+- Metric: mean mA / mW per phase from 2 s after its start to 1 s before it ends (n = 1 run: a map, not a claim).
+  Raw INA3221; mW not validated.
+- Stop: if the N6 doesn't come back on USB within 90 s of deep sleep, stop and report. A power cycle would be a hands-on
+  step for Nick, not something the builder does.
