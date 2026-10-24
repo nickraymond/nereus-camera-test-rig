@@ -63,7 +63,7 @@ TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
 # Per-frame 3A from the board (start_stream "meta", SPEC_n6_eval must do 2, 2026-10-23).
 META_KEYS = ("exposure_us", "gain_db")
 # On-board AprilTags per streamed frame (start_stream "apriltags", Nick's 10/23 power DOE).
-TAG_KEYS = ("tags", "tag_ids", "detect_ms", "tag_error")
+TAG_KEYS = ("tags", "tag_ids", "detect_ms", "tag_error", "tag_mode")
 
 
 def sha256(path: Path) -> str:
@@ -419,6 +419,10 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
     if getattr(a, "apriltags", False):
         s["apriltags"] = True
         s["tag_family"] = a.tag_family
+        if getattr(a, "tag_every", 1) > 1:
+            s["tag_every"] = a.tag_every
+        if getattr(a, "tag_roi", False):
+            s["tag_roi"] = True
     return s
 
 
@@ -502,6 +506,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "tag_ids and detect_ms go in frames.csv")
     ap.add_argument("--tag-family", default="TAG25H9",
                     help="image module constant for --apriltags (stock v5.0.1 N6: TAG36H11 only)")
+    ap.add_argument("--tag-every", type=int, default=1,
+                    help="with --apriltags: detect on every Nth frame only (video keeps its rate)")
+    ap.add_argument("--tag-roi", action="store_true",
+                    help="with --apriltags: search only around the last frame's tags; full frame "
+                         "again when one is missing (frames.csv tag_mode)")
     ap.add_argument("--n6-serial", default=None,
                     help="N6 USB serial (default: nereus002's N6); nereus001's spare N6 is "
                          "020023000450433547373200")

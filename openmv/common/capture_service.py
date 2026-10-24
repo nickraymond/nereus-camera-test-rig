@@ -209,6 +209,16 @@ def _lock_3a():
     return out
 
 
+def _tag_box(tag, w, h, margin=40):
+    """Search box around one tag for the next frame: its corners + ``margin`` px, clipped to the frame."""
+    c = _val(tag.corners)
+    x0 = max(0, min(p[0] for p in c) - margin)
+    y0 = max(0, min(p[1] for p in c) - margin)
+    x1 = min(w, max(p[0] for p in c) + margin)
+    y1 = min(h, max(p[1] for p in c) + margin)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
 def _val(attr):
     """A tag field that is a method on some firmware and a property on others (QE 010 N2)."""
     return attr() if callable(attr) else attr
@@ -501,6 +511,12 @@ def stream_frames(usb, command_id, board_config, settings):
         tag_family = getattr(image, fam_name, None)
         if tag_family is None:
             raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "no %s family in image module" % fam_name)
+    # Bench 2 (10/24): detect on every Nth frame only (video keeps its rate), and/or track: search
+    # only boxes around the last frame's tags (HD 32 ms vs 182 ms full frame, bench 1), falling
+    # back to the full frame whenever a tracked tag is missing.
+    tag_every = max(1, int(settings.get("tag_every") or 1))
+    tag_roi = bool(settings.get("tag_roi"))
+    tag_boxes = None
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -535,10 +551,23 @@ def stream_frames(usb, command_id, board_config, settings):
         img = sensor.snapshot()
         t_snap = time.ticks_ms()
         tag_extra = None
-        if tag_family is not None:
+        if tag_family is not None and seq % tag_every == 0:
             try:
-                tags = img.find_apriltags(families=tag_family)
+                tags, mode = None, "full"
+                if tag_roi and tag_boxes:
+                    tags = []
+                    for box in tag_boxes:
+                        tags.extend(img.find_apriltags(roi=box, families=tag_family))
+                    mode = "roi"
+                    if len(tags) < len(tag_boxes):  # lost one: search the whole frame again
+                        tags, mode = None, "roi+full"
+                if tags is None:
+                    tags = img.find_apriltags(families=tag_family)
+                if tag_roi:
+                    tag_boxes = [_tag_box(t, img.width(), img.height()) for t in tags] or None
                 tag_extra = {"tags": len(tags), "tag_ids": [_val(t.id) for t in tags]}
+                if tag_roi:
+                    tag_extra["tag_mode"] = mode
             except Exception as exc:  # e.g. MemoryError at HD: reported per frame, stream goes on
                 tag_extra = {"tags": None, "tag_error": repr(exc)}
             tag_extra["detect_ms"] = time.ticks_diff(time.ticks_ms(), t_snap)

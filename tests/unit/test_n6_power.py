@@ -74,3 +74,9 @@ def test_sleep_phase_windows_skip_settling_and_the_reboot():
     assert w["awake_sensor_on"] == (2.0, 19.0) and w["sensor_sleep"] == (22.0, 39.0)
     assert w["deepsleep"] == (62.3, 79.3)          # capped at the hold: the reboot is excluded
     assert w["service_idle_after"] == (92.0, 109.0) and "sensor_shutdown" not in w
+
+
+def test_bench2_plan_cells():
+    names = [sw.cell_name(c) for c in sw.cells("bench2")]
+    assert names == ["HD_notags_30fps", "HD_tags_30fps", "HD_tags_every3_30fps", "HD_tags_every6_30fps",
+                     "HD_tags_every10_30fps", "HD_tags_roi_30fps", "HD_tags_every3_roi_30fps"]

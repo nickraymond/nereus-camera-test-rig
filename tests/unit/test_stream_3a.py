@@ -202,3 +202,45 @@ def test_apriltags_family_by_name(run, monkeypatch):
     monkeypatch.setattr(FakeSensor, "snapshot", snap)
     frames, _, _ = run({"apriltags": True, "tag_family": "TAG36H11"})
     assert frames[0]["tags"] == 0
+
+
+def _tag(i, x=100, y=100, s=60):
+    return types.SimpleNamespace(id=i, corners=[(x, y), (x + s, y), (x + s, y + s), (x, y + s)])
+
+
+def test_tag_every_detects_only_every_nth_frame(run, monkeypatch):
+    monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace(TAG25H9=16))
+    orig = FakeSensor.snapshot
+
+    def snap(self):
+        img = orig(self)
+        img.find_apriltags = lambda families=None, roi=None: [_tag(0)]
+        return img
+    monkeypatch.setattr(FakeSensor, "snapshot", snap)
+    frames, _, _ = run({"apriltags": True, "tag_every": 3}, frames=7)
+    assert [("tags" in f) for f in frames] == [True, False, False, True, False, False, True]
+
+
+def test_tag_roi_tracks_then_falls_back_to_full_frame(run, monkeypatch):
+    monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace(TAG25H9=16))
+    orig = FakeSensor.snapshot
+    calls = []
+    frame = {"n": 0}
+
+    def snap(self):
+        img = orig(self)
+        frame["n"] += 1
+        k = frame["n"]
+
+        def find(families=None, roi=None):
+            calls.append((k, roi))
+            if roi is None:
+                return [_tag(0), _tag(1, x=600)]
+            return [] if (k == 3 and roi[0] > 500) else [_tag(0 if roi[0] < 500 else 1, x=roi[0] + 40)]
+        img.find_apriltags = find
+        return img
+    monkeypatch.setattr(FakeSensor, "snapshot", snap)
+    frames, _, _ = run({"apriltags": True, "tag_roi": True}, frames=4)
+    assert [f["tag_mode"] for f in frames] == ["full", "roi", "roi+full", "roi"]
+    assert all(f["tags"] == 2 for f in frames)
+    assert (2, (60, 60, 140, 140)) in calls   # box = corners +/- 40 px around the frame-1 tag

@@ -14,8 +14,10 @@ so there is no SD arm. n is small (a map, not a recommendation).
 ## Bench 2: decoupled detection (video at full rate, detection on every Nth frame)
 - Question: can the N6 stream HD at ≥ 10 fps while still detecting tags a few times a second?
 - How: start_stream `tag_every` = N (detect on every Nth frame only). HD q70, asked 30 fps, N in {1, 3, 6, 10}, 20 s each,
-  2 reps, through `scripts/n6_power_sweep.py` cells.
-- Reported: delivered fps, detections per second, power. Bar (from SPEC_n6_eval must do 9, for reference): ≥ 10.0 fps
+  2 reps: `scripts/n6_power_sweep.py --plan bench2`. **Added before the run (after bench 1 found ROI 32 ms vs 182 ms):**
+  `tag_roi`, which searches only boxes (+40 px) around the last frame's tags and falls back to the full frame when one is
+  missing, at N = 1 and 3. A tags-off control is included.
+- Reported: delivered fps, detections per second, share of ROI detections, tags per detection, power. Bar (from SPEC_n6_eval must do 9, for reference): ≥ 10.0 fps
   delivered at HD.
 
 ## Bench 3: buffer to RAM, then offload, vs streaming over USB

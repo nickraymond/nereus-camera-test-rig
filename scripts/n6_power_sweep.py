@@ -40,12 +40,20 @@ SIZES = ("HD", "VGA")
 FPS = (10, 15, 30)
 
 
-def cells() -> list[dict]:
+def cells(plan: str = "doe") -> list[dict]:
+    """doe = Nick's 10/23 matrix; bench2 = TEST_CARD_BENCH_1024 bench 2 (HD q70, 30 fps asked)."""
+    if plan == "bench2":
+        out = [{"size": "HD", "tags": False, "fps": 30}]
+        out += [{"size": "HD", "tags": True, "fps": 30, "every": n} for n in (1, 3, 6, 10)]
+        out += [{"size": "HD", "tags": True, "fps": 30, "every": n, "roi": True} for n in (1, 3)]
+        return out
     return [{"size": s, "tags": t, "fps": f} for s in SIZES for t in (False, True) for f in FPS]
 
 
 def cell_name(c: dict) -> str:
-    return f"{c['size']}_{'tags' if c['tags'] else 'notags'}_{c['fps']}fps"
+    tag = "notags" if not c["tags"] else "tags" + (f"_every{c['every']}" if c.get("every", 1) > 1 else "") \
+        + ("_roi" if c.get("roi") else "")
+    return f"{c['size']}_{tag}_{c['fps']}fps"
 
 
 def logger(bus, rows: list, stop: threading.Event, hz: float = 10.0) -> None:
@@ -77,12 +85,15 @@ def frame_stats(csv_path: Path, seconds: float) -> dict:
         return {"frames": len(fr)}
     t = [float(r["host_rx_mono"]) for r in fr]
     det = [float(r["detect_ms"]) for r in fr if r.get("detect_ms")]
+    modes = [r.get("tag_mode") for r in fr if r.get("tag_mode")]
     tags = [int(r["tags"]) for r in fr if r.get("tags") not in (None, "")]
     return {"frames": len(fr), "t0": t[0], "t1": t[-1],
             "fps_delivered": round((len(t) - 1) / (t[-1] - t[0]), 2),
             "fps_clip": round(len(t) / seconds, 2),
             "detect_ms_median": statistics.median(det) if det else None,
             "tags_mean": round(statistics.mean(tags), 2) if tags else None,
+            "detections_per_s": round(len(det) / (t[-1] - t[0]), 2) if det else None,
+            "roi_share": round(modes.count("roi") / len(modes), 3) if modes else None,
             "bytes_mean": round(statistics.mean(int(r["bytes"]) for r in fr))}
 
 
@@ -93,6 +104,10 @@ def run_cell(c: dict, out: Path, seconds: float) -> dict:
             "--out", str(out)]
     if c["tags"]:
         args += ["--apriltags", "--tag-family", "TAG25H9"]
+        if c.get("every", 1) > 1:
+            args += ["--tag-every", str(c["every"])]
+        if c.get("roi"):
+            args += ["--tag-roi"]
     p = subprocess.run(args, capture_output=True, text=True, timeout=seconds + 120)
     (out / "sync_video.log").write_text(p.stdout + p.stderr)
     return {"sync_video_rc": p.returncode, **frame_stats(out / "openmv_n6_frames.csv", seconds)}
@@ -103,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=float, default=20.0)
     ap.add_argument("--reps", type=int, default=2)
+    ap.add_argument("--plan", choices=("doe", "bench2"), default="doe")
     a = ap.parse_args(argv)
     out = Path(a.out).expanduser()
     out.mkdir(parents=True, exist_ok=False)  # never overwrite a run
@@ -120,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         th.start()
         plan = [("idle_start", None)]
         for rep in range(1, a.reps + 1):
-            order = cells() if rep % 2 else list(reversed(cells()))
+            order = cells(a.plan) if rep % 2 else list(reversed(cells(a.plan)))
             plan += [(f"r{rep}", c) for c in order]
         plan.append(("idle_end", None))
         for tag, c in plan:
@@ -137,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
                 r.update(window_stats(rows, r["t0"], r["t1"]))
             results.append(r)
             print(json.dumps({k: r.get(k) for k in ("cell", "fps_delivered", "ma_mean", "mw_mean",
-                                                     "detect_ms_median", "tags_mean", "n_power")}),
+                                                     "detect_ms_median", "tags_mean", "n_power",
+                                                     "detections_per_s", "roi_share")}),
                   flush=True)
         stop.set()
         th.join(timeout=2)
@@ -147,7 +164,8 @@ def main(argv: list[str] | None = None) -> int:
         w.writerows(rows)
     keys = ["cell", "rep", "size", "tags", "fps", "fps_delivered", "fps_clip", "frames",
             "v_mean", "ma_mean", "ma_sd", "mw_mean", "n_power", "read_errors",
-            "detect_ms_median", "tags_mean", "bytes_mean", "sync_video_rc"]
+            "detect_ms_median", "tags_mean", "bytes_mean", "sync_video_rc", "every", "roi",
+            "detections_per_s", "roi_share"]
     with (out / "sweep.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
         w.writeheader()
