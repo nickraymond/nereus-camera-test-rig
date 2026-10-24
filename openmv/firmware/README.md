@@ -18,9 +18,15 @@ TAG36H11, and the other family bits return in 14 ms with nothing. The tag25h9 de
     --openmv-dir ~/openmv-dev/openmv-n6-tag25h9 \
     --patch "$PWD/openmv/firmware/0001-n6-enable-apriltags-tag25h9.patch"
 ```
-Built 2026-10-23: label `v5.0.1-2.gbe78cb31ce`, `firmware.bin` 1,988,448 B, sha256
+Built 2026-10-23 with ADIN_SPI_OpenMV at `994b8c2` (`build_n6.sh` last changed in `1df54ba`): label
+`v5.0.1-2.gbe78cb31ce`. **`-2`** = two local commits on top of the v5.0.1 tag (`631681e5`): `0ecd45c2`, the
+harness's `docker/Makefile` safe.directory patch (build only, no compiled source), then `be78cb31`, this 0001 patch.
+ `firmware.bin` 1,988,448 B, sha256
 `273be3fa9a0ad147fa8108a63b32feb3835f28938425f92cef724dc1446b7edc`. Check that the `TAG25H9` string and the
 `tag25h9_create` symbol are in `firmware.elf`.
+
+**Who may flash:** only the session that owns that N6 on the board (one owner per unit). Each unit needs Nick's own
+words in that session's chat, and it gets recorded on its card. Never a field unit or another rig's boards.
 
 **Flash** (from the Pi the N6 is plugged into; FIRMWARE partition only):
 ```bash
@@ -46,5 +52,7 @@ Then run `openmv/probes/n6_apriltag_snapshot_v5.py` with the V3 card in view: it
 `1338b9607b57…`), take `OPENMV_N6/firmware.bin` (sha256 `479c7a1656d9…`), and flash alt 1 the same way.
 
 **Known limits:** tag25h9 has a small code distance, so false ids appear (10/24: id 30 and id 11 in 100 frames).
-Filter to the card's ids (V3: 0–15). Units flashed so far: the spare N6 on nereus001 (serial 020023000450433547373200),
+Filter to **the ids of the card copy in view**, not the whole V3 range. Each copy has its own block
+(`configs/cards/nereus_v3_c*.yaml` `corner_map`: c1 = 0–3, c3 = 8–11, and so on). The false id 11 above is a c3 id, so a
+0–15 filter would have let it through while c1 was in view. Units flashed so far: the spare N6 on nereus001 (serial 020023000450433547373200),
 10/23 8:28 PM PT, approved by Nick in the N6 eval builder's chat.
