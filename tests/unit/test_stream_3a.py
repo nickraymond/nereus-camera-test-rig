@@ -152,3 +152,40 @@ def test_cli_parses_the_new_flags():
     a = sv.build_parser().parse_args(["--meta", "--lock-3a", "--n6-serial", "020023000450433547373200"])
     assert (a.meta, a.lock_3a, a.n6_serial) == (True, True, "020023000450433547373200")
     assert sv.META_KEYS == ("exposure_us", "gain_db")
+
+
+def test_apriltags_reports_count_ids_and_ms_per_frame(run, monkeypatch):
+    tag = types.SimpleNamespace(id=lambda: 2)
+    fake_image = types.SimpleNamespace(TAG25H9=16)
+    monkeypatch.setitem(sys.modules, "image", fake_image)
+    orig = FakeSensor.snapshot
+
+    def snap(self):
+        img = orig(self)
+        img.find_apriltags = lambda families=None: [tag, tag] if families == 16 else []
+        return img
+    monkeypatch.setattr(FakeSensor, "snapshot", snap)
+    frames, _, _ = run({"apriltags": True})
+    assert all(f["tags"] == 2 and f["tag_ids"] == [2, 2] and f["detect_ms"] >= 0 for f in frames)
+
+
+def test_apriltags_error_is_reported_not_fatal(run, monkeypatch):
+    monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace(TAG25H9=16))
+    orig = FakeSensor.snapshot
+
+    def snap(self):
+        img = orig(self)
+
+        def boom(families=None):
+            raise MemoryError("FB alloc")
+        img.find_apriltags = boom
+        return img
+    monkeypatch.setattr(FakeSensor, "snapshot", snap)
+    frames, _, _ = run({"apriltags": True})
+    assert len(frames) == 3 and frames[0]["tags"] is None and "MemoryError" in frames[0]["tag_error"]
+
+
+def test_apriltags_without_a_family_constant_fails_the_stream(run, monkeypatch):
+    monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace())
+    with pytest.raises(Exception, match="tag25h9"):
+        run({"apriltags": True})

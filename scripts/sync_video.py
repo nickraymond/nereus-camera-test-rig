@@ -62,6 +62,8 @@ BOARDS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c140000000
 TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
 # Per-frame 3A from the board (start_stream "meta", SPEC_n6_eval must do 2, 2026-10-23).
 META_KEYS = ("exposure_us", "gain_db")
+# On-board AprilTags per streamed frame (start_stream "apriltags", Nick's 10/23 power DOE).
+TAG_KEYS = ("tags", "tag_ids", "detect_ms", "tag_error")
 
 
 def sha256(path: Path) -> str:
@@ -163,7 +165,7 @@ class BoardVideo:
                                  "host_rx_mono": round(time.monotonic(), 4),
                                  "bytes": len(data), "width": fr["width"],
                                  "height": fr["height"],
-                                 **{k: fr.get(k) for k in TIMING_KEYS + META_KEYS}})
+                                 **{k: fr.get(k) for k in TIMING_KEYS + META_KEYS + TAG_KEYS}})
                     q.put(data)
                 elif msg.get("status") == "completed":
                     self.rec["board_done"] = msg.get("output") or {}
@@ -177,7 +179,8 @@ class BoardVideo:
         self.rows = rows
         with (self.out / f"{self.name}_frames.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["seq", "ticks_ms", "host_rx_mono", "bytes",
-                                              "width", "height", *TIMING_KEYS, *META_KEYS])
+                                              "width", "height", *TIMING_KEYS, *META_KEYS,
+                                              *TAG_KEYS])
             w.writeheader()
             w.writerows(rows)
 
@@ -413,6 +416,8 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
         s["meta"] = True
     if a.lock_3a:
         s["lock_3a"] = True
+    if getattr(a, "apriltags", False):
+        s["apriltags"] = True
     return s
 
 
@@ -491,6 +496,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--lock-3a", action="store_true",
                     help="boards lock AE, gain and AWB after the warm-up (board_done.locked_3a "
                          "says which locked)")
+    ap.add_argument("--apriltags", action="store_true",
+                    help="boards run find_apriltags (tag25h9) on every streamed frame; tags, "
+                         "tag_ids and detect_ms go in frames.csv")
     ap.add_argument("--n6-serial", default=None,
                     help="N6 USB serial (default: nereus002's N6); nereus001's spare N6 is "
                          "020023000450433547373200")

@@ -150,7 +150,7 @@ def test_combined_decode_byte_loss_costs_one_frame_and_keeps_timing_columns(tmp_
     import csv
     rows = list(csv.DictReader((tmp_path / "openmv_ae3_frames.csv").open()))
     # timing columns keep their order; the per-frame 3A columns (SPEC_n6_eval) follow, empty here
-    assert list(rows[0])[-5:] == ["snap_ms", "jpeg_ms", "prev_write_ms", "exposure_us", "gain_db"]
+    assert list(rows[0])[-9:-4] == ["snap_ms", "jpeg_ms", "prev_write_ms", "exposure_us", "gain_db"]
     assert rows[3]["seq"] == "4" and rows[0]["exposure_us"] == ""
     assert (tmp_path / "openmv_ae3.mjpeg").stat().st_size == sum(len(frames[i])
                                                                  for i in (0, 1, 2, 4, 5, 6))

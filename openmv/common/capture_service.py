@@ -483,6 +483,19 @@ def stream_frames(usb, command_id, board_config, settings):
     # Per-frame 3A (SPEC_n6_eval must do 2): each header carries the exposure (us) and gain
     # (dB) read right after its snapshot. Off by default: the header stays as before.
     meta = bool(settings.get("meta"))
+    # On-board AprilTags on every streamed frame (SPEC_n6_eval must do 17's "stream + detect"
+    # power mode, Nick 10/23 DOE): tag count, ids and detect ms go in the frame header. The
+    # tag25h9 constant is looked up by name, never assumed; a missing one is a stream error.
+    tag_family = None
+    if settings.get("apriltags"):
+        import image
+
+        for name in ("TAG25H9", "APRILTAG_25H9"):
+            tag_family = getattr(image, name, None)
+            if tag_family is not None:
+                break
+        if tag_family is None:
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "no tag25h9 family in image module")
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -516,6 +529,15 @@ def stream_frames(usb, command_id, board_config, settings):
         t_frame = time.ticks_ms()
         img = sensor.snapshot()
         t_snap = time.ticks_ms()
+        tag_extra = None
+        if tag_family is not None:
+            try:
+                tags = img.find_apriltags(families=tag_family)
+                tag_extra = {"tags": len(tags), "tag_ids": [t.id() for t in tags]}
+            except Exception as exc:  # e.g. MemoryError at HD: reported per frame, stream goes on
+                tag_extra = {"tags": None, "tag_error": repr(exc)}
+            tag_extra["detect_ms"] = time.ticks_diff(time.ticks_ms(), t_snap)
+            t_snap = time.ticks_ms()  # jpeg_ms below stays the encode alone
         if sub_const is None:
             img.compress(quality=quality)
         else:
@@ -530,6 +552,9 @@ def stream_frames(usb, command_id, board_config, settings):
         if meta:
             extra = extra or {}
             extra["exposure_us"], extra["gain_db"] = _read_3a()
+        if tag_extra is not None:
+            extra = extra or {}
+            extra.update(tag_extra)
         t_write = time.ticks_ms()
         usb.write(cp.encode_message(
             cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
