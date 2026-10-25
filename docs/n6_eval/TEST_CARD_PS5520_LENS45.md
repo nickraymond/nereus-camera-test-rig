@@ -2,7 +2,7 @@
 
 Pre-registered before each item runs. The same suite as TEST_CARD_PAG7936_LENS45 (+ addendum) @ 1269cc8, so the two sensors on the new lens line up.
 Unit: nereus001 + spare N6 020023000450433547373200, PS5520 (0x5520, read 9:18 PM), v5.0.1 + tag25h9, board service 1d6f5c7 board files
-(ALL MATCH 9:18 PM). INA3221 CH1 at 10 Hz. Lens: the same 4.5 mm M12 as the PAG7936 run (Nick, chat ~9:25 PM: "Yes, it's the same 4.5 mm M12 lens."). V3 card at ~1 m in air (tape in frame, same spot as 8 PM), night indoor light (9:18 PM still: 33.4 ms; gain reads 0.0 dB,
+(ALL MATCH 9:18 PM). INA3221 CH1 at 10 Hz. Lens: the same 4.5 mm M12 as the PAG7936 run (Nick, chat ~9:21 PM: "Yes, it's the same 4.5 mm M12 lens."). V3 card at ~1 m in air (tape in frame, same spot as 8 PM), night indoor light (9:18 PM still: 33.4 ms; gain reads 0.0 dB,
 the PS5520 readout is suspect). HD tag edge 60 px (HD = the full 2592-wide view scaled to 1280×720).
 
 ## Compared with
