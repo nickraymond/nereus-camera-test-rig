@@ -47,6 +47,20 @@ DEFAULT_BAUD = 115200
 DEFAULT_HTTP_PORT = 8081
 
 
+# Sensor id (OpenMV common/omv_csi.h) -> name, class, native size (drivers/sensors/*.c, v5.0.1).
+SENSORS = {0x7936: ("PAG7936", "1 MP", "1280x800"), 0x5520: ("PS5520", "5 MP", "2592x1944")}
+
+
+def sensor_label(sensor_id):
+    """What the page shows for the sensor id the board reported (None = not reported)."""
+    if sensor_id is None:
+        return {"sensor": "unknown (board service doesn't report it)", "sensor_class": None,
+                "sensor_native": None, "sensor_id": None}
+    name, cls, native = SENSORS.get(int(sensor_id), ("unknown", None, None))
+    return {"sensor": name, "sensor_class": cls, "sensor_native": native,
+            "sensor_id": "0x%04x" % int(sensor_id)}
+
+
 class StreamState:
     """Latest frame + focus metrics, shared between the serial reader and HTTP handlers."""
 
@@ -58,14 +72,46 @@ class StreamState:
         self.peak = 0
         self.fps = 0.0
         self.running = True
+        # Resolution shown on the page and switchable from it (Nick, 10/24): the board stream
+        # is stopped cleanly, then restarted at the new framesize; fps follows the framesize.
+        self.width = 0
+        self.height = 0
+        self.framesize = None
+        self.pending = None  # framesize asked from the page, applied at the next segment
+        self.sensor_id = None
 
-    def update(self, frame, seq, sharpness, fps):
+    def update(self, frame, seq, sharpness, fps, width=None, height=None):
         with self._lock:
             self.frame = frame
             self.seq = seq
             self.sharpness = sharpness
             self.peak = max(self.peak, sharpness)
             self.fps = fps
+            if width and height:
+                self.width, self.height = int(width), int(height)
+
+    def request_framesize(self, framesize):
+        """Ask the reader to switch; False while a switch is already in flight."""
+        with self._lock:
+            if self.pending is not None:
+                return False
+            self.pending = framesize
+            return True
+
+    def apply_pending(self):
+        """Reader side, between segments: the framesize to restart with (None = keep)."""
+        with self._lock:
+            fs, self.pending = self.pending, None
+            if fs is not None:
+                self.framesize = fs
+                self.peak = 0  # sharpness scales with the frame: a new size starts a new peak
+                self.fps = 0.0
+            return fs
+
+    def info(self):
+        with self._lock:
+            return {"width": self.width, "height": self.height, "framesize": self.framesize,
+                    "switching": self.pending is not None, **sensor_label(self.sensor_id)}
 
     def snapshot(self):
         with self._lock:
@@ -88,7 +134,14 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
     fps = 0.0
     try:
         while state.running:
+            new_fs = state.apply_pending()
+            if new_fs is not None:
+                settings = {**settings, "framesize": new_fs}
+                fps = 0.0
+            elif state.framesize is None:
+                state.framesize = settings.get("framesize")
             io.write_message(cp.make_request("start_stream", command_id, settings))
+            stop_sent = False
             while state.running:
                 header = io.read_message(timeout=10.0)
                 status = header.get("status")
@@ -102,8 +155,16 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
                     if dt > 0:
                         fps = 0.8 * fps + 0.2 * (1.0 / dt)  # smoothed
                     state.update(
-                        data, int(meta.get("seq", 0)), int(meta.get("sharpness", size)), fps
+                        data, int(meta.get("seq", 0)), int(meta.get("sharpness", size)), fps,
+                        meta.get("width"), meta.get("height"),
                     )
+                    if meta.get("sensor_id") is not None:
+                        state.sensor_id = meta["sensor_id"]
+                    if state.pending is not None and not stop_sent:
+                        # Any inbound byte ends the board's stream; a bare newline is ignored
+                        # by its line loop afterwards (same stop as sync_video, QE #115).
+                        io._t.write(b"\n")
+                        stop_sent = True
                 elif status in ("completed", "failed"):
                     break  # segment ended; outer loop re-requests if still running
     except Exception as exc:  # stream stalled / port closed — stop cleanly
@@ -123,13 +184,19 @@ body{margin:0;background:#111;color:#eee;font-family:system-ui,sans-serif;text-a
 #fill{height:100%;width:0;background:linear-gradient(90deg,#f55,#fd0,#5f5)}
 button{background:#333;color:#eee;border:1px solid #555;border-radius:6px;
  padding:6px 12px;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button.on{background:#2a6;border-color:#5c9}
+#sizes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 10px 8px}
 </style></head><body>
 <div id=hud>
   <div><div class=n id=sharp>0</div><div class=l>sharpness</div></div>
   <div><div class=n id=peak>0</div><div class=l>peak</div></div>
   <div><div class=n id=fps>0</div><div class=l>fps</div></div>
+  <div><div class=n id=res>&ndash;</div><div class=l id=resl>resolution</div></div>
+  <div><div class=n id=sen>&ndash;</div><div class=l id=senl>sensor</div></div>
   <div><button onclick=fetch('/reset_peak',{method:'POST'})>reset peak</button></div>
 </div>
+<div id=sizes></div>
 <div id=bar><div id=fill></div></div>
 <img id=v src=/stream.mjpeg>
 <script>
@@ -140,6 +207,18 @@ async function tick(){
   document.getElementById('fps').textContent=d.fps.toFixed(1);
   let pct=d.peak?Math.round(100*d.sharpness/d.peak):0;
   document.getElementById('fill').style.width=pct+'%';
+  document.getElementById('res').textContent=d.width?d.width+'\u00d7'+d.height:'\u2013';
+  document.getElementById('resl').textContent=d.switching?'switching\u2026':(d.framesize?'resolution ('+d.framesize+')':'resolution');
+  document.getElementById('sen').textContent=d.sensor_class?d.sensor+' \u00b7 '+d.sensor_class:d.sensor;
+  document.getElementById('senl').textContent=d.sensor_native?'sensor (native '+d.sensor_native+', id '+d.sensor_id+')':'sensor';
+  let box=document.getElementById('sizes');
+  if(box.dataset.k!==d.framesizes.join()+d.framesize+d.switching){
+   box.dataset.k=d.framesizes.join()+d.framesize+d.switching; box.innerHTML='';
+   for(const fs of d.framesizes){let b=document.createElement('button');b.textContent=fs;
+    b.className=fs===d.framesize?'on':''; b.disabled=d.switching||fs===d.framesize;
+    b.onclick=()=>fetch('/framesize',{method:'POST',body:JSON.stringify({framesize:fs})});
+    box.appendChild(b);}
+  }
  }catch(e){}
  setTimeout(tick,150);
 }
@@ -147,7 +226,7 @@ tick();
 </script></body></html>"""
 
 
-def _make_handler(state: StreamState):
+def _make_handler(state: StreamState, framesizes=("QVGA", "VGA", "960x600", "HD")):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -159,6 +238,18 @@ def _make_handler(state: StreamState):
                 state.reset_peak()
                 self.send_response(204)
                 self.end_headers()
+            elif self.path == "/framesize":
+                n = int(self.headers.get("Content-Length") or 0)
+                try:
+                    fs = json.loads(self.rfile.read(n) or b"{}").get("framesize")
+                except ValueError:
+                    fs = None
+                if fs not in framesizes:
+                    self._json(400, {"ok": False, "err": "framesize must be one of %s" % list(framesizes)})
+                elif not state.request_framesize(fs):
+                    self._json(409, {"ok": False, "err": "a resolution switch is already in progress"})
+                else:
+                    self._json(200, {"ok": True, "framesize": fs})
             else:
                 self.send_error(404)
 
@@ -172,18 +263,20 @@ def _make_handler(state: StreamState):
                 self.wfile.write(body)
             elif self.path == "/focus.json":
                 _frame, seq, sharp, peak, fps = state.snapshot()
-                body = json.dumps(
-                    {"sharpness": sharp, "peak": peak, "fps": round(fps, 2), "seq": seq}
-                ).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
+                self._json(200, {"sharpness": sharp, "peak": peak, "fps": round(fps, 2),
+                                 "seq": seq, **state.info(), "framesizes": list(framesizes)})
             elif self.path == "/stream.mjpeg":
                 self._serve_mjpeg()
             else:
                 self.send_error(404)
+
+        def _json(self, code, obj):
+            body = json.dumps(obj).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def _serve_mjpeg(self):
             self.send_response(200)
@@ -262,7 +355,7 @@ def _imx_reader_loop(state: StreamState, width: int, height: int, fps: float, le
                 frame, buf = buf[start:end + 2], buf[end + 2:]
                 now = time.monotonic()
                 seq += 1
-                state.update(frame, seq, len(frame), 1.0 / max(now - t_last, 1e-3))
+                state.update(frame, seq, len(frame), 1.0 / max(now - t_last, 1e-3), width, height)
                 t_last = now
     finally:
         proc.terminate()
@@ -275,7 +368,7 @@ def run_imx708(width=1152, height=648, fps=10.0, lens=0.8, http_host="0.0.0.0",
     reader = threading.Thread(target=_imx_reader_loop, args=(state, width, height, fps, lens),
                               daemon=True)
     reader.start()
-    httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state))
+    httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state, ()))
     signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
     print("IMX708 full-frame preview on http://%s:%d/ (%dx%d, lens %.2f). Ctrl-C to stop."
           % (_tailscale_host(), http_port, width, height, lens))
@@ -290,7 +383,8 @@ def run_imx708(width=1152, height=648, fps=10.0, lens=0.8, http_host="0.0.0.0",
 
 
 def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
-        http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT, fps=0.0):
+        http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT, fps=0.0,
+        framesizes=("QVGA", "VGA", "960x600", "HD")):
     import serial
 
     dev = port or find_port(serial_number)
@@ -308,7 +402,7 @@ def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=
     )
     reader.start()
 
-    httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state))
+    httpd = ThreadingHTTPServer((http_host, http_port), _make_handler(state, tuple(framesizes)))
 
     # Treat SIGTERM like Ctrl-C so `kill <pid>` also shuts down cleanly. Without this, a
     # SIGTERM mid-stream skips the finally block below — the board never gets its stop byte
@@ -342,6 +436,9 @@ def main(argv=None):
     parser.add_argument("--port", default=None, help="explicit device path (overrides --serial)")
     parser.add_argument("--framesize", default="VGA", help="QVGA | VGA | HD (default VGA)")
     parser.add_argument("--quality", type=int, default=70, help="JPEG quality (default 70)")
+    parser.add_argument("--framesizes", default="QVGA,VGA,960x600,HD",
+                        help="resolutions the page offers (the board's allowlist must have them; "
+                             "default QVGA,VGA,960x600,HD = the N6 board_config)")
     parser.add_argument("--max-seconds", type=int, default=3600,
                         help="per-segment board stream cap; reader re-requests to stay live")
     parser.add_argument("--http-host", default="0.0.0.0")
@@ -363,7 +460,8 @@ def main(argv=None):
     try:
         run(serial_number=args.serial_number, port=args.port, framesize=args.framesize,
             quality=args.quality, max_seconds=args.max_seconds,
-            http_host=args.http_host, http_port=args.http_port, fps=args.fps)
+            http_host=args.http_host, http_port=args.http_port, fps=args.fps,
+            framesizes=[f for f in args.framesizes.split(",") if f])
     except RuntimeError as exc:
         print("focus stream failed: %s" % exc, file=sys.stderr)
         return 1
