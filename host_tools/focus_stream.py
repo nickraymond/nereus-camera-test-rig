@@ -83,6 +83,10 @@ class StreamState:
         self.pending = None  # framesize asked from the page, applied at the next segment
         self.sensor_id = None
         self.error = None  # last switch the board refused (e.g. a PS5520 size on the PAG7936)
+        self.resyncs = 0          # garbage lines skipped (lost bytes)
+        self.short_frames = 0     # frames dropped because bytes were lost inside them
+        self.reader_errors = 0    # segments ended on an error and restarted
+        self.last_reader_error = None
 
     def update(self, frame, seq, sharpness, fps, width=None, height=None):
         with self._lock:
@@ -116,6 +120,9 @@ class StreamState:
         with self._lock:
             return {"width": self.width, "height": self.height, "framesize": self.framesize,
                     "switching": self.pending is not None, "error": self.error,
+                    "resyncs": self.resyncs, "short_frames": self.short_frames,
+                    "reader_errors": self.reader_errors, "last_reader_error": self.last_reader_error,
+                    "streaming": self.running,
                     **sensor_label(self.sensor_id)}
 
     def snapshot(self):
@@ -127,16 +134,66 @@ class StreamState:
             self.peak = self.sharpness
 
 
+def _decode_tail(line):
+    """The protocol message at the END of ``line``: lost frame bytes can leave JPEG bytes in front
+    of the next header. Same algorithm as scripts/sync_video.py ``decode_tail``."""
+    end = len(line)
+    start = max(0, end - 512)  # a header line is ~200 B; never scan a whole JPEG
+    i = line.rfind(b"{", start, end)
+    while i >= 0:
+        try:
+            msg = cp.decode_message(line[i:])
+            if isinstance(msg, dict) and "status" in msg:
+                return msg
+        except (ValueError, UnicodeDecodeError, cp.ProtocolError):
+            pass
+        i = line.rfind(b"{", start, i)
+    return None
+
+
+def _split_short_jpeg(data):
+    """A payload whose JPEG ends (FF D9) before its declared size lost bytes in transit: return
+    (that frame, the bytes after it, which belong to the next message). As sync_video."""
+    eoi = data.find(b"\xff\xd9")
+    if 0 <= eoi < len(data) - 2:
+        return data[:eoi + 2], data[eoi + 2:]
+    return data, b""
+
+
+def _next_message(io, state, timeout=10.0):
+    """The next protocol message, resyncing past garbage instead of dying on it (Builder 2, 10/24:
+    at 1920x1080 the N6 dropped bytes, and the old reader died on "'utf-8' codec can't decode")."""
+    deadline = time.monotonic() + timeout
+    while True:
+        line = io.read_line(timeout=max(0.1, deadline - time.monotonic()))
+        msg = _decode_tail(line)
+        if msg is not None:
+            if not line.lstrip().startswith(b"{"):
+                state.resyncs += 1
+            return msg
+        if line.strip():
+            state.resyncs += 1
+        if time.monotonic() > deadline:
+            raise TimeoutError("no stream header for %.0f s" % timeout)
+
+
+MAX_FAILED_SEGMENTS = 5  # restarts in a row without a single frame before the reader gives up
+
+
 def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamState):
     """Read framed JPEG frames off the serial port, re-requesting the stream as needed.
 
     The board caps each stream segment at a safety timeout (so a dead host can't stream
     forever). To keep the browser feed continuous across that cap, the reader re-sends
     ``start_stream`` whenever a segment ends — invisible to the viewer beyond a brief hold
-    on the last frame. Stops for good once ``state.running`` is cleared (host shutdown).
+    on the last frame. Lost bytes are resynced (``_next_message``, ``_split_short_jpeg``); any
+    other error ends only that segment: the board gets a stop byte and the stream restarts,
+    so a resolution switch can never stay stuck. Stops for good once ``state.running`` is
+    cleared (host shutdown) or after MAX_FAILED_SEGMENTS restarts in a row with no frame.
     """
     last_t = time.monotonic()
     fps = 0.0
+    failed_in_a_row = 0
     try:
         while state.running:
             new_fs = state.apply_pending()
@@ -149,48 +206,72 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
                 last_good = settings.get("framesize")
                 if state.framesize is None:
                     state.framesize = last_good
-            io.write_message(cp.make_request("start_stream", command_id, settings))
             stop_sent = False
             frames_this_segment = 0
-            while state.running:
-                header = io.read_message(timeout=10.0)
-                status = header.get("status")
-                if status == "frame":
-                    meta = header.get("frame") or {}
-                    size = int(meta.get("size_bytes", 0))
-                    data = io.read_exact(size, timeout=10.0)
-                    frames_this_segment += 1
-                    now = time.monotonic()
-                    dt = now - last_t
-                    last_t = now
-                    if dt > 0:
-                        fps = 0.8 * fps + 0.2 * (1.0 / dt)  # smoothed
-                    state.update(
-                        data, int(meta.get("seq", 0)), int(meta.get("sharpness", size)), fps,
-                        meta.get("width"), meta.get("height"),
-                    )
-                    if meta.get("sensor_id") is not None:
-                        state.sensor_id = meta["sensor_id"]
-                    if state.pending is not None and not stop_sent:
-                        # Any inbound byte ends the board's stream; a bare newline is ignored
-                        # by its line loop afterwards (same stop as sync_video, QE #115).
-                        io._t.write(b"\n")
-                        stop_sent = True
-                elif status == "failed" and frames_this_segment == 0 \
-                        and settings.get("framesize") != last_good:
-                    # The board refused the new size before streaming a frame: go back to the
-                    # last working size instead of re-asking for a size that cannot work.
-                    err = (header.get("error") or {}).get("message") or "refused"
-                    state.error = "%s: %s" % (settings.get("framesize"), err)
-                    settings = {**settings, "framesize": last_good}
-                    state.framesize = last_good
-                    break
-                elif status in ("completed", "failed"):
-                    break  # segment ended; outer loop re-requests if still running
-    except Exception as exc:  # stream stalled / port closed — stop cleanly
+            try:
+                io.write_message(cp.make_request("start_stream", command_id, settings))
+                while state.running:
+                    header = _next_message(io, state)
+                    status = header.get("status")
+                    if status == "frame":
+                        meta = header.get("frame") or {}
+                        size = int(meta.get("size_bytes", 0))
+                        data, rest = _split_short_jpeg(io.read_exact(size, timeout=10.0))
+                        if rest:  # bytes were lost: this frame ended early, the next one began
+                            io._buf[0:0] = rest
+                            state.short_frames += 1
+                            continue
+                        frames_this_segment += 1
+                        failed_in_a_row = 0
+                        now = time.monotonic()
+                        dt = now - last_t
+                        last_t = now
+                        if dt > 0:
+                            fps = 0.8 * fps + 0.2 * (1.0 / dt)  # smoothed
+                        state.update(
+                            data, int(meta.get("seq", 0)), int(meta.get("sharpness", size)), fps,
+                            meta.get("width"), meta.get("height"),
+                        )
+                        if meta.get("sensor_id") is not None:
+                            state.sensor_id = meta["sensor_id"]
+                        if state.pending is not None and not stop_sent:
+                            # Any inbound byte ends the board's stream; a bare newline is ignored
+                            # by its line loop afterwards (same stop as sync_video, QE #115).
+                            io._t.write(b"\n")
+                            stop_sent = True
+                    elif status == "failed" and frames_this_segment == 0 \
+                            and settings.get("framesize") != last_good:
+                        # The board refused the new size before streaming a frame: go back to the
+                        # last working size instead of re-asking for a size that cannot work.
+                        err = (header.get("error") or {}).get("message") or "refused"
+                        state.error = "%s: %s" % (settings.get("framesize"), err)
+                        settings = {**settings, "framesize": last_good}
+                        state.framesize = last_good
+                        break
+                    elif status in ("completed", "failed"):
+                        break  # segment ended; outer loop re-requests if still running
+            except Exception as exc:  # lost sync, timeout: end this segment, restart the stream
+                state.reader_errors += 1
+                state.last_reader_error = repr(exc)
+                sys.stderr.write("focus stream segment ended on error (restarting): %r\n" % exc)
+                if frames_this_segment == 0:
+                    failed_in_a_row += 1
+                    if failed_in_a_row >= MAX_FAILED_SEGMENTS:
+                        raise
+                try:
+                    io._t.write(b"\n")  # make sure the board's stream is stopped
+                except Exception:
+                    pass
+                time.sleep(1.0)
+                try:
+                    io._buf.clear()  # drop the rest of the broken segment
+                except Exception:
+                    pass
+    except Exception as exc:  # the board stopped answering at all: stop cleanly
         sys.stderr.write("focus stream reader stopped: %s\n" % exc)
     finally:
         state.running = False
+        state.pending = None  # never leave the page stuck at "switching"
 
 
 _PAGE = """<!doctype html><html><head><meta charset=utf-8>
