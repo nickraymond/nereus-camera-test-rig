@@ -124,3 +124,10 @@ def test_reader_picks_up_the_sensor_id_from_the_first_frame():
     io.write_message = wm
     fs._reader_loop(io, "c", fs.stream_settings("HD", 70, 60), st)
     assert st.info()["sensor"] == "PS5520" and st.info()["sensor_class"] == "5 MP"
+
+
+def test_page_has_zoom_controls():
+    import host_tools.focus_stream as fsm
+    page = fsm._PAGE
+    for needle in ("id=vp", "data-z=fit", "data-z=1", "data-z=8", "pixelated", "addEventListener('wheel'"):
+        assert needle in page

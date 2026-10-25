@@ -187,6 +187,12 @@ button{background:#333;color:#eee;border:1px solid #555;border-radius:6px;
 button:disabled{opacity:.4;cursor:default}
 button.on{background:#2a6;border-color:#5c9}
 #sizes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 10px 8px}
+#zoom{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;padding:0 10px 8px}
+#zl{font-size:13px;color:#9aa;min-width:12em;font-variant-numeric:tabular-nums}
+#vp{position:relative;overflow:hidden;background:#000;width:100%;height:70vh;cursor:grab;touch-action:none}
+#vp.drag{cursor:grabbing}
+#vp #v{position:absolute;left:0;top:0;max-width:none;transform-origin:0 0;margin:0}
+#vp.px #v{image-rendering:pixelated}
 </style></head><body>
 <div id=hud>
   <div><div class=n id=sharp>0</div><div class=l>sharpness</div></div>
@@ -198,8 +204,53 @@ button.on{background:#2a6;border-color:#5c9}
 </div>
 <div id=sizes></div>
 <div id=bar><div id=fill></div></div>
-<img id=v src=/stream.mjpeg>
+<div id=zoom>
+  <button data-z=fit class=on>fit</button><button data-z=1>1:1</button><button data-z=2>2&times;</button>
+  <button data-z=4>4&times;</button><button data-z=8>8&times;</button>
+  <span id=zl>fit</span>
+</div>
+<div id=vp><img id=v src=/stream.mjpeg alt="live N6 frame"></div>
 <script>
+// Zoom + pan (Nick 10/24, lens focusing): s = screen px per frame px. Wheel zooms about the pointer,
+// drag pans, double-click toggles fit / 1:1. From 1:1 up, pixels stay square (no smoothing).
+const vp=document.getElementById('vp'), v=document.getElementById('v'), zl=document.getElementById('zl');
+let s=1, tx=0, ty=0, fit=true, nw=0, nh=0, drag=null;
+function fitScale(){return Math.min(vp.clientWidth/nw, vp.clientHeight/nh);}
+function clamp(){
+ const w=nw*s, h=nh*s, W=vp.clientWidth, H=vp.clientHeight;
+ tx = w<=W ? (W-w)/2 : Math.min(0, Math.max(W-w, tx));
+ ty = h<=H ? (H-h)/2 : Math.min(0, Math.max(H-h, ty));
+}
+function draw(){
+ if(!nw) return; if(fit) s=fitScale(); clamp();
+ v.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';
+ vp.classList.toggle('px', s>=1);
+ zl.textContent=(fit?'fit · ':'')+(s>=1?s.toFixed(s<10?1:0)+'×':'1:'+(1/s).toFixed(1))+' · '+nw+'×'+nh;
+ for(const b of document.querySelectorAll('#zoom button')){
+  const z=b.dataset.z; b.className=(z==='fit'?fit:(!fit&&Math.abs(s-Number(z))<1e-6))?'on':'';}
+}
+function zoomAt(ns, cx, cy){  // keep the frame point under (cx, cy) fixed
+ const fx=(cx-tx)/s, fy=(cy-ty)/s; fit=false;
+ s=Math.min(16, Math.max(fitScale(), ns)); tx=cx-fx*s; ty=cy-fy*s; draw();
+}
+function centre(){return [vp.clientWidth/2, vp.clientHeight/2];}
+for(const b of document.querySelectorAll('#zoom button')){
+ b.onclick=()=>{ if(b.dataset.z==='fit'){fit=true; draw();} else {const c=centre(); zoomAt(Number(b.dataset.z), c[0], c[1]);} };
+}
+vp.addEventListener('wheel', e=>{e.preventDefault(); const r=vp.getBoundingClientRect();
+ zoomAt(s*Math.exp(-e.deltaY*0.0015), e.clientX-r.left, e.clientY-r.top);}, {passive:false});
+vp.addEventListener('pointerdown', e=>{drag={x:e.clientX, y:e.clientY, tx, ty}; vp.classList.add('drag'); vp.setPointerCapture(e.pointerId);});
+vp.addEventListener('pointermove', e=>{ if(!drag) return; fit=false; tx=drag.tx+e.clientX-drag.x; ty=drag.ty+e.clientY-drag.y; draw();});
+vp.addEventListener('pointerup', ()=>{drag=null; vp.classList.remove('drag');});
+vp.addEventListener('dblclick', e=>{ const r=vp.getBoundingClientRect();
+ if(fit||s<0.999) zoomAt(1, e.clientX-r.left, e.clientY-r.top); else {fit=true; draw();} });
+window.addEventListener('resize', draw);
+// The MJPEG <img> keeps one element; its size changes when the resolution switches.
+setInterval(()=>{ if(v.naturalWidth && (v.naturalWidth!==nw || v.naturalHeight!==nh)){
+ const keep=!fit && nw ? [(vp.clientWidth/2-tx)/(s*nw), (vp.clientHeight/2-ty)/(s*nh), s*nw] : null;
+ nw=v.naturalWidth; nh=v.naturalHeight; v.style.width=nw+'px'; v.style.height=nh+'px';
+ if(keep){ s=keep[2]/nw; tx=vp.clientWidth/2-keep[0]*nw*s; ty=vp.clientHeight/2-keep[1]*nh*s; }
+ draw(); }}, 200);
 async function tick(){
  try{let r=await fetch('/focus.json');let d=await r.json();
   document.getElementById('sharp').textContent=d.sharpness;
