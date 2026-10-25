@@ -29,3 +29,14 @@ board service = test/141-on-n6-eval 1d6f5c7 board files (= feat/n6-eval + the fr
 - No board file writes, no firmware change, nothing on nereus002.
 - Not on this card: the lens sharpness measurement (edge 10–90 % in mm, n ≥ 10), which needs its own card and target.
 - Cost: ~45 min unattended on nereus001.
+
+## Addendum (Nick, chat ~7:47 PM: "Do any more testing that you need while this sensor is installed, then we will repeat the same suite of tests with the 5MP + new lens later this PM. Do what you can without me intervening")
+Pre-registered before these run, after items 1–6 and the clip card (TEST_CARD_PAG7936_LENS45_CLIPS):
+7. **On-board max fps** at the PAG7936's sizes: `openmv/probes/n6_bigsize_fps_probe_v5.py` (now picks the sizes by sensor id: QVGA 320×200,
+   VGA 640×400, 960×600, HD 1280×800), RGB565 capture fps, capture + JPEG q70 fps + bytes, BAYER capture fps. n = 1 run.
+8. **Stills at every PAG7936 size** for the cut sheet: QVGA, VGA, 960x600, HD, JPEG q90, one each (`~/n6_eval/n6_size_snap.py`, the rig capture call).
+9. **Sharpness, first pass:** 10 HD q90 stills, `scripts/n6_edge_sharpness.py`: 10–90 % edge rise across the outer edge of each card tag
+   (grey quiet zone → black border), px and mm on the card (tag edge 63 mm). Reported: median, IQR, n edges. Limits: camera JPEG (ISP + JPEG in
+   the loop), frame centre only (the corners need the target moved: not done without Nick). The stock-lens baseline (3 stills at ~0.5 m) is
+   reported beside it, but the distance differs, so mm on the card is not a lens-only comparison.
+**The suite to repeat on the PS5520 + new lens:** items 1–9 + the 6 clips, same commands.

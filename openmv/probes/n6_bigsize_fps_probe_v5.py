@@ -4,7 +4,7 @@ Run with ``mpremote connect <port> run openmv/probes/n6_bigsize_fps_probe_v5.py`
 ``mpremote connect <port> reset`` (mpremote leaves the rig service stopped). Writes nothing to
 /flash. Prints one ``#F {json}`` line per row.
 
-Per size (1280x720 reference, 1280x960, 1920x1080, 2560x1440, 2592x1944):
+Per size (PS5520: 1280x720 reference, 1280x960, 1920x1080, 2560x1440, 2592x1944; PAG7936: its 4 allowlist sizes):
   - RGB565 (the sensor reads its full 2592x1944 array, the N6 ISP crops to aspect + scales):
     capture-only fps over N_CAP snapshots, then capture + ``compress(quality=70)`` fps and JPEG bytes
     over N_JPEG frames (the stream's per-frame work, without USB);
@@ -22,6 +22,8 @@ N_CAP = 30
 N_JPEG = 15
 SIZES = (("1280x720", "HD"), ("1280x960", "SXGAM"), ("1920x1080", "FHD"),
          ("2560x1440", "QHD"), ("2592x1944", "WQXGA2"))
+# PAG7936 (0x7936, 1280x800 array): its own allowlist sizes (openmv/n6/board_config.py), 10/24 4.5 mm lens run.
+SIZES_BY_SENSOR = {0x7936: (("320x200", "QVGA"), ("640x400", "VGA"), ("960x600", (960, 600)), ("1280x800", "HD"))}
 
 
 def emit(**kw):
@@ -31,7 +33,7 @@ def emit(**kw):
 def setup(pf, name):
     sensor.reset()
     sensor.set_pixformat(getattr(sensor, pf))
-    sensor.set_framesize(getattr(sensor, name))
+    sensor.set_framesize(name if isinstance(name, tuple) else getattr(sensor, name))
     sensor.skip_frames(time=1500)
 
 
@@ -77,9 +79,11 @@ def run(label, name, pf, jpeg):
 
 
 def main():
-    emit(kind="identity", sensor_id=hex(sensor.get_id()), mem_free=gc.mem_free())
-    for label, name in SIZES:
-        if getattr(sensor, name, None) is None:
+    sensor.reset()
+    sid = sensor.get_id()
+    emit(kind="identity", sensor_id=hex(sid), mem_free=gc.mem_free())
+    for label, name in SIZES_BY_SENSOR.get(sid, SIZES):
+        if not isinstance(name, tuple) and getattr(sensor, name, None) is None:
             emit(size=label, ok=None, absent=name)
             continue
         run(label, name, "RGB565", True)
