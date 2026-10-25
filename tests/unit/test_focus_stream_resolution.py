@@ -213,3 +213,8 @@ def test_reader_gives_up_after_repeated_dead_segments_and_clears_pending():
     finally:
         fs.time.sleep = real_sleep
     assert len(io.requests) == fs.MAX_FAILED_SEGMENTS and st.running is False and st.pending is None
+def test_page_has_zoom_controls():
+    import host_tools.focus_stream as fsm
+    page = fsm._PAGE
+    for needle in ("id=vp", "data-z=fit", "data-z=1", "data-z=8", "pixelated", "addEventListener('wheel'"):
+        assert needle in page
