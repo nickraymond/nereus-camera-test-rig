@@ -124,3 +124,38 @@ def test_reader_picks_up_the_sensor_id_from_the_first_frame():
     io.write_message = wm
     fs._reader_loop(io, "c", fs.stream_settings("HD", 70, 60), st)
     assert st.info()["sensor"] == "PS5520" and st.info()["sensor_class"] == "5 MP"
+
+
+def test_refused_size_falls_back_to_the_last_working_one():
+    st = fs.StreamState()
+
+    class RefusingIO(FakeIO):
+        def write_message(self, msg):
+            super().write_message(msg)
+            if msg["settings"]["framesize"] == "2592x1944":   # PAG7936: "Sensor control failed"
+                self.queue = [{"status": "failed", "error": {"message": "Sensor control failed"}}]
+
+    io = RefusingIO(st, {"HD": (1280, 800), "2592x1944": (2592, 1944)})
+    orig = io.read_exact
+    asked = {"done": False}
+
+    def read_exact(n, timeout=None):
+        if not asked["done"]:
+            assert st.request_framesize("2592x1944")
+            asked["done"] = True
+        return orig(n, timeout)
+    io.read_exact = read_exact
+    fs._reader_loop(io, "c", fs.stream_settings("HD", 70, 60), st)
+    assert io.requests[:3] == ["HD", "2592x1944", "HD"]
+    info = st.info()
+    assert info["framesize"] == "HD" and "Sensor control failed" in info["error"]
+
+
+def test_default_sizes_follow_the_n6_allowlist():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "n6cfg", Path(__file__).resolve().parents[2] / "openmv/n6/board_config.py")
+    cfg = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cfg)
+    assert list(fs.N6_FRAMESIZES) == list(cfg.FRAMESIZES)

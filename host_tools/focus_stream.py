@@ -47,6 +47,9 @@ DEFAULT_BAUD = 115200
 DEFAULT_HTTP_PORT = 8081
 
 
+# The N6 stream allowlist (openmv/n6/board_config.py FRAMESIZES): the last 4 need the PS5520.
+N6_FRAMESIZES = ("QVGA", "VGA", "960x600", "HD", "1280x960", "1920x1080", "2560x1440", "2592x1944")
+
 # Sensor id (OpenMV common/omv_csi.h) -> name, class, native size (drivers/sensors/*.c, v5.0.1).
 SENSORS = {0x7936: ("PAG7936", "1 MP", "1280x800"), 0x5520: ("PS5520", "5 MP", "2592x1944")}
 
@@ -79,6 +82,7 @@ class StreamState:
         self.framesize = None
         self.pending = None  # framesize asked from the page, applied at the next segment
         self.sensor_id = None
+        self.error = None  # last switch the board refused (e.g. a PS5520 size on the PAG7936)
 
     def update(self, frame, seq, sharpness, fps, width=None, height=None):
         with self._lock:
@@ -111,7 +115,8 @@ class StreamState:
     def info(self):
         with self._lock:
             return {"width": self.width, "height": self.height, "framesize": self.framesize,
-                    "switching": self.pending is not None, **sensor_label(self.sensor_id)}
+                    "switching": self.pending is not None, "error": self.error,
+                    **sensor_label(self.sensor_id)}
 
     def snapshot(self):
         with self._lock:
@@ -136,12 +141,17 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
         while state.running:
             new_fs = state.apply_pending()
             if new_fs is not None:
+                last_good = settings.get("framesize")
                 settings = {**settings, "framesize": new_fs}
+                state.error = None
                 fps = 0.0
-            elif state.framesize is None:
-                state.framesize = settings.get("framesize")
+            else:
+                last_good = settings.get("framesize")
+                if state.framesize is None:
+                    state.framesize = last_good
             io.write_message(cp.make_request("start_stream", command_id, settings))
             stop_sent = False
+            frames_this_segment = 0
             while state.running:
                 header = io.read_message(timeout=10.0)
                 status = header.get("status")
@@ -149,6 +159,7 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
                     meta = header.get("frame") or {}
                     size = int(meta.get("size_bytes", 0))
                     data = io.read_exact(size, timeout=10.0)
+                    frames_this_segment += 1
                     now = time.monotonic()
                     dt = now - last_t
                     last_t = now
@@ -165,6 +176,15 @@ def _reader_loop(io: _SerialIO, command_id: str, settings: dict, state: StreamSt
                         # by its line loop afterwards (same stop as sync_video, QE #115).
                         io._t.write(b"\n")
                         stop_sent = True
+                elif status == "failed" and frames_this_segment == 0 \
+                        and settings.get("framesize") != last_good:
+                    # The board refused the new size before streaming a frame: go back to the
+                    # last working size instead of re-asking for a size that cannot work.
+                    err = (header.get("error") or {}).get("message") or "refused"
+                    state.error = "%s: %s" % (settings.get("framesize"), err)
+                    settings = {**settings, "framesize": last_good}
+                    state.framesize = last_good
+                    break
                 elif status in ("completed", "failed"):
                     break  # segment ended; outer loop re-requests if still running
     except Exception as exc:  # stream stalled / port closed — stop cleanly
@@ -197,6 +217,7 @@ button.on{background:#2a6;border-color:#5c9}
   <div><button onclick=fetch('/reset_peak',{method:'POST'})>reset peak</button></div>
 </div>
 <div id=sizes></div>
+<div id=err style="color:#f88;font-size:13px;min-height:1em"></div>
 <div id=bar><div id=fill></div></div>
 <img id=v src=/stream.mjpeg>
 <script>
@@ -208,6 +229,7 @@ async function tick(){
   let pct=d.peak?Math.round(100*d.sharpness/d.peak):0;
   document.getElementById('fill').style.width=pct+'%';
   document.getElementById('res').textContent=d.width?d.width+'\u00d7'+d.height:'\u2013';
+  document.getElementById('err').textContent=d.error?'board refused '+d.error:'';
   document.getElementById('resl').textContent=d.switching?'switching\u2026':(d.framesize?'resolution ('+d.framesize+')':'resolution');
   document.getElementById('sen').textContent=d.sensor_class?d.sensor+' \u00b7 '+d.sensor_class:d.sensor;
   document.getElementById('senl').textContent=d.sensor_native?'sensor (native '+d.sensor_native+', id '+d.sensor_id+')':'sensor';
@@ -226,7 +248,7 @@ tick();
 </script></body></html>"""
 
 
-def _make_handler(state: StreamState, framesizes=("QVGA", "VGA", "960x600", "HD")):
+def _make_handler(state: StreamState, framesizes=N6_FRAMESIZES):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -384,7 +406,7 @@ def run_imx708(width=1152, height=648, fps=10.0, lens=0.8, http_host="0.0.0.0",
 
 def run(serial_number=None, port=None, framesize="VGA", quality=70, max_seconds=3600,
         http_host="0.0.0.0", http_port=DEFAULT_HTTP_PORT, fps=0.0,
-        framesizes=("QVGA", "VGA", "960x600", "HD")):
+        framesizes=N6_FRAMESIZES):
     import serial
 
     dev = port or find_port(serial_number)
@@ -436,9 +458,10 @@ def main(argv=None):
     parser.add_argument("--port", default=None, help="explicit device path (overrides --serial)")
     parser.add_argument("--framesize", default="VGA", help="QVGA | VGA | HD (default VGA)")
     parser.add_argument("--quality", type=int, default=70, help="JPEG quality (default 70)")
-    parser.add_argument("--framesizes", default="QVGA,VGA,960x600,HD",
-                        help="resolutions the page offers (the board's allowlist must have them; "
-                             "default QVGA,VGA,960x600,HD = the N6 board_config)")
+    parser.add_argument("--framesizes", default=",".join(N6_FRAMESIZES),
+                        help="resolutions the page offers (default = openmv/n6/board_config.py "
+                             "FRAMESIZES; the 4 large ones are PS5520-only: a size the sensor "
+                             "refuses falls back to the last working one, shown on the page)")
     parser.add_argument("--max-seconds", type=int, default=3600,
                         help="per-segment board stream cap; reader re-requests to stay live")
     parser.add_argument("--http-host", default="0.0.0.0")
