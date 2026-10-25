@@ -1,0 +1,13 @@
+--- a/ports/stm32/mp_config.h	2026-10-24 17:11:06
++++ b/ports/stm32/mp_config.h	2026-10-24 17:11:06
+@@ -67,4 +67,10 @@
+     __attribute__((section(".lwip"), aligned(MEM_ALIGNMENT))) u8_t variable_name[size]
+ #endif
+ 
++// Nereus: Python threads (_thread) on the N6 only, for the double-buffered USB stream test
++// (N6 eval, 10/24). Upstream default is off (lib/micropython/ports/stm32/mpconfigport.h).
++#if defined(OPENMV_N6)
++#define MICROPY_PY_THREAD                   (1)
++#endif
++
+ #include <mpconfigport.h>
