@@ -1,6 +1,6 @@
 # Test card: PAG7936 vs PS5520, same light, RAW Bayer (Nick, chat 10/25 ~9:00 AM: "Start with the same-light RAW (Bayer) comparison of the PAG7936 and PS5520. Write the test card first."; "I should fine tune the lens on each sensor before we run the test")
 
-Written Sun 10/25 9:04 AM PT by N6 eval builder 3, before anything runs. Feeds SPEC_n6_eval must do 13 / 14 (`docs/specs/n6_eval.md`).
+Written Sun 10/25 9:04 AM PT by N6 eval builder 3, before anything runs. Feeds SPEC_n6_eval must do 13 / 14, and leg B also does must do 1 for the PAG7936 (`docs/specs/n6_eval.md`).
 
 **Question:** under the same light, with each sensor freshly focused, the same lens and card position and the ISP out of the loop,
 is the PAG7936 still sharper on the card than the PS5520, and how do the two compare on noise and sensitivity?
@@ -43,6 +43,9 @@ gain index 4 in the driver `ps5520.c`; dB are each sensor's own scale and not co
    at 1:1; I record the page's sharpness readout and stop the page (`kill <pid>`). Then the exposure plan + darks.
 2. **Leg B, PAG7936:** Nick swaps the sensor (and power-cycles if needed, as on 10/24), same lens. Focus page at HD, sensor id shown
    by the page (0x7936), Nick focuses, readout recorded. Exposure plan + darks.
+   **Also SPEC_n6_eval must do 1 for the PAG7936** (the kill line is Sun 10/25 6 PM; only the PS5520 list exists, `2026-10-24_sensor_compare/ps5520/modes_probe.txt`):
+   `openmv/probes/n6_modes_probe_v5.py` via `mpremote run` (RAM only, no board writes), exactly as for the PS5520 on 10/24 12:28 PM →
+   `legB/modes_probe.txt`. Firmware is v5.0.1 + the one tag25h9 #define, as for the PS5520 list (stated in the result).
 3. **Leg A′, PS5520 again (recommended; Nick's call, ~15 min of his time):** swap back, refocus, 10 frames at 4 ms only.
    This is the only check that the light and setup stayed the same across the swaps.
 4. **Mac analysis** (`scripts/n6_raw_compare.py`, new, unit-tested on synthetic Bayer before use): black from the darks; one bilinear
