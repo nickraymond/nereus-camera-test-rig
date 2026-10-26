@@ -11,6 +11,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -144,3 +145,25 @@ def test_imx_flags_parse(tmp_path):
                                       "10000000", "--tag-ids", "c1"])
     assert (a.imx_tags, a.imx_intra, a.imx_bitrate) == (True, 15, 10000000)
     assert sv.build_parser().parse_args([]).imx_tags is False
+
+
+def test_imx_tags_preflight_fails_loudly_before_recording():
+    sv = _load("sync_video_imx_t3", "scripts/sync_video.py")
+
+    def args(*extra):
+        return sv.build_parser().parse_args(["--imx-tags", "--tag-ids", "c1", *extra])
+
+    ok = type("R", (), {"returncode": 0})
+    bad = type("R", (), {"returncode": 1})
+    sv.check_imx_tags(sv.build_parser().parse_args([]))           # tags off: nothing checked
+    sv.check_imx_tags(args("--imx-intra", "15"), which=lambda c: "/usr/bin/ffmpeg",
+                      run=lambda *a, **k: ok)
+    for extra, which, run, why in (
+            ((), lambda c: "/x", lambda *a, **k: ok, "--imx-intra"),           # QE N6
+            (("--imx-intra", "60"), lambda c: "/x", lambda *a, **k: ok, "--imx-intra"),
+            (("--imx-intra", "15"), lambda c: None, lambda *a, **k: ok, "ffmpeg"),  # QE N7
+            (("--imx-intra", "15"), lambda c: "/x", lambda *a, **k: bad, "aruco")):
+        with pytest.raises(ValueError, match=why):
+            sv.check_imx_tags(args(*extra), which=which, run=run)
+    with pytest.raises(ValueError, match="--tag-ids"):
+        sv.check_imx_tags(sv.build_parser().parse_args(["--imx-tags", "--imx-intra", "15"]))

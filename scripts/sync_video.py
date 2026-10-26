@@ -46,6 +46,7 @@ import csv
 import hashlib
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -523,6 +524,24 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
     return s
 
 
+def check_imx_tags(a: argparse.Namespace, which=shutil.which, run=subprocess.run) -> None:
+    """Raise ValueError before anything records when --imx-tags can't meet the spec: the follower
+    searches only IDR frames, so it needs --imx-intra <= --imx-fps (>= 1 search/s, QE 011 N6), and
+    it needs ffmpeg + cv2.aruco on this host (else every decode fails quietly, QE 011 N7)."""
+    if not a.imx_tags:
+        return
+    if not a.tag_ids:
+        raise ValueError("--imx-tags needs --tag-ids <card copy in view, e.g. c1>")
+    if not a.imx_intra or a.imx_intra > a.imx_fps:
+        raise ValueError(f"--imx-tags needs --imx-intra <= --imx-fps ({a.imx_fps}): the follower "
+                         f"searches only IDR frames (rpicam-vid's own period was 60 frames)")
+    if not which("ffmpeg"):
+        raise ValueError("--imx-tags needs ffmpeg on PATH (scripts/imx_tags.py decodes with it)")
+    r = run([sys.executable, "-c", "import cv2; cv2.aruco.ArucoDetector"], capture_output=True)
+    if r.returncode != 0:
+        raise ValueError("--imx-tags needs cv2 with aruco (opencv-contrib) in this python")
+
+
 CMA_ISSUE_MB = 4  # pool 3 spec rev 2.1 F8 (ci-record hard-reset this Pi at CmaFree 16 kB)
 CALLER_OWNED = ("--seconds", "--out")  # a caller passing extra args (pool_capture) sets these
 
@@ -621,6 +640,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     a = build_parser().parse_args()
+    try:
+        check_imx_tags(a)
+    except ValueError as exc:
+        print(f"sync_video: {exc}", file=sys.stderr)
+        return 2
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(a.out) if a.out else ROOT / "results" / "video" / ts
     out.mkdir(parents=True, exist_ok=True)
