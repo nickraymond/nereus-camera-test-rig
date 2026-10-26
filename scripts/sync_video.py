@@ -23,11 +23,15 @@ How:
 Usage (Pi, repo root):
   python scripts/sync_video.py --seconds 10                      # all three, defaults
   python scripts/sync_video.py --seconds 10 --board-framesize VGA --board-fps 10 --out DIR
+  python scripts/sync_video.py --seconds 60 --n6-tags-every 5 --ae3-tags-every 10 --tag-ids c1
+      # on-board tags (pool 3; off by default)
 Outputs (DIR, default results/video/<ts>/): imx708.h264 (+ .pts, .meta.json, .log),
   openmv_n6.mjpeg + openmv_n6_frames.csv, openmv_ae3.mjpeg + openmv_ae3_frames.csv,
   host_stats.csv, video_sync.json (start skew, fps, frames, gaps, files + sha256). Per camera,
   fps_clip = frames captured in the clip's --seconds / --seconds (the pool 2 bars' input, QE 005
   R2) next to fps = (frames - 1) / (first -> last frame), and last_frame_s.
+  With tags on, frames.csv has the tag_* columns of each searched frame and video_sync.json a
+  per-board "tags" block (detection frames/s, hit %, raw false ids, decode ms; tag_summary).
 Exit 0 = every camera recorded and the start skew was measured; 1 otherwise.
 
 Limits: the AE3's software JPEG caps it at ~14 fps VGA / ~2.3 fps HD (Nick's S3 bench); the
@@ -60,6 +64,49 @@ from nereus_camera_test_rig.cameras.openmv_usb import OpenMvError, OpenMvUsbCame
 BOARDS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c14000000000"}
 # Per-frame stream timing from the board (start_stream "timing", pool 2 B0, 2026-10-17).
 TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
+# On-board AprilTags (start_stream "tags", pool 3 edge test, docs/specs/pool3_edge_tags.md): a frame
+# the board searched carries its result; frames.csv gets one column per field (lists as JSON).
+TAG_KEYS = ("tag_mode", "tag_ms", "tag_ids", "tag_rej", "tag_corners")
+
+
+def tag_columns(tags: dict | None) -> dict:
+    """frames.csv columns for one frame header's ``tags`` record (empty when not searched)."""
+    if not tags:
+        return {k: None for k in TAG_KEYS}
+    return {"tag_mode": tags.get("mode"), "tag_ms": tags.get("ms"),
+            "tag_ids": json.dumps(tags.get("ids", [])), "tag_rej": json.dumps(tags.get("rej", [])),
+            "tag_corners": json.dumps(tags.get("corners", []))}
+
+
+def tag_summary(rows: list[dict], seconds: float | None) -> dict:
+    """Must do 4's per-board numbers from frames.csv rows. A detection frame is one the board
+    searched (spec rev 1 N2); a hit has >= 1 card id; raw false ids = ids outside the card's set
+    before the filter (N3). Pure."""
+    searched = [r for r in rows if r.get("tag_ms") not in (None, "")]
+    hits = [r for r in searched if json.loads(r["tag_ids"] or "[]")]
+    ms = sorted(float(r["tag_ms"]) for r in searched)
+    false_ids = [i for r in searched for i in json.loads(r["tag_rej"] or "[]")]
+    per_s = (lambda n: round(n / seconds, 2)) if seconds else (lambda n: None)
+    return {"detection_frames": len(searched), "detections_per_s": per_s(len(searched)),
+            "hit_frames": len(hits), "hit_frames_per_s": per_s(len(hits)),
+            "hit_pct": round(100 * len(hits) / len(searched), 1) if searched else None,
+            "false_ids": len(false_ids), "false_id_values": sorted(set(false_ids)),
+            "decode_ms_median": ms[len(ms) // 2] if ms else None,
+            "decode_ms_max": ms[-1] if ms else None}
+
+
+def card_tag_ids(copy: str) -> list[int]:
+    """The tag ids of V3 card copy ``copy`` (c1..c4): configs/cards/nereus_v3_<copy>.yaml
+    ``corner_map`` (spec rev 1.2: filter to the copy in view, openmv/firmware/README.md)."""
+    import yaml
+
+    if not copy:
+        raise ValueError("tags on needs --tag-ids <card copy in view, e.g. c1>")
+    path = ROOT / "configs" / "cards" / f"nereus_v3_{copy}.yaml"
+    if not path.exists():
+        raise ValueError(f"no card copy {copy!r} ({path.name} not found)")
+    corner_map = yaml.safe_load(path.read_text())["apriltag"]["corner_map"]
+    return sorted(int(v) for v in corner_map.values())
 
 
 def sha256(path: Path) -> str:
@@ -137,6 +184,7 @@ class BoardVideo:
 
         mjpeg = self.out / f"{self.name}.mjpeg"
         rows = []
+        tags_on = bool(self.settings.get("tags"))  # tags off: frames.csv exactly as before
         q: queue.Queue = queue.Queue()
 
         def writer():
@@ -162,6 +210,8 @@ class BoardVideo:
                                  "bytes": len(data), "width": fr["width"],
                                  "height": fr["height"],
                                  **{k: fr.get(k) for k in TIMING_KEYS}})
+                    if tags_on:
+                        rows[-1].update(tag_columns(fr.get("tags")))
                     q.put(data)
                 elif msg.get("status") == "completed":
                     self.rec["board_done"] = msg.get("output") or {}
@@ -175,7 +225,8 @@ class BoardVideo:
         self.rows = rows
         with (self.out / f"{self.name}_frames.csv").open("w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["seq", "ticks_ms", "host_rx_mono", "bytes",
-                                              "width", "height", *TIMING_KEYS])
+                                              "width", "height", *TIMING_KEYS,
+                                              *(TAG_KEYS if tags_on else ())])
             w.writeheader()
             w.writerows(rows)
 
@@ -222,6 +273,10 @@ class BoardVideo:
                         file=mjpeg.name, bytes=mjpeg.stat().st_size if mjpeg.exists() else 0,
                         sha256=sha256(mjpeg) if mjpeg.exists() else None,
                         board_sync=sync, **clip_rate(times, fire_host, self.seconds))
+        if self.settings.get("tags"):
+            board = (self.rec.get("board_done") or {}).get("tags") or {}
+            # max_gap_ms above is the N4 bar's input (<= 2 frame periods with tags on)
+            self.rec["tags"] = {**tag_summary(rows, self.seconds), "board": board}
         self.rec["ok"] = bool(rows) and "error" not in self.rec and bool(times)
         return self.rec
 
@@ -407,6 +462,9 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
         s["subsampling"] = pick("subsampling")
     if a.timing:
         s["timing"] = True
+    if pick("tags_every"):  # 0 = off (the default): the stream is exactly as without the hook
+        s["tags"] = {"every": pick("tags_every"), "scale": pick("tags_scale"),
+                     "bands": pick("tags_bands"), "ids": card_tag_ids(a.tag_ids)}
     return s
 
 
@@ -478,6 +536,19 @@ def build_parser() -> argparse.ArgumentParser:
         ap.add_argument(f"--{key}-quality", type=int, default=None)
         ap.add_argument(f"--{key}-fps", type=float, default=None)
         ap.add_argument(f"--{key}-subsampling", default=None, choices=SUBSAMPLINGS)
+    ap.add_argument("--board-tags-every", type=int, default=0,
+                    help="on-board tag25h9 search on at most every Nth frame, both boards "
+                         "(0 = hook off, the default); needs --tag-ids")
+    ap.add_argument("--board-tags-scale", type=float, default=1.0,
+                    help="search a grayscale copy scaled by this (1 = the frame itself)")
+    ap.add_argument("--board-tags-bands", type=int, default=1,
+                    help="acquire search covers 1 of N horizontal bands per detection frame")
+    for key in ("n6", "ae3"):
+        ap.add_argument(f"--{key}-tags-every", type=int, default=None)
+        ap.add_argument(f"--{key}-tags-scale", type=float, default=None)
+        ap.add_argument(f"--{key}-tags-bands", type=int, default=None)
+    ap.add_argument("--tag-ids", default=None, choices=("c1", "c2", "c3", "c4"),
+                    help="V3 card copy in view; its corner_map ids are the filter")
     ap.add_argument("--timing", action="store_true",
                     help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
     return ap
