@@ -79,3 +79,32 @@
   guard_cameras, detector; rig main 83086d1). The card-id filter comes from **`configs/cards/nereus_v3_<copy>.yaml` `corner_map`** of the
   card copy in view (c1: {tl 0, tr 1, bl 2, br 3}), as openmv/firmware/README.md says ("filter to the ids of the card copy in view"). The
   arm line names the copy (`--tag-ids`); default c1 only if the owner confirms c1 is the copy at the pool from a bench frame's tag ids.
+
+## Rev 2 (PE 009, Mon 10/26 10:58 AM PT): Nick's demo bar (Lead 004's chat, read by PE 009 at 10:57 AM). Set before any data.
+- **Nick, verbatim:** "2. Get nereus002 up and running with my pool demo for tomorrow. Run the demo 10 times in a row, with april tag
+  detection and quantify the max frame rate and detection rate that each cam can do. I want max quality for IMX, N6 and AE3 sensors."
+- **Pool demo: Tue 10/27** (rev 1's "this PM" is withdrawn). The NOAA update (from 9:30 AM) comes first.
+- **Max-quality ladder, measured first on the bench (tags on), per camera:** each camera steps from its highest-quality setting the rig's
+  capture path supports (highest resolution, then highest JPEG quality / H.264 bitrate) downwards, and the "max-quality setting" is the
+  highest rung that holds the capture-validity floor (IMX708 ≥ 26.0 fps, gap ≤ 100 ms; boards ≥ 95 % of the asked fps, 0 lost / usable
+  ≥ 95 %, skew ≤ 25 ms, 0 wedges, throttled 0x0). The rungs tried come from must do 1's mode lists (rig docs / firmware); the owner writes
+  them into the run plan before the first clip. Rev 1's targets (IMX708 30, N6 HD 15/30, AE3 640 at 10) stay as named rungs.
+- **Deliverable table (report-only numbers, per camera, at each rung tried):** max delivered fps, max frame gap, detection rate (detections/s
+  and % of detection frames with ≥ 1 card id), decode ms, raw false ids; resolution / quality of the rung.
+- **"10 times in a row" (pass bar):** at the chosen demo settings (each camera's max-quality rung), 10 consecutive bench demo runs (60 s,
+  3 cameras synced, tags on) each pass the card's bars. A failed run resets the count; the cause is recorded and fixed before restarting.
+  Nobody calls the demo ready before 10/10.
+
+## Rev 2.1 (PE 009, Mon 10/26 10:59 AM PT; owner 2's bench prep, ~/NereusData/nereus-camera-test-rig/2026-10-26_bench_prep/MANIFEST.md). No bar moves.
+- **IMX708 rungs (data, IMX-only, no boards, no detection):** 1080p (ScalerCrop full sensor) = 27.5 fps, gap 66.7 ms (n = 1): valid
+  capture, "30 not met". 720p (`--imx-size 1280x720`, ScalerCrop (768,432)/3072x1728) = 30.01 fps, gap 33.3 ms, 3/3. The 720p field holds
+  the N6's whole field at the same 2.4 sensor px per output px, so nothing is lost inside the N6's view; the wider 1080p field is.
+- **Rule for the IMX708's demo rung (rev 1's 30 fps bar and rev 2's "max quality" read together):** the highest rung that passes ≥ 28.5 fps
+  **with all three cameras and tags running**. On today's data that is 720p; it is chosen only after the full-rig bench clips confirm it.
+  Both rungs go in Nick's table, so he sees 1080p's 27.5 fps and can pick the wider field instead.
+- **New row F8, CMA exhaustion on the Pi:** free CMA fell to **2 MB** on 720p clip 3 (all buffers still delivered); on 10/14 ci-record
+  hard-reset this Pi at CmaFree 16 kB (sync_video.py comment, per the MANIFEST). Detect: min CmaFree logged per clip. Then: any run with min
+  CmaFree < 4 MB counts as an issue (resets the 10/10 count) and goes to the owner + PE with the numbers; a CMA or boot-config raise needs
+  Nick's own words (root, per the rig handoff). Never mitigate it by changing the bars.
+- AE3 on-board tag25h9 (owner 2, n = 20 frames, 640×400): full frame 140–155 ms, ROI 24–25 ms, ids 0–3 on 20/20, no false ids, no
+  MemoryError. JPEG encode + USB alongside detection: unmeasured (needs the builder's hook).
