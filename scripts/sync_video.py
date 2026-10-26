@@ -288,8 +288,11 @@ class ImxVideo:
     name = "imx708"
 
     def __init__(self, out: Path, width: int, height: int, fps: int, lens: float | None,
-                 warmup_s: float, buffers: int, seconds: float):
+                 warmup_s: float, buffers: int, seconds: float, intra: int | None = None,
+                 bitrate: int | None = None, tag_ids: list[int] | None = None):
         self.out, self.warmup_s, self.fps, self.seconds = out, warmup_s, fps, seconds
+        # Live tags (pool 3): scripts/imx_tags.py follows the H.264 file in its own process.
+        self.tag_ids, self.tagger = tag_ids, None
         # rpicam-vid stops on its own timer (-t), its normal exit path: stopping it with a
         # signal segfaulted it at teardown once in ~15 clips (gate006 c1, rc -11, metadata cut
         # off mid-frame). Started after the boards are armed: warm-up + clip + 1.5 s margin.
@@ -305,12 +308,25 @@ class ImxVideo:
             self.cmd[1:1] = ["--buffer-count", str(buffers)]
         if lens is not None:
             self.cmd[1:1] = ["--autofocus-mode", "manual", "--lens-position", str(lens)]
+        # H.264 knobs for pool 3's max-quality ladder; absent = rpicam-vid's own defaults
+        # (--intra 60: an IDR, i.e. a frame the tag follower can decode alone, every 2 s at 30 fps)
+        if intra:
+            self.cmd[1:1] = ["--intra", str(intra)]
+        if bitrate:
+            self.cmd[1:1] = ["--bitrate", str(bitrate)]
         self.rec: dict = {"camera": "imx708", "ok": False, "cmd": " ".join(self.cmd)}
 
     def arm(self) -> None:
         self.log = (self.out / "imx708.log").open("wb")
         self.proc = subprocess.Popen(self.cmd, cwd=self.out, stdout=self.log,
                                      stderr=subprocess.STDOUT)
+        if self.tag_ids:
+            self.tag_log = (self.out / "imx708_tags.log").open("wb")
+            self.tagger = subprocess.Popen(
+                [sys.executable, str(ROOT / "scripts" / "imx_tags.py"),
+                 str(self.out / "imx708.h264"), "--out", str(self.out / "imx708_tags.csv"),
+                 "--ids", ",".join(map(str, self.tag_ids))],
+                stdout=self.tag_log, stderr=subprocess.STDOUT)
         t0 = time.monotonic()
         while time.monotonic() - t0 < self.warmup_s:
             if self.proc.poll() is not None:
@@ -328,6 +344,7 @@ class ImxVideo:
     def abort(self) -> None:
         """Idempotent cleanup for any exit path: rpicam-vid must never outlive this script
         (it would hold the camera and keep filling the SD card)."""
+        self._stop_tagger()
         proc = getattr(self, "proc", None)
         if proc is not None and proc.poll() is None:
             os.kill(proc.pid, signal.SIGINT)
@@ -340,6 +357,38 @@ class ImxVideo:
         if log is not None and not log.closed:
             log.close()
 
+    def _stop_tagger(self) -> None:
+        """Stop the tag follower (it only reads the file; nothing is lost by stopping it)."""
+        tagger = self.tagger
+        if tagger is not None and tagger.poll() is None:
+            tagger.send_signal(signal.SIGTERM)
+            try:
+                tagger.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                tagger.kill()
+                tagger.wait()
+        log = getattr(self, "tag_log", None)
+        if log is not None and not log.closed:
+            log.close()
+
+    def _tags(self, frames: list[dict], fire: float, stop_t: float) -> dict:
+        """The follower's searched frames inside the synchronized window, summarised like a
+        board's (tag_summary), plus its own counters (imx708_tags.csv.json)."""
+        path = self.out / "imx708_tags.csv"
+        rows = list(csv.DictReader(path.open())) if path.exists() else []
+        win = []
+        for r in rows:
+            k = int(r["frame"])
+            ts = frames[k].get("SensorTimestamp") if k < len(frames) else None
+            if ts is not None and fire <= ts / 1e9 <= stop_t:
+                win.append(r)
+        dec = sorted(float(r["decode_ms"]) for r in win)
+        side = Path(str(path) + ".json")
+        return {**tag_summary(win, self.seconds),
+                "h264_decode_ms_median": dec[len(dec) // 2] if dec else None,
+                "follower": json.loads(side.read_text()) if side.exists() else None,
+                "follower_rc": self.tagger.returncode}
+
     def finish(self) -> dict:
         try:
             self.proc.wait(timeout=15)
@@ -351,6 +400,7 @@ class ImxVideo:
                 self.proc.kill()
                 self.proc.wait()
         self.log.close()
+        self._stop_tagger()
         self.rec["rc"] = self.proc.returncode
         h264, meta = self.out / "imx708.h264", self.out / "imx708.meta.json"
         frames = read_frame_metadata(meta)
@@ -371,6 +421,10 @@ class ImxVideo:
                         max_gap_ms=round(max((b - a) * 1000 for a, b in zip(times, times[1:])),
                                          1) if len(times) > 1 else None,
                         **clip_rate(times, fire, self.seconds))
+        if self.tagger is not None:
+            self.rec["tags"] = self._tags(frames, fire, stop_t)
+            # F7: a recorder gap > 100 ms with the follower running = run the IMX708 without tags
+            self.rec["tags"]["f7_gap"] = (self.rec.get("max_gap_ms") or 0) > 100
         # Judged by the artifacts (CLAUDE.md: trust the artifacts): a file, and >= 2/3 of the
         # nominal frames inside the synchronized window.
         window = (stop_t - fire) if stop_t < 1e17 else 0
@@ -468,6 +522,7 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
     return s
 
 
+CMA_ISSUE_MB = 4  # pool 3 spec rev 2.1 F8 (ci-record hard-reset this Pi at CmaFree 16 kB)
 CALLER_OWNED = ("--seconds", "--out")  # a caller passing extra args (pool_capture) sets these
 
 
@@ -516,6 +571,14 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--imx-size", default="1920x1080")
     ap.add_argument("--imx-fps", type=int, default=30)
     ap.add_argument("--lens-position", type=float, default=0.8)
+    ap.add_argument("--imx-intra", type=int, default=None,
+                    help="rpicam-vid --intra (IDR period, frames; default rpicam's 60). The IMX708 "
+                         "tag follower can search only IDR frames")
+    ap.add_argument("--imx-bitrate", type=int, default=None,
+                    help="rpicam-vid --bitrate (bits/s; default rpicam's)")
+    ap.add_argument("--imx-tags", action="store_true",
+                    help="live tag25h9 on the IMX708's IDR frames in a separate process "
+                         "(scripts/imx_tags.py); needs --tag-ids")
     ap.add_argument("--imx-buffers", type=int, default=4,
                     help="rpicam-vid --buffer-count (CMA headroom; 0 = rpicam default)")
     ap.add_argument("--board-framesize", default="VGA",
@@ -564,7 +627,9 @@ def main() -> int:
     devs = []
     if "imx708" in cams:
         devs.append(ImxVideo(out, w, h, a.imx_fps, a.lens_position, warmup_s=3.0,
-                             buffers=a.imx_buffers, seconds=a.seconds))
+                             buffers=a.imx_buffers, seconds=a.seconds, intra=a.imx_intra,
+                             bitrate=a.imx_bitrate,
+                             tag_ids=card_tag_ids(a.tag_ids) if a.imx_tags else None))
     devs += [BoardVideo(n, s, out, board_settings(a, n), seconds=a.seconds)
              for n, s in BOARDS.items() if n in cams]
     print(f"sync_video: {ts} -> {out} cameras {cams} {a.seconds}s", flush=True)
@@ -643,6 +708,8 @@ def main() -> int:
     if stats:
         summary["host"] = {
             "min_cma_free_mb": min(int(r["cma_free_mb"]) for r in stats),
+            # spec pool3 F8: a clip with min CmaFree < 4 MB is an issue (resets the 10/10 count)
+            "cma_issue": min(int(r["cma_free_mb"]) for r in stats) < CMA_ISSUE_MB,
             "min_mem_avail_mb": min(int(r["mem_avail_mb"]) for r in stats),
             "max_cpu_c": max(float(r["cpu_c"] or 0) for r in stats),
             "throttled": sorted({r["throttled"] for r in stats})}
