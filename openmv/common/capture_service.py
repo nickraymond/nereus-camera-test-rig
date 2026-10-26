@@ -177,6 +177,53 @@ def capture_image(board_config, settings, usb=None, command_id=None):
     return out
 
 
+def _read_3a():
+    """Current exposure (us) and gain (dB), or Nones where the firmware can't report them."""
+    try:
+        return sensor.get_exposure_us(), _finite(sensor.get_gain_db())
+    except Exception:
+        return None, None
+
+
+def _lock_3a():
+    """Freeze AE, gain and AWB at their settled values (N6 eval test 1, SPEC_n6_eval must do 7).
+
+    Each control is tried on its own and reported, not board-branched: the PAG7936 has no
+    AWB control on some firmware (module docstring), so ``awb`` can come back False while
+    exposure and gain lock. Three frames are flushed after the lock, since a changed exposure
+    can leave stale frames buffered (``capture_raw``).
+    """
+    exposure_us, gain_db = _read_3a()
+    out = {"exposure_us": exposure_us, "gain_db": gain_db}
+    for key, fn in (("exposure", lambda: sensor.set_auto_exposure(False, exposure_us=exposure_us)),
+                    ("gain", lambda: sensor.set_auto_gain(False, gain_db=gain_db)),
+                    ("awb", lambda: sensor.set_auto_whitebal(False))):
+        try:
+            fn()
+            out[key] = True
+        except Exception as exc:
+            out[key] = False
+            out[key + "_error"] = repr(exc)
+    sensor.skip_frames(3)
+    out["exposure_us_after"], out["gain_db_after"] = _read_3a()
+    return out
+
+
+def _tag_box(tag, w, h, margin=40):
+    """Search box around one tag for the next frame: its corners + ``margin`` px, clipped to the frame."""
+    c = _val(tag.corners)
+    x0 = max(0, min(p[0] for p in c) - margin)
+    y0 = max(0, min(p[1] for p in c) - margin)
+    x1 = min(w, max(p[0] for p in c) + margin)
+    y1 = min(h, max(p[1] for p in c) + margin)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def _val(attr):
+    """A tag field that is a method on some firmware and a property on others (QE 010 N2)."""
+    return attr() if callable(attr) else attr
+
+
 def _finite(v):
     """JSON-safe float: the AE3 reports ``rgb_gain_db()`` as (-inf, 0, -inf)."""
     v = float(v)
@@ -448,6 +495,28 @@ def stream_frames(usb, command_id, board_config, settings):
     # Per-frame timing (B0): each header carries this frame's snapshot and JPEG ms and the
     # previous frame's USB write ms (a frame's own write ends after its header is sent).
     timing = bool(settings.get("timing"))
+    # Per-frame 3A (SPEC_n6_eval must do 2): each header carries the exposure (us) and gain
+    # (dB) read right after its snapshot. Off by default: the header stays as before.
+    meta = bool(settings.get("meta"))
+    # On-board AprilTags on every streamed frame (SPEC_n6_eval must do 17's "stream + detect"
+    # power mode, Nick 10/23 DOE): tag count, ids and detect ms go in the frame header. The
+    # family constant is looked up by name (``tag_family``, default TAG25H9 = card V3), never
+    # assumed: stock v5.0.1 on the N6 defines only TAG36H11 (10/23), so a missing name is a stream
+    # error, not a silent 0 tags.
+    tag_family = None
+    if settings.get("apriltags"):
+        import image
+
+        fam_name = settings.get("tag_family") or "TAG25H9"
+        tag_family = getattr(image, fam_name, None)
+        if tag_family is None:
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "no %s family in image module" % fam_name)
+    # Bench 2 (10/24): detect on every Nth frame only (video keeps its rate), and/or track: search
+    # only boxes around the last frame's tags (HD 32 ms vs 182 ms full frame, bench 1), falling
+    # back to the full frame whenever a tracked tag is missing.
+    tag_every = max(1, int(settings.get("tag_every") or 1))
+    tag_roi = bool(settings.get("tag_roi"))
+    tag_boxes = None
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -456,6 +525,8 @@ def stream_frames(usb, command_id, board_config, settings):
     # host's fire byte; every frame header then carries its board ticks. Focus stream: as before.
     trigger = bool(settings.get("trigger"))
     sensor.skip_frames(time=int(settings.get("warmup_ms", 2000 if trigger else 300)))
+    # AE + gain + AWB locked after the warm-up (SPEC_n6_eval test 1); absent = autos run.
+    locked = _lock_3a() if settings.get("lock_3a") else None
     sync = _wait_fire(usb, command_id, sensor.snapshot) if trigger else None
     if sync is not None and sync["timed_out"]:
         # The host never fired (it died or gave up): do not stream into a port nobody reads.
@@ -465,6 +536,11 @@ def stream_frames(usb, command_id, board_config, settings):
 
     seq = 0
     write_ms = None
+    # Bench 3 (10/24, Nick: power with frames kept in RAM vs streamed): keep each JPEG in RAM and
+    # send nothing but a 1 s "buffering" keepalive until the stop; then the whole burst. A full
+    # heap ends the capture (reported), it never crashes the stream.
+    buffering = bool(settings.get("buffer_frames"))
+    buf, buffer_error, t_keep = [], None, time.ticks_ms()
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
     while True:
         # Any inbound byte is the host's stop signal; drain it and exit.
@@ -479,6 +555,28 @@ def stream_frames(usb, command_id, board_config, settings):
         t_frame = time.ticks_ms()
         img = sensor.snapshot()
         t_snap = time.ticks_ms()
+        tag_extra = None
+        if tag_family is not None and seq % tag_every == 0:
+            try:
+                tags, mode = None, "full"
+                if tag_roi and tag_boxes:
+                    tags = []
+                    for box in tag_boxes:
+                        tags.extend(img.find_apriltags(roi=box, families=tag_family))
+                    mode = "roi"
+                    if len(tags) < len(tag_boxes):  # lost one: search the whole frame again
+                        tags, mode = None, "roi+full"
+                if tags is None:
+                    tags = img.find_apriltags(families=tag_family)
+                if tag_roi:
+                    tag_boxes = [_tag_box(t, img.width(), img.height()) for t in tags] or None
+                tag_extra = {"tags": len(tags), "tag_ids": [_val(t.id) for t in tags]}
+                if tag_roi:
+                    tag_extra["tag_mode"] = mode
+            except Exception as exc:  # e.g. MemoryError at HD: reported per frame, stream goes on
+                tag_extra = {"tags": None, "tag_error": repr(exc)}
+            tag_extra["detect_ms"] = time.ticks_diff(time.ticks_ms(), t_snap)
+            t_snap = time.ticks_ms()  # jpeg_ms below stays the encode alone
         if sub_const is None:
             img.compress(quality=quality)
         else:
@@ -490,12 +588,30 @@ def stream_frames(usb, command_id, board_config, settings):
             extra = {"snap_ms": time.ticks_diff(t_snap, t_frame),
                      "jpeg_ms": time.ticks_diff(time.ticks_ms(), t_snap),
                      "prev_write_ms": write_ms}
+        if meta:
+            extra = extra or {}
+            extra["exposure_us"], extra["gain_db"] = _read_3a()
+        if tag_extra is not None:
+            extra = extra or {}
+            extra.update(tag_extra)
         t_write = time.ticks_ms()
-        usb.write(cp.encode_message(
+        header = cp.encode_message(
             cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
                               ticks_ms=t_snap if trigger else None, extra=extra)
-        ))
-        usb.write(data)
+        )
+        if buffering:
+            try:
+                buf.append((header, bytes(data)))
+            except MemoryError as exc:
+                buffer_error = repr(exc)
+                break
+            if time.ticks_diff(time.ticks_ms(), t_keep) >= 1000:
+                t_keep = time.ticks_ms()
+                usb.write(cp.encode_message({"version": cp.PROTOCOL_VERSION, "command_id": command_id,
+                                             "status": "buffering", "frames": len(buf)}))
+        else:
+            usb.write(header)
+            usb.write(data)
         write_ms = time.ticks_diff(time.ticks_ms(), t_write)
         seq += 1
         if period_ms:
@@ -507,7 +623,18 @@ def stream_frames(usb, command_id, board_config, settings):
                     break
                 time.sleep_ms(min(rest, 50))
 
+    if buffering:
+        t_burst = time.ticks_ms()
+        for header, data in buf:
+            usb.write(header)
+            usb.write(data)
+        del buf
     out = {"frames": seq}
+    if buffering:
+        out["buffered"] = {"frames": seq, "burst_ms": time.ticks_diff(time.ticks_ms(), t_burst),
+                           "error": buffer_error}
     if sync is not None:
         out["sync"] = sync
+    if locked is not None:
+        out["locked_3a"] = locked
     usb.write(cp.encode_message(cp.completed_response(command_id, out)))

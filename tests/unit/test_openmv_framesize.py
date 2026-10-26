@@ -45,3 +45,14 @@ def test_ae3_has_no_custom_size_and_rejects_960x600(service):
     assert not any(isinstance(v, tuple) for v in ae3.FRAMESIZES.values())
     with pytest.raises(Exception, match="unsupported framesize"):
         service._resolve_framesize(ae3, {"framesize": "960x600"})
+
+
+def test_n6_offers_the_ps5520_large_sizes_by_name(service, monkeypatch):
+    for name in ("SXGAM", "FHD", "QHD", "WQXGA2"):
+        monkeypatch.setattr(sys.modules["sensor"], name, name, raising=False)
+    n6 = _load("n6_board_config", "openmv/n6/board_config.py")
+    for wire, const in (("1280x960", "SXGAM"), ("1920x1080", "FHD"), ("2560x1440", "QHD"),
+                        ("2592x1944", "WQXGA2")):
+        assert service._resolve_framesize(n6, {"framesize": wire}) == (const, wire)
+    ae3 = _load("ae3_board_config", "openmv/ae3/board_config.py")
+    assert "2592x1944" not in ae3.FRAMESIZES

@@ -25,6 +25,8 @@ analysis = [
     "Pillow>=10.0",
 ]
 # Pi <-> OpenMV USB transport (Phase 3+).
+# INA3221 power logger (scripts/ina3221_log.py, SPEC_n6_eval must do 2; MIT).
+power = ["smbus2>=0.4"]
 serial = [
     "pyserial>=3.5",
     "mpremote>=1.20",   # host_tools/deploy_openmv.py copies the board service (1.29.0 on nereus002)

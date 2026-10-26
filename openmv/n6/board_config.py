@@ -33,6 +33,14 @@ FRAMESIZES = {
     "VGA": "VGA",     # 640x400
     "960x600": (960, 600),  # ISP-scaled from HD (see above)
     "HD": "HD",       # 1280x800 (max)
+    # PS5520 only (2592x1944 array, Nick 10/24): the sensor reads its full array and the ISP crops to
+    # aspect + scales (drivers/sensors/ps5520.c, ports/stm32/stm_isp.c). Measured on the board 10/24
+    # (openmv/probes/n6_bigsize_fps_probe_v5.py): all four snapshot at 29.4 fps. On the PAG7936 they
+    # exceed its 1280x800 array, so set_framesize fails ("Sensor control failed").
+    "1280x960": "SXGAM",
+    "1920x1080": "FHD",
+    "2560x1440": "QHD",
+    "2592x1944": "WQXGA2",
 }
 DEFAULT_FRAMESIZE = "HD"
 
@@ -48,7 +56,10 @@ DEFAULT_PIXEL_FORMAT = "RGB565"
 # CFA of the delivered bytes is BGGR (decided on the V1 card: patch hues within 9 deg of
 # truth, RGGB 180 deg off); black level 0 (subtracted on chip, noise clipped at 0). Only HD
 # was probed — whether smaller sizes bin or crop the mosaic is unknown, so they are not offered.
-RAW_FRAMESIZES = {"HD": "HD"}
+# WQXGA2 (2592x1944) is the PS5520's full-pitch native mode (5 MB Bayer); its HD Bayer mode sees
+# the whole field at half pitch (TEST_CARD_RAW_COMPARE step 0, 2026-10-25). The PAG7936 has no
+# such mode: asking for it there fails the capture, nothing else.
+RAW_FRAMESIZES = {"HD": "HD", "WQXGA2": "WQXGA2"}
 RAW_DEFAULT_FRAMESIZE = "HD"
 RAW_CFA = "BGGR"
 RAW_BITS = 8
