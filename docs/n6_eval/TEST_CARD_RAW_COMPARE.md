@@ -10,11 +10,11 @@ One scene, one card position (frame centre only; corners are the separate corner
 
 ## Fixed
 - nereus001 + spare N6 020023000450433547373200, OpenMV v5.0.1 + tag25h9 (v5.0.1-2.gbe78cb31ce), board service files as deployed
-  (1d6f5c7 board files, ALL MATCH 10/24 9:57 PM; re-checked with `board_hashes` before leg 1). **No board writes, no deploy, no register writes.**
+  (1d6f5c7 board files, ALL MATCH 10/24 9:57 PM; re-checked with `board_hashes` before leg 1). **No register writes.** The only board write is amendment 1's `board_config.py` (below).
 - The same 4.5 mm M12 lens on both sensors, V3 card c1 (tags 0–3) at ~1 m in air, rig and card not moved between legs.
 - **Light:** Nick's LED lamp(s) at one fixed setting (brightness, colour temperature, position) for every leg; daylight kept out
   (blinds closed, or room lights as Nick sets them, recorded). Nick records the lamp setting in chat before leg 1.
-- Capture: rig `capture_raw` (8-bit Bayer, `csi.BAYER`, streamed from RAM, SHA-256 verified; `cameras/openmv_usb.py`), framesize `HD`,
+- Capture: rig `capture_raw` (8-bit Bayer, `csi.BAYER`, streamed from RAM, SHA-256 verified; `cameras/openmv_usb.py`), framesize `HD` (and `WQXGA2` on the PS5520, amendment 1),
   AWB frozen, exposure and gain locked by request (below). Each call is its own camera session (reset + warm-up), so the 10 frames are 10 sessions.
 - Sensor defaults as delivered, including the PAG7936's on-chip denoise + lens shading (Nick's decision 2026-10-01, OQ-54). Whether the
   PS5520's Bayer is processed on chip is unknown; the neighbour-noise correlation below shows it.
@@ -40,16 +40,34 @@ gain index 4 in the driver `ps5520.c`; dB are each sensor's own scale and not co
    ask Nick (a full-pitch PS5520 Bayer needs a board-config change + deploy, outside this card).
 1. **Leg A, PS5520:** Nick sets the lamps; I start the focus page (`host_tools.focus_stream` from the deployed
    `test/141-on-n6-eval` checkout, as `~/n6_eval/focus141_big.sh`, switched to 2592×1944); it shows the sensor id. Nick focuses on the card
-   at 1:1; I record the page's sharpness readout and stop the page (`kill <pid>`). Then the exposure plan + darks.
+   at 1:1; I record the page's sharpness readout and stop the page (`kill <pid>`). Then the exposure plan + darks, at `HD` and at `WQXGA2` (amendment 1).
+   *Step 0 result (9:14 AM, `2026-10-25_raw_compare/STEP0.md`): valid frame, tags 59.8–61.0 px, so the HD Bayer mode is **binned or skipped**. Stopped; Nick chose amendment 1.*
 2. **Leg B, PAG7936:** Nick swaps the sensor (and power-cycles if needed, as on 10/24), same lens. Focus page at HD, sensor id shown
    by the page (0x7936), Nick focuses, readout recorded. Exposure plan + darks.
    **Also SPEC_n6_eval must do 1 for the PAG7936** (the kill line is Sun 10/25 6 PM; only the PS5520 list exists, `2026-10-24_sensor_compare/ps5520/modes_probe.txt`):
    `openmv/probes/n6_modes_probe_v5.py` via `mpremote run` (RAM only, no board writes), exactly as for the PS5520 on 10/24 12:28 PM →
    `legB/modes_probe.txt`. Firmware is v5.0.1 + the one tag25h9 #define, as for the PS5520 list (stated in the result).
-3. **Leg A′, PS5520 again (recommended; Nick's call, ~15 min of his time):** swap back, refocus, 10 frames at 4 ms only.
+3. **Leg A′, PS5520 again (recommended; Nick's call, ~15 min of his time):** swap back, refocus, 10 frames at 4 ms only, at `HD` and at `WQXGA2`.
    This is the only check that the light and setup stayed the same across the swaps.
 4. **Mac analysis** (`scripts/n6_raw_compare.py`, new, unit-tested on synthetic Bayer before use): black from the darks; one bilinear
    demosaic (`color/raw_io.demosaic_bilinear`, the same code for both sensors); card located from the tags.
+
+## Amendment 1 (Nick, chat Sun 10/25 evening: "Yes: amend the card to add PS5520 5 MP Bayer (2592x1944) next to binned HD, and deploy the board_config.py change to the N6. Send me the amended card sha first.")
+- **Why:** step 0 showed the PS5520 HD Bayer mode is binned or skipped (tags ~60 px), so it can't show what the PS5520's full pixel
+  pitch resolves. Its native 2592×1944 mode (`ps5520.c` table `PS5520_2592x1944x30fps`) can: tags ~123 px, as on the 10/24 5 MP JPEG.
+- **Board change:** `openmv/n6/board_config.py` `RAW_FRAMESIZES` gains `"WQXGA2": "WQXGA2"` (`csi.WQXGA2` = 2592×1944 in the v5.0.1
+  csi module). Nothing else changes; the PAG7936 is never asked for `WQXGA2`.
+  Deployed **only after Nick's go on this card's sha**: `mpremote fs cp board_config.py :board_config.py` + reset, from
+  `~/n6_eval/`. Before: sha256 094fc9b1…594 (ALL MATCH 9:13 AM). After: 3b988ac6…699, read back with `mpremote fs sha256sum`.
+  **Revert** after leg A′ (or on any stop): the same copy of the 094fc9b1… file (feat/n6-eval @ 3d24a20), read back.
+- **5 MP exposure:** the same 2 / 4 / 8 ms plan. The 2592×1944 mode is also a 30 fps mode (~33 ms frame), so 8 ms stays clear of
+  the frame-time register path (`frame_time_us` null, checked per frame).
+- **First 5 MP frame = feasibility:** 2592×1944, 5,038,848 B, SHA match, inside the host's 30 s capture timeout. Unknown before it
+  runs: whether the N6 holds and sends a 5 MB Bayer frame. On a MemoryError, timeout or USB drop: stop, revert, tell Nick.
+- **Metrics:** reported per mode (PAG7936 HD, PS5520 HD binned, PS5520 5 MP); the edge in mm on the card compares them.
+- **Focus (Nick, board 8:00 PM: "this is done"):** the PS5520 refocus for leg A is done. The focus page read 726,686, then
+  422,715 / 422,835 a minute later (the scene or light changed; cause unknown), so no single focus figure is recorded.
+- **Light:** still to come from Nick before leg A (the setting in chat, as "Fixed" says).
 
 ## Metrics (per sensor, at the longest exposure where neither sensor clips the card: no grey patch > 250 DN)
 | metric | how |
@@ -71,7 +89,7 @@ gain index 4 in the driver `ps5520.c`; dB are each sensor's own scale and not co
 ## Stop rules
 - Any frame with `frame_time_us` not null on the PS5520 → stop, `reset_board`, tell Nick.
 - The N6 drops off USB twice, or once without coming back in 60 s → stop. Two failed captures in a row → stop.
-- No board file writes, no firmware change, no sensor register writes, no lightsleep. Nothing on nereus002.
+- No board file writes beyond amendment 1, no firmware change, no sensor register writes, no lightsleep. Nothing on nereus002.
 
 ## Cost
-Builder ~10 min per leg + ~1 h analysis. Nick: lamps ~5 min, focus ~5 min per leg, 1 swap (2 with leg A′), lens cover per leg: ~30–45 min hands-on.
+Builder ~15 min per leg (5 MP adds ~6 min) + ~1 h analysis. Nick: lamps ~5 min, focus ~5 min per leg, 1 swap (2 with leg A′), lens cover per leg: ~30–45 min hands-on.

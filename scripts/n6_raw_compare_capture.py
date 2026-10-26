@@ -8,7 +8,8 @@ per frame and checks every sidecar against the card's validity rules: exposure r
 exits 3. Two failed captures in a row stop it with exit 2. Every frame is logged to ``<out>/manifest.jsonl``.
 
 Usage (Pi, repo root):
-  .venv/bin/python scripts/n6_raw_compare_capture.py --out DIR --exposures-us 2000 4000 8000 --frames 10 [--label dark]
+  .venv/bin/python scripts/n6_raw_compare_capture.py --out DIR --exposures-us 2000 4000 8000 --frames 10 \
+      [--framesize HD|WQXGA2] [--label dark]
 Exit 0 = every frame captured and valid; 1 = a frame failed a check (kept, logged); 2 = two failures in a row;
 3 = frame-time path taken (stopped, board reset).
 """
@@ -47,6 +48,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--exposures-us", type=int, nargs="+", required=True)
     ap.add_argument("--frames", type=int, default=10)
+    ap.add_argument("--framesize", default="HD", help="HD, or WQXGA2 (PS5520 2592x1944, card amendment 1)")
     ap.add_argument("--gain-db", type=float, default=1.0, help="requested gain; each driver clamps to its floor")
     ap.add_argument("--label", default="lit", help="file prefix, e.g. lit / dark")
     ap.add_argument("--serial", default=SERIAL)
@@ -59,14 +61,15 @@ def main(argv=None) -> int:
     try:
         for exp in args.exposures_us:
             for i in range(1, args.frames + 1):
-                dest = args.out / ("%s_e%05d_%02d.bayer" % (args.label, exp, i))
+                dest = args.out / ("%s_%s_e%05d_%02d.bayer" % (args.label, args.framesize, exp, i))
                 if dest.exists():
                     print("exists, not overwriting: %s" % dest, file=sys.stderr)
                     return 2
                 t0 = time.time()
-                settings = {"framesize": "HD", "exposure_us": exp, "gain_db": args.gain_db}
+                settings = {"framesize": args.framesize, "exposure_us": exp, "gain_db": args.gain_db}
                 result = cam.capture_raw(str(dest), CaptureRequest(kind="image", settings=settings))
-                row = {"file": dest.name, "label": args.label, "exposure_req_us": exp, "frame": i,
+                row = {"file": dest.name, "label": args.label, "framesize": args.framesize,
+                       "exposure_req_us": exp, "frame": i,
                        "status": result.status, "error": result.error, "sha256": result.sha256,
                        "size_bytes": result.size_bytes, "wall_s": round(time.time() - t0, 2),
                        "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}

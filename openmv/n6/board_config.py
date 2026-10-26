@@ -56,7 +56,10 @@ DEFAULT_PIXEL_FORMAT = "RGB565"
 # CFA of the delivered bytes is BGGR (decided on the V1 card: patch hues within 9 deg of
 # truth, RGGB 180 deg off); black level 0 (subtracted on chip, noise clipped at 0). Only HD
 # was probed — whether smaller sizes bin or crop the mosaic is unknown, so they are not offered.
-RAW_FRAMESIZES = {"HD": "HD"}
+# WQXGA2 (2592x1944) is the PS5520's full-pitch native mode (5 MB Bayer); its HD Bayer mode sees
+# the whole field at half pitch (TEST_CARD_RAW_COMPARE step 0, 2026-10-25). The PAG7936 has no
+# such mode: asking for it there fails the capture, nothing else.
+RAW_FRAMESIZES = {"HD": "HD", "WQXGA2": "WQXGA2"}
 RAW_DEFAULT_FRAMESIZE = "HD"
 RAW_CFA = "BGGR"
 RAW_BITS = 8
