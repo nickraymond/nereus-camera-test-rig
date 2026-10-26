@@ -53,6 +53,7 @@ def svc(monkeypatch, clock):
     monkeypatch.setitem(sys.modules, "sensor", types.SimpleNamespace(RGB565=1, VGA=2, HD=3))
     monkeypatch.setitem(sys.modules, "time", clock)
     monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace(TAG25H9=4))
+    monkeypatch.setitem(sys.modules, "gc", types.SimpleNamespace(collect=lambda: None))
     monkeypatch.setitem(sys.modules, "command_protocol",
                         _load("command_protocol", "openmv/common/command_protocol.py"))
     return _load("capture_service_tags_t", "openmv/common/capture_service.py")
@@ -247,17 +248,18 @@ def test_tags_off_stream_has_no_tag_fields_and_keeps_10_fps(svc, clock, monkeypa
     assert not any("tags" in f for f in frames)
 
 
-def test_tags_on_ae3_keeps_10_fps_and_the_gap_bar_with_a_120_ms_search(svc, clock, monkeypatch):
-    # AE3 at the pool settings: 74 ms busy of each 100 ms. A 120 ms search every 10th frame is
-    # paid back by the next frames' slack, so the clip keeps 10 fps (bar >= 9.5) and the longest
-    # frame gap stays <= 2 periods (spec rev 1 N4).
-    img = FakeImage(clock, hits=[[tag(0), tag(1), tag(30)]] * 100, search_ms=120)
+def test_tags_on_ae3_keeps_10_fps_and_the_gap_bar_at_owner_2s_search_cost(svc, clock,
+                                                                          monkeypatch):
+    # AE3 at the pool settings: 74 ms busy of each 100 ms; owner 2 measured a full-frame search
+    # at 140-155 ms (bench_prep MANIFEST). With 3 bands each search is ~58 % of that; it is paid
+    # back by the next frames' slack, so the clip keeps 10 fps (bar >= 9.5) and the longest frame
+    # gap stays <= 2 periods (spec rev 1 N4). No tag found: every search is a band search.
+    img = FakeImage(clock, search_ms=155)
     frames, done = run_stream(svc, clock, monkeypatch, img,
-                              {"tags": {"every": 10, "ids": [0, 1, 2, 3]}})
+                              {"tags": {"every": 10, "bands": 3, "ids": [0, 1, 2, 3]}})
     searched = [f for f in frames if "tags" in f]
     assert 59 <= len(frames) <= 61
     assert len(searched) >= 5                                  # >= 1 detection frame per second
-    assert searched[0]["tags"]["ids"] == [0, 1] and searched[0]["tags"]["rej"] == [30]
     assert done["tags"]["searches"] == len(searched) and done["tags"]["error"] is None
     assert all(b["seq"] - a["seq"] >= 10 for a, b in zip(searched, searched[1:]))
     gaps = [b["_t"] - a["_t"] for a, b in zip(frames, frames[1:])]
@@ -271,6 +273,20 @@ def test_a_search_that_never_fits_is_never_run_more_than_the_schedule_allows(svc
     frames, done = run_stream(svc, clock, monkeypatch, FakeImage(clock, search_ms=100),
                               {"fps": 30, "tags": {"every": 5, "ids": [0]}}, snap_ms=1, jpeg_ms=39)
     assert done["tags"]["searches"] == 1                        # frame 0 only (nothing is late yet)
+
+
+def test_tracked_search_reports_card_ids_and_raw_false_ids(svc, clock, monkeypatch):
+    img = FakeImage(clock, hits=[[tag(0), tag(1), tag(30)]] * 100, search_ms=120)
+    frames, _ = run_stream(svc, clock, monkeypatch, img, {"tags": {"every": 10, "ids": [0, 1]}})
+    searched = [f["tags"] for f in frames if "tags" in f]
+    assert searched[0]["ids"] == [0, 1] and searched[0]["rej"] == [30]
+    assert searched[1]["mode"] == "track"
+
+
+def test_tags_without_an_fps_cap_fail_the_arm(svc, clock, monkeypatch):
+    with pytest.raises(svc.cp.ProtocolError, match="fps"):
+        run_stream(svc, clock, monkeypatch, FakeImage(clock),
+                   {"fps": 0, "tags": {"every": 5, "ids": [0]}})
 
 
 def test_memory_error_turns_the_hook_off_and_the_stream_goes_on(svc, clock, monkeypatch):

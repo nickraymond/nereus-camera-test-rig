@@ -27,6 +27,7 @@ a poisoned capture is diagnosable from its metadata alone (§12).
 """
 
 import binascii
+import gc
 import hashlib
 import os
 import time
@@ -420,7 +421,8 @@ def send_file(usb, command_id, filename):
 # grayscale copy scaled by s), and the result goes in that frame's header. Each search is bounded so
 # a frame gap stays short (spec rev 1 N4: <= 2 frame periods): while the last search kept a card
 # id, only boxes around those tags are searched (track); otherwise one of B overlapping horizontal
-# bands, in turn (acquire; B = 1 is the full frame). Ids outside "ids" (the card copy in view; 25h9
+# bands, in turn (acquire; B = 1 is the full frame). Known limit (QE 011 N4): while one card id is
+# tracked, the card's other tags are not re-acquired. Ids outside "ids" (the card copy in view; 25h9
 # has a small code distance, openmv/firmware/README.md) are reported as rejected, never as hits.
 # Result fields (tag.id / tag.corners), find_apriltags(roi=, families=) and
 # to_grayscale(x_scale=, y_scale=, copy=True) read from modules/py_image.c at OpenMV v5.0.0 (AE3)
@@ -518,6 +520,9 @@ def _find_tags(img, cfg, family, state):
     for x, y, bw, bh in boxes:
         tags.extend(src.find_apriltags(roi=(int(x * s), int(y * s), max(4, int(bw * s)),
                                             max(4, int(bh * s))), families=family))
+    if src is not img:  # free the scaled copy before the JPEG encoder needs the heap (F4)
+        src = None
+        gc.collect()
     rec = _tag_result(tags, cfg["ids"], s, time.ticks_diff(time.ticks_ms(), t0))
     rec["mode"] = mode
     state["corners"] = rec["corners"]
@@ -581,6 +586,8 @@ def stream_frames(usb, command_id, board_config, settings):
         if family is None:
             raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "firmware has no image." + _TAG_FAMILY
                                    + " (openmv/firmware/README.md)")
+        if not period_ms:  # the on-schedule guard needs a frame period (QE 011 N3)
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "tags need an fps cap (fps > 0)")
     tag_stats = {"searches": 0, "max_ms": 0, "error": None}
 
     sensor.reset()
