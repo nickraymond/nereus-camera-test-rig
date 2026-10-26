@@ -309,7 +309,8 @@ class ImxVideo:
         if lens is not None:
             self.cmd[1:1] = ["--autofocus-mode", "manual", "--lens-position", str(lens)]
         # H.264 knobs for pool 3's max-quality ladder; absent = rpicam-vid's own defaults
-        # (--intra 60: an IDR, i.e. a frame the tag follower can decode alone, every 2 s at 30 fps)
+        # (rpicam-vid --help on nereus002: --intra default 0 = the encoder's own period, measured
+        # 60 frames on pool 2's clip008: an IDR, the only frame the tag follower decodes, every 2 s)
         if intra:
             self.cmd[1:1] = ["--intra", str(intra)]
         if bitrate:
@@ -572,7 +573,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--imx-fps", type=int, default=30)
     ap.add_argument("--lens-position", type=float, default=0.8)
     ap.add_argument("--imx-intra", type=int, default=None,
-                    help="rpicam-vid --intra (IDR period, frames; default rpicam's 60). The IMX708 "
+                    help="rpicam-vid --intra (IDR period, frames; unset = the encoder's own, "
+                         "60 measured on pool 2's clips). The IMX708 "
                          "tag follower can search only IDR frames")
     ap.add_argument("--imx-bitrate", type=int, default=None,
                     help="rpicam-vid --bitrate (bits/s; default rpicam's)")
