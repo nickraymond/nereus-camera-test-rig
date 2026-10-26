@@ -519,6 +519,12 @@ def stream_frames(usb, command_id, board_config, settings):
     tag_boxes = None
 
     sensor.reset()
+    # The sensor actually fitted (focus page, Nick 10/24: PAG7936 1 MP or PS5520 5 MP). Read live,
+    # because board_config.SENSOR_NAME is a constant; sent once, in the first frame's header.
+    try:
+        sensor_id = sensor.get_id()
+    except Exception:
+        sensor_id = None
     sensor.set_pixformat(sensor.RGB565)
     sensor.set_framesize(fs_const)
     # Synchronized video (settings["trigger"], 2026-10-14): warm up, say "armed", start on the
@@ -594,6 +600,9 @@ def stream_frames(usb, command_id, board_config, settings):
         if tag_extra is not None:
             extra = extra or {}
             extra.update(tag_extra)
+        if seq == 0 and sensor_id is not None:
+            extra = extra or {}
+            extra["sensor_id"] = sensor_id
         t_write = time.ticks_ms()
         header = cp.encode_message(
             cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
