@@ -27,6 +27,7 @@ a poisoned capture is diagnosable from its metadata alone (§12).
 """
 
 import binascii
+import gc
 import hashlib
 import os
 import time
@@ -414,6 +415,132 @@ def send_file(usb, command_id, filename):
     ))
 
 
+# On-board AprilTags (pool 3 edge test, docs/specs/pool3_edge_tags.md). Off unless the host sends
+# settings["tags"] = {"every": N, "ids": [...], "scale": s, "bands": B}. tag25h9 is searched on at
+# most every Nth frame, only while the stream is on schedule, on the raw frame before JPEG (or a
+# grayscale copy scaled by s), and the result goes in that frame's header. Each search is bounded so
+# a frame gap stays short (spec rev 1 N4: <= 2 frame periods): while the last search kept a card
+# id, only boxes around those tags are searched (track); otherwise one of B overlapping horizontal
+# bands, in turn (acquire; B = 1 is the full frame). Known limit (QE 011 N4): while one card id is
+# tracked, the card's other tags are not re-acquired. Ids outside "ids" (the card copy in view; 25h9
+# has a small code distance, openmv/firmware/README.md) are reported as rejected, never as hits.
+# Result fields (tag.id / tag.corners), find_apriltags(roi=, families=) and
+# to_grayscale(x_scale=, y_scale=, copy=True) read from modules/py_image.c at OpenMV v5.0.0 (AE3)
+# and v5.0.1 + patch 0001 (N6).
+_TAG_FAMILY = "TAG25H9"
+_TAG_MARGIN = 1.0  # track box = the tag's bounding box grown by this x its size on every side
+
+
+def _tag_config(settings):
+    """settings["tags"] -> None (off, the default) or the validated
+    {"every", "scale", "bands", "ids"}."""
+    t = settings.get("tags")
+    if not t:
+        return None
+    try:
+        every = int(t.get("every", 0))
+        scale = float(t.get("scale", 1.0))
+        bands = int(t.get("bands", 1))
+        ids = [int(i) for i in t.get("ids") or ()]
+    except (TypeError, ValueError, AttributeError):
+        raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "bad tags settings: " + repr(t))
+    if every < 1 or not 0 < scale <= 1 or not 1 <= bands <= 8 or not ids:
+        raise cp.ProtocolError(
+            cp.ERR_CAPTURE_FAILED,
+            "tags needs every >= 1, 0 < scale <= 1, 1 <= bands <= 8 and ids: " + repr(t),
+        )
+    return {"every": every, "scale": scale, "bands": bands, "ids": ids}
+
+
+def _tag_due(seq, last_seq, every, late_ms):
+    """Search this frame? At most every ``every`` frames, and only while the stream is on
+    schedule (``late_ms``, how late the previous frame's work left this one, <= 0): a late frame
+    defers the search, so searches never pile up, and a stream that cannot hold its asked fps
+    never searches at all."""
+    if late_ms > 0:
+        return False
+    return last_seq is None or seq - last_seq >= every
+
+
+def _band(k, bands, w, h):
+    """Acquire box k of ``bands`` horizontal strips over a w x h frame, each grown by h/8 top and
+    bottom so a tag up to h/8 tall lies wholly inside at least one strip."""
+    pad = h // 8
+    y0 = max(0, k * h // bands - pad)
+    y1 = min(h, (k + 1) * h // bands + pad)
+    return (0, y0, w, y1 - y0)
+
+
+def _track_boxes(corners, w, h):
+    """Track boxes: each kept tag's bounding box grown by _TAG_MARGIN x its size, clipped to the
+    w x h frame (full-frame pixels)."""
+    boxes = []
+    for c in corners:
+        xs = [p[0] for p in c]
+        ys = [p[1] for p in c]
+        mx = int((max(xs) - min(xs)) * _TAG_MARGIN) + 1
+        my = int((max(ys) - min(ys)) * _TAG_MARGIN) + 1
+        x0, y0 = max(0, min(xs) - mx), max(0, min(ys) - my)
+        x1, y1 = min(w, max(xs) + mx), min(h, max(ys) + my)
+        if x1 - x0 >= 4 and y1 - y0 >= 4:
+            boxes.append((x0, y0, x1 - x0, y1 - y0))
+    return boxes
+
+
+def _tag_result(tags, ids, scale, ms):
+    """Frame-header record of one search: kept ids + their corners in full-frame pixels,
+    rejected ids (not on the card in view), decode ms. One entry per id: overlapping track
+    boxes can return the same tag twice."""
+    keep, corners, rej = [], [], []
+    for tag in tags:
+        if tag.id in keep or tag.id in rej:
+            continue
+        if tag.id in ids:
+            keep.append(tag.id)
+            corners.append([[int(x / scale), int(y / scale)] for x, y in tag.corners])
+        else:
+            rej.append(tag.id)
+    return {"ms": ms, "ids": keep, "corners": corners, "rej": rej}
+
+
+def _find_tags(img, cfg, family, state):
+    """One bounded search (track or acquire, see above). ``state`` carries the last kept corners
+    and the next acquire band between calls."""
+    t0 = time.ticks_ms()
+    w, h = img.width(), img.height()
+    s = cfg["scale"]
+    src = img if s == 1 else img.to_grayscale(x_scale=s, y_scale=s, copy=True)
+    boxes = _track_boxes(state["corners"], w, h)
+    mode = "track"
+    if not boxes:
+        mode = "band%d" % state["band"]
+        boxes = [_band(state["band"], cfg["bands"], w, h)]
+        state["band"] = (state["band"] + 1) % cfg["bands"]
+    tags = []
+    for x, y, bw, bh in boxes:
+        tags.extend(src.find_apriltags(roi=(int(x * s), int(y * s), max(4, int(bw * s)),
+                                            max(4, int(bh * s))), families=family))
+    if src is not img:  # free the scaled copy before the JPEG encoder needs the heap (F4)
+        src = None
+        gc.collect()
+    rec = _tag_result(tags, cfg["ids"], s, time.ticks_diff(time.ticks_ms(), t0))
+    rec["mode"] = mode
+    state["corners"] = rec["corners"]
+    return rec
+
+
+def _next_due(due, now, period_ms):
+    """Tags-on pacing -> (next frame's due time, how late it already is in ms). The next frame
+    is due one period after this one was due, so frames after a search catch up the time it
+    took (the clip keeps its fps). More than one period behind, the debt is dropped and pacing
+    restarts from now; the lateness is still reported, so no search runs on that frame."""
+    due = time.ticks_add(due, period_ms)
+    late = time.ticks_diff(now, due)
+    if late > period_ms:
+        due = now
+    return due, late
+
+
 def stream_frames(usb, command_id, board_config, settings):
     """Continuously stream framed JPEG frames for manual lens focusing (§2 "where practical").
 
@@ -448,6 +575,20 @@ def stream_frames(usb, command_id, board_config, settings):
     # Per-frame timing (B0): each header carries this frame's snapshot and JPEG ms and the
     # previous frame's USB write ms (a frame's own write ends after its header is sent).
     timing = bool(settings.get("timing"))
+    # On-board tags (pool 3): checked before the sensor starts, so a board whose firmware lacks
+    # tag25h9 (stock N6 v5.0.1) fails the arm loudly instead of streaming with no searches.
+    tags = _tag_config(settings)
+    family = None
+    if tags is not None:
+        import image  # OpenMV firmware module
+
+        family = getattr(image, _TAG_FAMILY, None)
+        if family is None:
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "firmware has no image." + _TAG_FAMILY
+                                   + " (openmv/firmware/README.md)")
+        if not period_ms:  # the on-schedule guard needs a frame period (QE 011 N3)
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "tags need an fps cap (fps > 0)")
+    tag_stats = {"searches": 0, "max_ms": 0, "error": None}
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -465,6 +606,10 @@ def stream_frames(usb, command_id, board_config, settings):
 
     seq = 0
     write_ms = None
+    due = None  # tags on: when this frame was due (pacing grid, _next_due)
+    late = 0  # tags on: how late the previous frame left this one (ms)
+    last_tag_seq = None
+    tag_state = {"corners": [], "band": 0}
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
     while True:
         # Any inbound byte is the host's stop signal; drain it and exit.
@@ -477,8 +622,22 @@ def stream_frames(usb, command_id, board_config, settings):
         if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
             break
         t_frame = time.ticks_ms()
+        if due is None:
+            due = t_frame
         img = sensor.snapshot()
         t_snap = time.ticks_ms()
+        t_jpeg = t_snap
+        tag = None
+        if tags is not None and _tag_due(seq, last_tag_seq, tags["every"], late):
+            try:
+                tag = _find_tags(img, tags, family, tag_state)
+                last_tag_seq = seq
+                tag_stats["searches"] += 1
+                tag_stats["max_ms"] = max(tag_stats["max_ms"], tag["ms"])
+            except Exception as e:  # e.g. MemoryError beside the JPEG encoder (F4): hook off,
+                tags = None         # the stream goes on; the reason is in the completed line
+                tag_stats["error"] = repr(e)
+            t_jpeg = time.ticks_ms()
         if sub_const is None:
             img.compress(quality=quality)
         else:
@@ -488,8 +647,11 @@ def stream_frames(usb, command_id, board_config, settings):
         extra = None
         if timing:
             extra = {"snap_ms": time.ticks_diff(t_snap, t_frame),
-                     "jpeg_ms": time.ticks_diff(time.ticks_ms(), t_snap),
+                     "jpeg_ms": time.ticks_diff(time.ticks_ms(), t_jpeg),
                      "prev_write_ms": write_ms}
+        if tag is not None:
+            extra = extra or {}
+            extra["tags"] = tag
         t_write = time.ticks_ms()
         usb.write(cp.encode_message(
             cp.frame_response(command_id, seq, n, n, img.width(), img.height(),
@@ -499,10 +661,14 @@ def stream_frames(usb, command_id, board_config, settings):
         write_ms = time.ticks_diff(time.ticks_ms(), t_write)
         seq += 1
         if period_ms:
+            if tags is not None:
+                due, late = _next_due(due, time.ticks_ms(), period_ms)
+            else:
+                due = time.ticks_add(t_frame, period_ms)  # tags off: one period from this frame
             # Sleep the rest of the period in <= 50 ms slices so a host stop byte is still seen
             # promptly even with a tiny --fps (QE #107).
             while not usb.any():
-                rest = period_ms - time.ticks_diff(time.ticks_ms(), t_frame)
+                rest = time.ticks_diff(due, time.ticks_ms())
                 if rest <= 0:
                     break
                 time.sleep_ms(min(rest, 50))
@@ -510,4 +676,6 @@ def stream_frames(usb, command_id, board_config, settings):
     out = {"frames": seq}
     if sync is not None:
         out["sync"] = sync
+    if settings.get("tags"):
+        out["tags"] = tag_stats
     usb.write(cp.encode_message(cp.completed_response(command_id, out)))

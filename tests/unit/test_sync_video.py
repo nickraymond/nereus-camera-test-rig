@@ -47,7 +47,10 @@ def _args(**kw):
     base = dict(seconds=30.0, board_framesize="VGA", board_quality=70, board_fps=10.0,
                 board_subsampling="auto", timing=False,
                 n6_framesize=None, n6_quality=None, n6_fps=None, n6_subsampling=None,
-                ae3_framesize=None, ae3_quality=None, ae3_fps=None, ae3_subsampling=None)
+                ae3_framesize=None, ae3_quality=None, ae3_fps=None, ae3_subsampling=None,
+                board_tags_every=0, board_tags_scale=1.0, board_tags_bands=1, tag_ids=None,
+                n6_tags_every=None, n6_tags_scale=None, n6_tags_bands=None,
+                ae3_tags_every=None, ae3_tags_scale=None, ae3_tags_bands=None)
     base.update(kw)
     return argparse.Namespace(**base)
 
