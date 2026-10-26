@@ -44,3 +44,38 @@
   TEST_CARD_pool3 rev 2+. Nothing on nereus002 after the bench proof without Nick accepting it.
 - **Out of scope:** pose/range on the board, H.264, the Pi-side detector, IMX708 changes, any other unit.
 - **Done:** TEAM_RULES §4; PE checks off must dos 0–5 and F1–F6.
+
+## Rev 1 (PE 009, Mon 10/26 10:50 AM PT): Nick's demo spec + QE 011's rev 0 nits N1–N4. Overrides rev 0 where they conflict; set before any data.
+- **Nick, typed in Lead 004's chat Mon ~10:55 AM (read by PE 009 in that transcript):** "I expect nereus002 to give me a demo this PM, all
+  three cameras should be running their april tag detection. I want the IMX to have 30fps, I want the N6 to have 30 or 15fps with
+  intermittent april tag detection at HD quality, and I want AE3 at the smaller rez with intermittent april tag detection at 10 fps. You
+  make it happen and keep them working and testing until there is a solution".
+- **Scope now covers three cameras** (rev 0 had N6 + AE3 only). The IMX708's detection runs **live on the Pi**, on a frame subset, in a
+  separate process at native scale (apriltag_detector.py's note: upscaled passes OOM on the Pi Zero 2 W), never in the capture path.
+- **Targets and bars (per camera, worst of 3 bench clips; the "95 % of asked" rule from WED_CARD's 9.5-of-10):**
+
+  | Camera | Asked | Capture pass | Tags |
+  |---|---|---|---|
+  | IMX708 (Pi) | 1080p H.264, **30 fps** | **≥ 28.5 fps** delivered, max gap ≤ 100 ms. Below 28.5 but ≥ 26.0 (pool 2's bar) = "capture valid, 30 fps not met", reported, not a pass | intermittent, ≥ 1 detection/s |
+  | N6 | HD 1280×800 MJPEG, **15 fps** first, 30 fps tried after | 15 fps: **≥ 14.25**; 30 fps: **≥ 28.5**; usable ≥ 95 % | intermittent, ≥ 1 detection/s |
+  | AE3 | 640×400 MJPEG 4:2:0, **10 fps** | **≥ 9.5**, 0 lost | intermittent, ≥ 1 detection/s |
+
+  All: skew ≤ 25 ms, 0 wedges / ladder USB resets, throttled 0x0, ≥ 1 card id in ≥ 50 % of detection frames (card fully in view, bench).
+  N6 at 15 or 30 fps HD was never measured on nereus002 (pool 2 held 10 fps): USB/encoder limits are unknown, measured on the bench first.
+- **"Keep working until there is a solution":** the stop-early line (rev 0 chip: 4 PM) becomes a fallback, not a stop: at the demo start,
+  any camera not yet passing runs at its best passing setting (or without tags), and work continues after the demo; the card says which
+  camera ran what.
+- **QE 011 nits on rev 0 (qe_reviews/QE011_spec_pool3_edge_tags_1f303d06b14b.md), folded here:**
+  - N1 pool output (report-only, before any pool clip is scored): per camera and per held range (2.2 m, 3.3 m): % of detection frames with
+    ≥ 1 card id, raw ids outside the card's set, decode ms, and agreement with the Pi-side post-clip detector on matched frames (±50 ms).
+  - N2 "detection frame" = a frame the hook ran on (with or without a detection). Bench card distance: 2.2 m and 3.3 m, as the pool holds.
+  - N3 false ids are counted **before** the card filter (F3's count); after filtering they are 0 by construction.
+  - N4 each camera's **max frame gap with tags on** is reported (bench + pool); a gap > 100 ms (IMX708) or > 2 frame periods (boards) fails
+    that setting even if mean fps passes.
+- **Rev 1.1 (QE 011 nit N6 on rev 1, text):** new row F7: the Pi-side IMX708 detector runs the Pi Zero 2 W out of memory or starves the
+  recorder (detected: OOM in dmesg, recorder frame gap > 100 ms, or MemAvailable falling while it runs) → kill the detector process; the
+  IMX708 records without tags for that clip; reported.
+- **Rev 1.2 (PE 009; builder's finding on must do 1, text):** `card_values_wed.json` holds no tag ids (keys: source, partb, first_bin,
+  guard_cameras, detector; rig main 83086d1). The card-id filter comes from **`configs/cards/nereus_v3_<copy>.yaml` `corner_map`** of the
+  card copy in view (c1: {tl 0, tr 1, bl 2, br 3}), as openmv/firmware/README.md says ("filter to the ids of the card copy in view"). The
+  arm line names the copy (`--tag-ids`); default c1 only if the owner confirms c1 is the copy at the pool from a bench frame's tag ids.
