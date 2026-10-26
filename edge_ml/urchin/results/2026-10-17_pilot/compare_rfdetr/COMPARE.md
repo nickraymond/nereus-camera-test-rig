@@ -38,3 +38,21 @@ Files in the run folder: `rfdetr_dets.json` (detections ≥ 0.05, whole + tiled)
   - A rerun from the committed code at 7:35 PM gave identical detections (top score and count on all 100 stills, whole and tiled).
   - `score` reproduces `compare.json` byte for byte.
 - **Request:** Nick's own line in the urchin session's chat, Sun 10/18 evening: "I want to know how my model does relative to your results."
+
+## Rerun with 560-px tiles (Nick's ask, Sun 10/18 ~9 PM; rule in `MANIFEST_tile560.md`, written 9:21 PM before the run)
+
+Tile side min(short side, 560) px, so each tile is fed about 1:1 to the model's 560 × 560 input. Everything else is unchanged.
+Run 9:22–9:25:44 PM PT, 199 s (2.0 s/still), code `edge_ml/urchin/compare_rfdetr.py` @ `5ed86d6` (`--tile 560 --no-whole`).
+
+| Model | AUC yes vs no | AUC yes vs non-red no | Purple flagged at 0.5 | No flagged at 0.5 (red-only) | Unsure at 0.5 |
+|---|---|---|---|---|---|
+| RF-DETR whole frame | 0.78 | 0.84 | 44/59 | 7/29 (3/4) | 7/12 |
+| RF-DETR 1080-px tiles | 0.79 | 0.81 | 53/59 | 12/29 (3/4) | 6/12 |
+| **RF-DETR 560-px tiles** | **0.87** | **0.88** | **54/59** | 13/29 (2/4) | 9/12 |
+| OWLv2 tiled | 0.94 | 0.96 | 44/59 | 3/29 (2/4) | 1/12 |
+
+Purple stills flagged at 0.5, per video (560 / 1080 / OWLv2): leadline 1 / 1 / 1 of 2; leadline2 9 / 9 / 6 of 11; South Wreck f4 28 / 28 / 23 of 28; South Wreck f3 16 / 15 / 14 of 18.
+
+Candidates after the 300-per-still cap, 100 stills: 560-px tiles 7,935 at ≥ 0.05 and 2,937 at ≥ 0.1; 1080-px tiles 6,296 and 2,440; OWLv2 4,835 and 1,699. 2 stills hit the cap in each RF-DETR run.
+
+Reading: feeding the model at its own scale ranks urchin stills clearly better (AUC 0.79 → 0.87) and finds 1 more purple still at 0.5, but at the fixed 0.5 threshold it also flags 1 more no-purple still, and it gives 26 % more candidates to review at 0.05 than 1080-px tiles. Still below OWLv2 on the purple question (0.94), partly because the "no" group holds red-type urchins that are correct for its class. Not a PREREG result; the full-run pre-labeler stays at 1080-px tiles unless the PE/QE amend #128.
