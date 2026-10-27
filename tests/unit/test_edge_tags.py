@@ -95,7 +95,8 @@ def test_bad_tag_settings_fail_loudly(svc, bad):
 def test_tags_are_off_unless_asked(svc):
     assert svc._tag_config({}) is None and svc._tag_config({"tags": None}) is None
     assert svc._tag_config({"tags": {"every": 5, "ids": [0, 1, 2, 3]}}) == {
-        "every": 5, "scale": 1.0, "bands": 1, "ids": [0, 1, 2, 3]}
+        "every": 5, "scale": 1.0, "bands": 1, "ids": [0, 1, 2, 3], "tiles": None, "pad": None,
+        "reacq": 4, "budget": None, "lit": None}
 
 
 # -- frame subset ----------------------------------------------------------------------------------
@@ -155,7 +156,7 @@ class FakeImage:
 
 def test_tracks_found_tags_then_falls_back_to_bands_when_lost(svc, clock):
     cfg = {"every": 1, "scale": 1.0, "bands": 2, "ids": [0, 1, 2, 3]}
-    st = {"corners": [], "band": 0}
+    st = {"corners": [], "last": [], "band": 0}
     img = FakeImage(clock, hits=[[], [tag(0)], [], []], search_ms=30)
     r1 = svc._find_tags(img, cfg, 4, st)   # band 0: nothing
     r2 = svc._find_tags(img, cfg, 4, st)   # band 1: finds tag 0
@@ -169,7 +170,7 @@ def test_tracks_found_tags_then_falls_back_to_bands_when_lost(svc, clock):
 def test_scaled_search_uses_a_grayscale_copy_and_scaled_boxes(svc, clock):
     cfg = {"every": 1, "scale": 0.5, "bands": 1, "ids": [0]}
     img = FakeImage(clock)
-    svc._find_tags(img, cfg, 4, {"corners": [], "band": 0})
+    svc._find_tags(img, cfg, 4, {"corners": [], "last": [], "band": 0})
     assert img.scaled == (0.5, 0.5) and img.rois == [(0, 0, 640, 400)]
 
 
@@ -309,6 +310,140 @@ def test_next_due_catches_up_then_drops_debt_beyond_one_period(svc):
     assert svc._next_due(1000, 1250, 100) == (1250, 150)       # > 1 period behind: restart
 
 
+# -- G2 (docs/specs/yard_g2.md): tiles, re-acquire, budget guard, lit stored frame ----------------
+
+def g2(**kw):
+    cfg = {"every": 1, "scale": 1.0, "bands": 1, "ids": [0, 1, 2, 3], "tiles": [2, 3], "pad": 100,
+           "reacq": 4, "budget": 66, "lit": None}
+    cfg.update(kw)
+    return cfg
+
+
+def g2_state():
+    return {"corners": [], "last": [], "band": 0, "tile": 0, "tracks": 0, "tile_ms": None}
+
+
+@pytest.mark.parametrize("rows,cols,w,h,pad", [(2, 3, 1280, 800, 100), (3, 4, 640, 400, 50),
+                                               (1, 1, 1280, 800, 0), (8, 8, 1280, 800, 40)])
+def test_tiles_cover_the_frame_and_hold_any_tag_up_to_pad_in_one_tile(svc, rows, cols, w, h, pad):
+    boxes = [svc._tile(k, rows, cols, w, h, pad) for k in range(rows * cols)]
+    assert all(x >= 0 and y >= 0 and x + bw <= w and y + bh <= h for x, y, bw, bh in boxes)
+    side = max(pad, 1)
+    for ty in range(0, h - side + 1, 37):
+        for tx in range(0, w - side + 1, 37):
+            assert any(x <= tx and y <= ty and tx + side <= x + bw and ty + side <= y + bh
+                       for x, y, bw, bh in boxes), (tx, ty)
+
+
+@pytest.mark.parametrize("bad", [
+    {"tiles": [0, 3]}, {"tiles": [2, 9]}, {"tiles": [2]}, {"tiles": "2x3"}, {"pad": -1},
+    {"reacq": 0}, {"budget_ms": 0}, {"lit": 5},
+])
+def test_bad_g2_settings_fail_loudly(svc, bad):
+    with pytest.raises(svc.cp.ProtocolError):
+        svc._tag_config({"tags": {"every": 5, "ids": [0], **bad}})
+
+
+def test_g2_settings_parse(svc):
+    cfg = svc._tag_config({"tags": {"every": 5, "ids": [0], "tiles": [2, 3], "pad": 80,
+                                    "reacq": 3, "budget_ms": 60, "lit": "/flash/lit.pgm"}})
+    assert (cfg["tiles"], cfg["pad"], cfg["reacq"], cfg["budget"], cfg["lit"]) == \
+        ([2, 3], 80, 3, 60, "/flash/lit.pgm")
+
+
+def test_acquire_visits_each_tile_in_turn_then_wraps(svc, clock):
+    img = FakeImage(clock, search_ms=182)
+    st, cfg = g2_state(), g2()
+    modes = [svc._find_tags(img, cfg, 4, st)["mode"] for _ in range(7)]
+    assert modes == ["tile0", "tile1", "tile2", "tile3", "tile4", "tile5", "tile0"]
+    assert img.rois[:6] == [svc._tile(k, 2, 3, 1280, 800, 100) for k in range(6)]
+
+
+def test_reacquire_adds_the_next_tile_every_mth_track_search_and_tracks_what_it_finds(svc, clock):
+    other = ((900, 600), (930, 600), (930, 630), (900, 630))
+    hits = [[tag(0)]] + [[tag(0)]] * 4 + [[tag(1, other)]]
+    img = FakeImage(clock, hits=hits, search_ms=182)
+    st, cfg = g2_state(), g2()
+    recs = [svc._find_tags(img, cfg, 4, st) for _ in range(5)]
+    assert [r["mode"] for r in recs] == ["tile0", "track", "track", "track", "track+tile1"]
+    assert recs[-1]["ids"] == [0, 1]                 # the card's other tag, re-acquired (N4)
+    assert len(svc._track_boxes(st["corners"], 1280, 800)) == 2  # both tracked from now on
+
+
+def test_reacquire_waits_when_the_last_tile_would_not_fit_the_budget(svc, clock):
+    img = FakeImage(clock, hits=[[tag(0)]] * 10, search_ms=182)
+    st, cfg = g2_state(), g2(reacq=1, budget=40)
+    svc._find_tags(img, cfg, 4, st)                  # tile0 (527 x 500 px) finds tag 0: 46 ms
+    assert st["tile_ms"] == 46
+    r = svc._find_tags(img, cfg, 4, st)              # track + 46 > 40: no tile this time
+    assert r["mode"] == "track" and r["over"] == 0
+
+
+def test_tile_says_whether_it_held_the_cards_last_known_position(svc, clock):
+    # tag 0 found in tile0 (top-left), then lost: tile1..5 don't hold it, tile0 again does
+    img = FakeImage(clock, hits=[[tag(0)], []], search_ms=182)
+    st, cfg = g2_state(), g2()
+    recs = [svc._find_tags(img, cfg, 4, st) for _ in range(8)]
+    tiles = ["tile%d" % k for k in (1, 2, 3, 4, 5, 0)]
+    assert [r["mode"] for r in recs] == ["tile0", "track"] + tiles
+    assert recs[0]["held"] == 0                      # before the first detection nothing counts
+    assert [r["held"] for r in recs[2:]] == [0, 0, 0, 0, 0, 1] and "held" not in recs[1]
+    assert svc._holds((0, 0, 50, 50), [[[10, 10], [20, 10], [20, 20], [10, 20]]]) == 1
+    assert svc._holds((15, 0, 50, 50), [[[10, 10], [20, 10], [20, 20], [10, 20]]]) == 0
+
+
+def test_no_tiles_keeps_the_bands_behaviour_and_header(svc, clock):
+    img = FakeImage(clock, hits=[[tag(0)]] * 10, search_ms=30)
+    st = g2_state()
+    cfg = g2(tiles=None, bands=2)
+    recs = [svc._find_tags(img, cfg, 4, st) for _ in range(6)]
+    assert [r["mode"] for r in recs] == ["band0"] + ["track"] * 5   # never track+tile
+    assert all("over" not in r for r in recs) and st["tracks"] == 0
+
+
+def test_n6_tiles_keep_the_gap_bar_at_the_spare_n6s_full_frame_cost(svc, clock, monkeypatch):
+    # N6 HD 15 fps: ~26 ms JPEG of a 66 ms period. Full-frame search 182 ms on nereus001's spare N6
+    # (pool3 spec :13; nereus002's own cost is must do 3's). 2 x 3 tiles + 100 px pad: ~67 ms.
+    img = FakeImage(clock, search_ms=182, w=1280, h=800)
+    frames, done = run_stream(svc, clock, monkeypatch, img,
+                              {"framesize": "HD", "fps": 15,
+                               "tags": {"every": 5, "ids": [0, 1, 2, 3], "tiles": [2, 3],
+                                        "pad": 100}}, snap_ms=0, jpeg_ms=26)
+    searched = [f["tags"] for f in frames if "tags" in f]
+    assert len(frames) >= 0.95 * 15 * 6 and len(searched) >= 6
+    assert done["tags"]["over"] == 0 and all(t["over"] == 0 for t in searched)
+    gaps = [b["_t"] - a["_t"] for a, b in zip(frames, frames[1:])]
+    assert max(gaps) <= 133                            # 2 periods at 15 fps
+
+
+def test_over_budget_search_is_counted_and_skips_the_next_every_frames(svc, clock, monkeypatch):
+    img = FakeImage(clock, search_ms=400)              # one 1 x 1 tile = the whole frame: 400 ms
+    frames, done = run_stream(svc, clock, monkeypatch, img,
+                              {"tags": {"every": 5, "ids": [0], "tiles": [1, 1]}}, seconds=10)
+    searched = [f for f in frames if "tags" in f]
+    assert len(frames) > 60 and len(searched) >= 3     # capture goes on
+    assert all(f["tags"]["over"] == 1 for f in searched)
+    assert done["tags"]["over"] == len(searched) == done["tags"]["searches"]
+    assert all(b["seq"] - a["seq"] >= 10 for a, b in zip(searched, searched[1:]))  # 2 x every
+
+
+def test_lit_image_is_searched_in_place_of_the_live_frame(svc, clock, monkeypatch):
+    lit = FakeImage(clock, hits=[[tag(2)]] * 100, search_ms=100)
+    live = FakeImage(clock)
+    def load(path):
+        if path != "/l":
+            raise OSError(2, "ENOENT")
+        return lit
+    monkeypatch.setitem(sys.modules, "image", types.SimpleNamespace(TAG25H9=4, Image=load))
+    frames, _ = run_stream(svc, clock, monkeypatch, live,
+                           {"tags": {"every": 5, "ids": [2], "tiles": [2, 2], "lit": "/l"}})
+    assert live.rois == [] and lit.rois                 # only the stored frame is searched
+    assert [f["tags"]["ids"] for f in frames if "tags" in f][0] == [2]
+    with pytest.raises(svc.cp.ProtocolError, match="lit image"):
+        run_stream(svc, clock, monkeypatch, live,
+                   {"tags": {"every": 5, "ids": [2], "tiles": [2, 2], "lit": "/missing"}})
+
+
 # -- host: arm-line flags, frames.csv columns, per-board summary -----------------------------------
 
 @pytest.fixture(scope="module")
@@ -360,6 +495,62 @@ def test_summary_counts_detection_frames_hits_and_raw_false_ids(sv):
     assert sv.tag_summary(rows[:50], 2.0)["hit_pct"] is None
 
 
+def test_g2_flags_reach_the_board_settings_only_when_tiles_are_asked(sv):
+    a = sv.build_parser().parse_args(["--n6-tags-every", "5", "--ae3-tags-every", "10",
+                                      "--n6-tags-tiles", "2x3", "--n6-tags-pad", "100",
+                                      "--board-tags-budget-ms", "60", "--ae3-tags-lit",
+                                      "/flash/lit.pgm", "--tag-ids", "c1"])
+    n6, ae3 = sv.board_settings(a, "openmv_n6")["tags"], sv.board_settings(a, "openmv_ae3")["tags"]
+    assert n6["tiles"] == [2, 3] and n6["pad"] == 100 and n6["budget_ms"] == 60
+    assert "reacq" not in n6                                 # unset: the board's default (4)
+    assert "tiles" not in ae3 and "budget_ms" not in ae3     # no tiles: today's bands, unchanged
+    assert ae3["lit"] == "/flash/lit.pgm"
+
+
+def _g2_row(ticks, mode, ids=(), held=None, over=0):
+    return {"ticks_ms": str(ticks), "tag_ms": "30", "tag_mode": mode,
+            "tag_ids": json.dumps(list(ids)), "tag_rej": "[]", "tag_over": str(over),
+            "tag_held": "" if held is None else str(held)}
+
+
+def test_g2_summary_sweep_first_detection_and_r1_hit_pct(sv):
+    rows = [{"ticks_ms": "1000", "tag_ms": ""}]
+    rows += [_g2_row(1000 + 500 * k, "tile%d" % k, held=0) for k in range(4)]     # sweep 1: 1.5 s
+    rows += [_g2_row(3000, "tile0", ids=[0], held=0, over=1),                     # first hit 2.0 s
+             _g2_row(3500, "track", ids=[0]), _g2_row(4000, "track"),             # lost
+             _g2_row(4500, "track+tile1", ids=[0, 1], held=0),                   # ends sweep
+             _g2_row(5000, "tile2", held=0), _g2_row(7000, "tile3", held=0),     # sweep 2: 4.5 s
+             _g2_row(9000, "tile0", held=1), _g2_row(9500, "tile1", held=0),
+             _g2_row(10000, "tile2", held=0)]                                      # (3rd: open)
+    g = sv.g2_summary(rows, 4)
+    assert g["sweeps"] == 2 and g["sweep_s_max"] == 4.5 and g["sweep_ok"] is False
+    assert g["first_detection_s"] == 2.0 and g["over_searches"] == 1
+    # R1: 3 track frames + 1 held tile = 4 counted, 2 with a card id (the miss-free tile0 at 3000
+    # held nothing yet: no frame counts before the first detection)
+    assert g["r1_frames"] == 4 and g["r1_hit_pct"] == 50.0
+    assert sv.g2_summary([{"ticks_ms": "0", "tag_ms": ""}], 6)["sweep_ok"] is None
+
+
+def test_g2_sweep_ignores_the_re_acquire_probes_while_tracking(sv):
+    # QE 011 rig #144 N1: 2x3 tiles, 3 searches/s, the card found in tile4 at 1.33 s, then
+    # tracked for 10 s with a track+tileK probe every 4th search. Those probes visit all 6 tiles
+    # in ~8 s; they are not an acquisition sweep and must not fail the 3 s bar.
+    rows = [_g2_row(round(1000 * k / 3), "tile%d" % k, held=0) for k in range(4)]
+    rows.append(_g2_row(1333, "tile4", ids=[0, 1, 2, 3], held=0))
+    for i in range(1, 31):
+        mode = "track+tile%d" % ((4 + i // 4) % 6) if i % 4 == 0 else "track"
+        rows.append(_g2_row(1333 + round(1000 * i / 3), mode, ids=[0, 1, 2, 3]))
+    g = sv.g2_summary(rows, 6)
+    assert g["first_detection_s"] == 1.33
+    assert g["sweeps"] == 0 and g["sweep_s_max"] is None and g["sweep_ok"] is None
+    # The card is lost: a full acquire sweep at 3 searches/s now times 5 / 3 s, and passes.
+    t0 = 1333 + 10000
+    rows += [_g2_row(t0 + round(1000 * k / 3), "tile%d" % ((5 + k) % 6), held=int(k == 5))
+             for k in range(6)]
+    g = sv.g2_summary(rows, 6)
+    assert g["sweeps"] == 1 and g["sweep_s_max"] == 1.67 and g["sweep_ok"] is True
+
+
 def test_host_logs_the_board_tag_records_and_summarises_them(sv, tmp_path, monkeypatch):
     # The hook's frame headers end up in frames.csv (tag_* columns) and video_sync.json's
     # per-board "tags" block, next to max_gap_ms (the N4 bar's input).
@@ -400,7 +591,7 @@ def test_host_logs_the_board_tag_records_and_summarises_them(sv, tmp_path, monke
     bv._read()
     import csv
     rows = list(csv.DictReader((tmp_path / "openmv_ae3_frames.csv").open()))
-    assert list(rows[0])[-5:] == list(sv.TAG_KEYS)
+    assert list(rows[0])[-len(sv.TAG_KEYS):] == list(sv.TAG_KEYS)
     assert json.loads(rows[5]["tag_ids"]) == [0, 1] and rows[1]["tag_ms"] == ""
     rec = bv.finish()
     assert rec["tags"]["detection_frames"] == 2 and rec["tags"]["hit_pct"] == 50.0
