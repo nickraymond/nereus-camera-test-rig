@@ -66,3 +66,25 @@ Firmware, IMX708 (Pi-side tags), new bars, any unit but nereus002, merging #143 
 
 ## Done
 TEAM_RULES §4; PE checks off must dos 1–6 and G-F1–G-F7 against the PR, the timing table and the clips' MANIFEST.
+
+## Rev 1 (PE 010, Mon 10/26 9:22 PM PT; QE 011 FAIL R1 + N1–N3, qe_reviews/QE011_spec_yard_g2_d3474398f305.md). Text only, before any data.
+- **R1, scoring under tiles (replaces the Tue line's "≥ 50 % of detection frames" and, for G2 clips, yard spec rev 1 N1's hit %):**
+  - **Hit % counts only frames whose searched region held the card:** track frames, plus acquire/probe frames whose tile contains the card's
+    last known position on that board (its last kept corners; before the first detection in a clip, no frame counts). Hit % = those frames
+    with ≥ 1 card id ÷ those frames. The report shows that n next to each hit %.
+  - **Per mark, also reported:** time to first detection (from window start, or "none in window") and the clip's sweep time (all tiles
+    visited once, from must do 6).
+  - Tue lit pass line becomes: ≥ 1 detection/s per board **and** ≥ 50 % hit % by the rule above. G1 clips keep yard rev 1 N1's rule
+    (whole-frame search, every hook frame counts). G2 vs G1 ranges are compared only by time to first detection and the R1 hit %.
+  - The yard spec's report section carries the same rule (yard spec rev 1.6).
+- **N1, freeze (replaces the Tier line's "Until his words exist … not ours"):** Nick, Lead 006 chat (verbatim, his own `[user]` turn read by
+  PE 010): "Yes, Accept the §10 risk for the new G2 code on nereus002." That covers this PR on nereus002. His 9:15 PM line in owner 3's chat
+  still covers rig #143 only.
+- **N2, how board code reaches the boards (adds to must do 5):** copying board Python with `host_tools/deploy_openmv.py` (mpremote over USB;
+  board files flat on the board's filesystem, main.py last) is **not** a firmware flash, so Nick's G2 §10 line covers it and he isn't asked
+  again for it. A firmware reflash stays Nick's own words in owner 3's chat. How the AE3's files get there on nereus002 (USB like the N6, or
+  another path): **unknown**; owner 3 states it before deploy. **Rollback:** redeploy the board files from rig 224e5ce (or the #143 sha on
+  the Pi) with the same tool; the owner verifies each board file's sha256 against the repo after deploy and after rollback, and logs them.
+- **N3, sweep vs the 4 s pause:** tonight's pass adds **sweep time ≤ 3 s per board** (logged per clip). Nick pauses ~4 s per mark (yard spec
+  :24); a sweep longer than the pause can't acquire a far mark inside its window. Sweep > 3 s → fewer/larger tiles if the gap bar still holds;
+  else G1. The yard reads acquisition latency from the sweep time and time to first detection.
