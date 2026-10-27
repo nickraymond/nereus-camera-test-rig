@@ -19,6 +19,11 @@ How:
     pause/resume: rpicam-vid resumes only at the next keyframe (measured: 251 of ~300 frames,
     up to the intra period late), which would make the IMX708 start late by up to ~2 s.
   - all three are armed in parallel and fired back to back (sub-ms on the host).
+  - page cache (spec pool3 rev 2.3/2.4 must do 7): the clip files' page cache filled free CMA at
+    ~2 MB/s on nereus002 (B0b, CmaFree 60 -> 0 MB; D1 with a side loop held it at 10 MB). So a
+    thread of its own (``cache_releaser``, off the USB readers and the rpicam-vid pipe) opens each
+    file in the clip dir by path every --cache-release-s (<= 5 s) and runs fdatasync, then
+    POSIX_FADV_DONTNEED (it drops clean pages only; the bytes on disk are unchanged).
 
 Usage (Pi, repo root):
   python scripts/sync_video.py --seconds 10                      # all three, defaults
@@ -27,7 +32,8 @@ Usage (Pi, repo root):
       # on-board tags (pool 3; off by default)
 Outputs (DIR, default results/video/<ts>/): imx708.h264 (+ .pts, .meta.json, .log),
   openmv_n6.mjpeg + openmv_n6_frames.csv, openmv_ae3.mjpeg + openmv_ae3_frames.csv,
-  host_stats.csv, video_sync.json (start skew, fps, frames, gaps, files + sha256). Per camera,
+  host_stats.csv (+ cached_mb, dirty_mb), cache_release.csv (one row per release pass: files,
+  bytes, ms), video_sync.json (start skew, fps, frames, gaps, files + sha256). Per camera,
   fps_clip = frames captured in the clip's --seconds / --seconds (the pool 2 bars' input, QE 005
   R2) next to fps = (frames - 1) / (first -> last frame), and last_frame_s.
   With tags on, frames.csv has the tag_* columns of each searched frame and video_sync.json a
@@ -483,24 +489,79 @@ def read_frame_metadata(path: Path) -> list[dict]:
     return []
 
 
-def host_sampler(path: Path, stop: threading.Event) -> None:
+def host_sampler(path: Path, stop: threading.Event, meminfo: Path = Path("/proc/meminfo"),
+                 run=subprocess.run) -> None:
     """1 Hz: CPU temp, load, MemAvailable, CmaFree, throttled — the ci-record crash signals."""
     with path.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["mono_s", "cpu_c", "load1", "mem_avail_mb", "cma_free_mb", "throttled"])
+        w.writerow(["mono_s", "cpu_c", "load1", "mem_avail_mb", "cma_free_mb", "throttled",
+                    "cached_mb", "dirty_mb"])
         while not stop.is_set():
-            mem = dict(ln.split(":", 1) for ln in Path("/proc/meminfo").read_text().splitlines())
+            mem = dict(ln.split(":", 1) for ln in meminfo.read_text().splitlines())
             try:
                 temp = int(Path("/sys/class/thermal/thermal_zone0/temp").read_text()) / 1000
             except (OSError, ValueError):
                 temp = None
-            thr = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True,
-                                 text=True).stdout.strip().split("=")[-1]
+            thr = run(["vcgencmd", "get_throttled"], capture_output=True,
+                      text=True).stdout.strip().split("=")[-1]
             w.writerow([round(time.monotonic(), 2), temp, os.getloadavg()[0],
                         int(mem["MemAvailable"].split()[0]) // 1024,
-                        int(mem.get("CmaFree", "0 kB").split()[0]) // 1024, thr])
+                        int(mem.get("CmaFree", "0 kB").split()[0]) // 1024, thr,
+                        int(mem.get("Cached", "0 kB").split()[0]) // 1024,
+                        int(mem.get("Dirty", "0 kB").split()[0]) // 1024])
             f.flush()
             stop.wait(1.0)
+
+
+CACHE_RELEASE_MAX_S = 5.0  # spec pool3 rev 2.3 must do 7: release cadence <= 5 s
+
+
+def cache_releaser(out: Path, period_s: float, stop: threading.Event, stats: dict,
+                   sync=getattr(os, "fdatasync", None),
+                   advise=getattr(os, "posix_fadvise", None)) -> None:
+    """Every period_s, and once more after stop: each regular file in the clip dir that grew
+    since its last release is opened by path (read-only: the writers' fds are never touched),
+    fdatasync'd, then POSIX_FADV_DONTNEED'd. One row per pass to cache_release.csv; stats gets
+    passes / max_ms / median_ms / errors. fdatasync of ~5 s of clip (~10 MB) took ~720 ms on
+    nereus002's SD (D1), which is why this is a thread of its own."""
+    stats.update(period_s=period_s, passes=0, errors=0, max_ms=None, median_ms=None)
+    if sync is None or advise is None:  # not Linux (a dev Mac): nothing to release
+        stats["unsupported"] = True
+        return
+    released: dict[str, int] = {}
+    times: list[float] = []
+    with (out / "cache_release.csv").open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["mono_s", "files", "bytes", "release_ms"])
+        last = False
+        while not last:
+            last = stop.wait(period_s)
+            t0 = time.monotonic()
+            n = nbytes = 0
+            for e in sorted(os.scandir(out), key=lambda e: e.name):
+                try:
+                    if not e.is_file() or e.name == "cache_release.csv":
+                        continue
+                    size = e.stat().st_size
+                    if released.get(e.name) == size:
+                        continue
+                    fd = os.open(e.path, os.O_RDONLY)
+                    try:
+                        sync(fd)
+                        advise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+                    finally:
+                        os.close(fd)
+                    released[e.name] = size
+                    n, nbytes = n + 1, nbytes + size
+                except OSError as exc:  # counted, never fatal to the clip
+                    stats["errors"] += 1
+                    stats["last_error"] = repr(exc)[:200]
+            ms = round((time.monotonic() - t0) * 1000, 1)
+            w.writerow([round(t0, 2), n, nbytes, ms])
+            f.flush()
+            times.append(ms)
+            stats.update(passes=len(times), max_ms=max(times),
+                         median_ms=sorted(times)[len(times) // 2])
 
 
 def board_settings(a: argparse.Namespace, name: str) -> dict:
@@ -633,6 +694,9 @@ def build_parser() -> argparse.ArgumentParser:
         ap.add_argument(f"--{key}-tags-bands", type=int, default=None)
     ap.add_argument("--tag-ids", default=None, choices=("c1", "c2", "c3", "c4"),
                     help="V3 card copy in view; its corner_map ids are the filter")
+    ap.add_argument("--cache-release-s", type=float, default=CACHE_RELEASE_MAX_S,
+                    help="every this many s (<= 5), fdatasync + drop the clip files' page "
+                         "cache, which otherwise fills free CMA (spec pool3 must do 7; 0 = off)")
     ap.add_argument("--timing", action="store_true",
                     help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
     return ap
@@ -644,6 +708,10 @@ def main() -> int:
         check_imx_tags(a)
     except ValueError as exc:
         print(f"sync_video: {exc}", file=sys.stderr)
+        return 2
+    if not 0 <= a.cache_release_s <= CACHE_RELEASE_MAX_S:
+        print(f"sync_video: --cache-release-s must be 0 (off) .. {CACHE_RELEASE_MAX_S}",
+              file=sys.stderr)
         return 2
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(a.out) if a.out else ROOT / "results" / "video" / ts
@@ -664,6 +732,12 @@ def main() -> int:
     sampler = threading.Thread(target=host_sampler, args=(out / "host_stats.csv", stop),
                                daemon=True)
     sampler.start()
+    release: dict = {}
+    releaser = None
+    if a.cache_release_s > 0:
+        releaser = threading.Thread(target=cache_releaser,
+                                    args=(out, a.cache_release_s, stop, release), daemon=True)
+        releaser.start()
     errors: dict = {}
 
     def arm(d):
@@ -708,6 +782,8 @@ def main() -> int:
             d.abort()
         stop.set()
         sampler.join(timeout=3)
+        if releaser:
+            releaser.join(timeout=30)  # its last pass syncs the closed files
     for name, err in errors.items():
         results[name] = {"camera": name, "ok": False, "error": err}
 
@@ -728,6 +804,7 @@ def main() -> int:
                                  for n, t in firsts.items()
                                  if results[n].get("fire_host_mono")},
         "cameras": results,
+        "cache_release": release or None,
         "ok": all(r.get("ok") for r in results.values()) and len(results) == len(cams),
     }
     stats = list(csv.DictReader((out / "host_stats.csv").open()))
