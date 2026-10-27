@@ -108,3 +108,73 @@
   Nick's own words (root, per the rig handoff). Never mitigate it by changing the bars.
 - AE3 on-board tag25h9 (owner 2, n = 20 frames, 640×400): full frame 140–155 ms, ROI 24–25 ms, ids 0–3 on 20/20, no false ids, no
   MemoryError. JPEG encode + USB alongside detection: unmeasured (needs the builder's hook).
+
+## Rev 2.2 (PE 009, Mon 10/26 2:48 PM PT; QE 011 nits on rev 2.1). Text only; set before the ladder / 10× runs.
+- N3, CMA pre-run check (prevention for F8): before every bench or pool run the owner reads idle CmaFree; **below 20 MB** → the owner's normal
+  recovery (a Pi reboot, then wait for idle) before the run, logged. (Today: clip 3 started at 13 MB idle and fell to 2 MB; idle drifted
+  65 → 10 MB across the clips.) A recovery is not a retry and doesn't reset the 10/10 count; a run whose min CmaFree < 4 MB does (F8).
+- N2 (stands): ladder rungs come only from rig main or QE-passed PRs (the PS5520 sizes on draft #139 are out).
+- Rev 2 N1: if Nick picks the IMX708's 1080p rung from his table, the 10/10 count uses its validity floor (≥ 26.0 fps, gap ≤ 100 ms) and each
+  run reports "30 not met"; otherwise the ≥ 28.5 bar applies.
+
+## Rev 2.3 (PE 009, Mon 10/26 5:37 PM PT; owner 2's ladder baseline, 2026-10-26_bench_ladder/MANIFEST.md). No bar moves.
+- **Finding:** at the planned rungs (rig main 224e5ce, N6 tag25h9 firmware; IMX708 720p30, N6 HD q70 15, AE3 VGA q70 10, tags OFF, 60 s),
+  clip B0b took CmaFree 60 → 0 MB at ~2 MB/s (≈ the clip write rate, N6 ~1.27 + IMX708 ~0.84 MB/s) and held 0 for the last ~15 s; all
+  frames delivered. Owner 2's hypothesis (untested): page cache of the clip files fills free CMA. F8's bar (< 4 MB = issue) **stands**
+  (rev 2.1: never mitigate by changing the bars).
+- **Must do 6, test the hypothesis first (owner, one uncounted diagnostic clip D1, no repo change):** same settings as B0b, plus a side loop
+  under ~/NereusData that, every 5 s, runs `os.posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED)` on each clip file being written (no root
+  needed for files the capture user owns) and logs CmaFree + Cached from /proc/meminfo. Read:
+  - min CmaFree ≥ 4 MB and it tracks Cached → page cache confirmed → must do 7.
+  - CmaFree still → < 4 MB with Cached held low → camera/driver buffers, not cache → step down a rung per the ladder (N6 quality or
+    IMX708 size first), and a CMA raise (`cma=` / dtoverlay) becomes a NEEDED card for Nick (root + boot config, rev 2.1); never done
+    without his own words.
+- **Must do 7, the fix if D1 confirms (builder, rig PR → QE draft, then main per N2):** `sync_video.py` releases the written ranges as it goes
+  (periodic `os.fdatasync` + `POSIX_FADV_DONTNEED` on the bytes written so far, ≤ 5 s cadence), with a test that a 60 s clip's files are
+  byte-identical with and without it. The 10/10 count starts only on main with this in, at a rung that passes F8.
+- **New row F9, N6 reboots mid-clip:** n = 1 (B0_tagsoff, frame 357, kernel disconnect 17:30:11 → DFU boot 17:30:12; tags off; cause
+  unknown, reset_cause 0). Detect: USB disconnect / DFU line in dmesg, or N6 frame count short. Then: that run fails (resets 10/10). A
+  second N6 reboot in the same session → stop captures; the owner saves dmesg + the N6 serial log and the PE re-plans. No cause is named
+  and nothing is changed on n = 1.
+
+## Rev 2.4 (PE 009, Mon 10/26 5:38 PM PT; QE 011 N1–N3 on rev 2.3, qe_reviews/QE011_spec_pool3_edge_tags_1f303d06b14b.md :34). Text only; no bar moves.
+- **N1, must do 6 / D1 (replaces its loop text; lands before D1):** every 5 s the side loop opens each clip file by path and runs
+  `os.fdatasync(fd)` then `os.posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED)` (DONTNEED drops only clean pages; the clip pages stay dirty
+  until writeback). It logs CmaFree, Cached, Dirty and Writeback from /proc/meminfo each pass. Three outcomes:
+  - Cached held low and min CmaFree ≥ 4 MB → page cache confirmed → must do 7.
+  - Cached held low and CmaFree still < 4 MB → buffers, not cache → step down a rung; CMA raise = NEEDED card for Nick (rev 2.3).
+  - Cached **not** held low (or Dirty climbs) → the loop didn't work: fix the loop and re-run D1; no rung change, no conclusion.
+- **N2, must do 7:** on rig main 224e5ce the IMX708 file is written by rpicam-vid (`scripts/sync_video.py:301–304`, `-o imx708.h264`) and
+  the board .mjpeg files by their own writer thread (:190–194). The release runs in **its own thread**, opening each file by path, off the
+  USB readers and the rpicam-vid pipe. Must do 7's bench check includes the gap bars (an fdatasync of ~10 MB to SD can stall 100s of ms,
+  :181–182), not only byte-identity.
+- **N3, must do 7:** `host_stats.csv` (sync_video.py:490) adds `cached_mb` and `dirty_mb`, so every counted clip shows the mechanism.
+
+## Rev 2.5 (PE 009, Mon 10/26 7:49 PM PT; Lead 005's ask on owner 2's rig #143 bench, 2026-10-26_bench_pr143/MANIFEST.md). No bar moves.
+- **Data (n = 1 each, rig #143 @ dcd51ba1, rungs I2/N2/A3, 60 s):**
+  - Q1 tags on (IMX708 follower decodes H.264 on the Pi, intra 30; boards N6 5/2, AE3 10/3), 5 s release: gaps IMX708 533 ms, N6 321 ms,
+    AE3 203 ms (all three over 100 ms); min CmaFree 2 MB at the follower's start; IMX708 0.38 det/s at decode median 1256 ms (below the
+    ≥ 1 det/s target). Board tags: N6 3.0 det/s, 99.4 % hit; AE3 1.0 det/s, 98.3 %.
+  - Q2 tags off, 5 s release: N6 18 lost, gap 198 ms. Q3 tags off, 1 s release: every capture bar met during capture; CmaFree 3 MB only
+    after capture, while finish() reads each file back for its sha256 (Cached 135 → 226 MB at t ≈ 74–80 s).
+- **Ruling 1, release cadence (PE's call, no must do dropped):** 1 s becomes the default for counted runs (within must do 7's ≤ 5 s); set as
+  the default in the rig PR (→ QE), not by a run flag. The 10/10 is its test; 5 s is out (Q2).
+- **Ruling 2, new must do 7 item N4 (fix, not a bar change):** finish()'s sha256 read-back releases each file's pages as it hashes
+  (fadvise DONTNEED after each file, as owner 2's rehash.py does), so min CmaFree stays ≥ 4 MB after capture too. Builder, same PR, → QE.
+- **Options for the demo, IMX708 tags vs F7 (Nick decides through the Lead; A and B differ from his "all three cameras" line):**
+
+  | Option | What runs Tue | Cost / risk | Drops a must do? |
+  |---|---|---|---|
+  | A. Board tags only, IMX708 records without tags (F7's existing fallback) | N6 + AE3 tags on board, IMX708 30 fps video | Needs one confirming clip: boards' gaps with the Pi follower off are **unknown** (Q1 broke them with it on) | No (F7 already says so), but differs from Nick's "all three running tag detection" → Nick |
+  | B. A + IMX708 tags offline on the Mac after each clip | Same as A live; IMX708 det rate in Nick's table from the saved H.264 | Mac-side script, no Pi load; not live | Live IMX708 detection dropped → Nick |
+  | C. IMX708 tags live from rpicam-vid's low-res YUV stream (no H.264 decode) | All three live | New code + QE + bench before Tue ~2 PM; Pi cost at low res **unknown** | No, if it passes; high schedule risk |
+  | D. Keep the H.264 follower, sparser (e.g. intra 90) | All three live | Each pass still ~1.26 s of decode (Q1 median); Q1 broke all three gaps | No, if it passes; not supported by Q1 |
+- **PE rec (conditional, not from n = 1):** A for the live demo, with B for the IMX708 number in Nick's table; C after Tue. A's first step is
+  one clip "boards tags on, IMX708 tags off, 1 s release"; if it misses a capture bar, the boards' tag rates (N/K) step down per rev 2's ladder.
+  The 10/10 then confirms whichever Nick picks. If Nick picks C or D, the 10/10 starts only on main with that code in (N2).
+
+## Rev 2.6 (PE 009, Mon 10/26 7:50 PM PT; QE 011 N1 on rev 2.5, qe_reviews/QE011_spec_pool3_edge_tags_1f303d06b14b.md rev 2.5 section). Text only; no bar moves.
+- **N1, must do 7 N4 (replaces "after each file"; lands before the builder codes N4):** finish()'s sha256 read-back releases **each chunk as
+  it is hashed, ≤ 4 MB**: `posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED)` inside the read loop, as owner 2's rehash.py :25–27 does.
+  Per file is not enough: Q3's openmv_n6.mjpeg is 101 MB and imx708.h264 80 MB against 72–92 MB of CmaFree during capture. Test (builder,
+  same PR): the advise calls cover each file end to end in steps ≤ 4 MB, and the hashes are unchanged.
