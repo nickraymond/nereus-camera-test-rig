@@ -108,3 +108,44 @@
   Nick's own words (root, per the rig handoff). Never mitigate it by changing the bars.
 - AE3 on-board tag25h9 (owner 2, n = 20 frames, 640×400): full frame 140–155 ms, ROI 24–25 ms, ids 0–3 on 20/20, no false ids, no
   MemoryError. JPEG encode + USB alongside detection: unmeasured (needs the builder's hook).
+
+## Rev 2.2 (PE 009, Mon 10/26 2:48 PM PT; QE 011 nits on rev 2.1). Text only; set before the ladder / 10× runs.
+- N3, CMA pre-run check (prevention for F8): before every bench or pool run the owner reads idle CmaFree; **below 20 MB** → the owner's normal
+  recovery (a Pi reboot, then wait for idle) before the run, logged. (Today: clip 3 started at 13 MB idle and fell to 2 MB; idle drifted
+  65 → 10 MB across the clips.) A recovery is not a retry and doesn't reset the 10/10 count; a run whose min CmaFree < 4 MB does (F8).
+- N2 (stands): ladder rungs come only from rig main or QE-passed PRs (the PS5520 sizes on draft #139 are out).
+- Rev 2 N1: if Nick picks the IMX708's 1080p rung from his table, the 10/10 count uses its validity floor (≥ 26.0 fps, gap ≤ 100 ms) and each
+  run reports "30 not met"; otherwise the ≥ 28.5 bar applies.
+
+## Rev 2.3 (PE 009, Mon 10/26 5:37 PM PT; owner 2's ladder baseline, 2026-10-26_bench_ladder/MANIFEST.md). No bar moves.
+- **Finding:** at the planned rungs (rig main 224e5ce, N6 tag25h9 firmware; IMX708 720p30, N6 HD q70 15, AE3 VGA q70 10, tags OFF, 60 s),
+  clip B0b took CmaFree 60 → 0 MB at ~2 MB/s (≈ the clip write rate, N6 ~1.27 + IMX708 ~0.84 MB/s) and held 0 for the last ~15 s; all
+  frames delivered. Owner 2's hypothesis (untested): page cache of the clip files fills free CMA. F8's bar (< 4 MB = issue) **stands**
+  (rev 2.1: never mitigate by changing the bars).
+- **Must do 6, test the hypothesis first (owner, one uncounted diagnostic clip D1, no repo change):** same settings as B0b, plus a side loop
+  under ~/NereusData that, every 5 s, runs `os.posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED)` on each clip file being written (no root
+  needed for files the capture user owns) and logs CmaFree + Cached from /proc/meminfo. Read:
+  - min CmaFree ≥ 4 MB and it tracks Cached → page cache confirmed → must do 7.
+  - CmaFree still → < 4 MB with Cached held low → camera/driver buffers, not cache → step down a rung per the ladder (N6 quality or
+    IMX708 size first), and a CMA raise (`cma=` / dtoverlay) becomes a NEEDED card for Nick (root + boot config, rev 2.1); never done
+    without his own words.
+- **Must do 7, the fix if D1 confirms (builder, rig PR → QE draft, then main per N2):** `sync_video.py` releases the written ranges as it goes
+  (periodic `os.fdatasync` + `POSIX_FADV_DONTNEED` on the bytes written so far, ≤ 5 s cadence), with a test that a 60 s clip's files are
+  byte-identical with and without it. The 10/10 count starts only on main with this in, at a rung that passes F8.
+- **New row F9, N6 reboots mid-clip:** n = 1 (B0_tagsoff, frame 357, kernel disconnect 17:30:11 → DFU boot 17:30:12; tags off; cause
+  unknown, reset_cause 0). Detect: USB disconnect / DFU line in dmesg, or N6 frame count short. Then: that run fails (resets 10/10). A
+  second N6 reboot in the same session → stop captures; the owner saves dmesg + the N6 serial log and the PE re-plans. No cause is named
+  and nothing is changed on n = 1.
+
+## Rev 2.4 (PE 009, Mon 10/26 5:38 PM PT; QE 011 N1–N3 on rev 2.3, qe_reviews/QE011_spec_pool3_edge_tags_1f303d06b14b.md :34). Text only; no bar moves.
+- **N1, must do 6 / D1 (replaces its loop text; lands before D1):** every 5 s the side loop opens each clip file by path and runs
+  `os.fdatasync(fd)` then `os.posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED)` (DONTNEED drops only clean pages; the clip pages stay dirty
+  until writeback). It logs CmaFree, Cached, Dirty and Writeback from /proc/meminfo each pass. Three outcomes:
+  - Cached held low and min CmaFree ≥ 4 MB → page cache confirmed → must do 7.
+  - Cached held low and CmaFree still < 4 MB → buffers, not cache → step down a rung; CMA raise = NEEDED card for Nick (rev 2.3).
+  - Cached **not** held low (or Dirty climbs) → the loop didn't work: fix the loop and re-run D1; no rung change, no conclusion.
+- **N2, must do 7:** on rig main 224e5ce the IMX708 file is written by rpicam-vid (`scripts/sync_video.py:301–304`, `-o imx708.h264`) and
+  the board .mjpeg files by their own writer thread (:190–194). The release runs in **its own thread**, opening each file by path, off the
+  USB readers and the rpicam-vid pipe. Must do 7's bench check includes the gap bars (an fdatasync of ~10 MB to SD can stall 100s of ms,
+  :181–182), not only byte-identity.
+- **N3, must do 7:** `host_stats.csv` (sync_video.py:490) adds `cached_mb` and `dirty_mb`, so every counted clip shows the mechanism.
