@@ -113,9 +113,11 @@ SWEEP_MAX_S = 3.0  # yard G2 spec rev 1 N3: all tiles visited within 3 s (Nick p
 def g2_summary(rows: list[dict], n_tiles: int) -> dict:
     """G2 per-board numbers from frames.csv rows (board ticks_ms as the clock). Over-budget
     searches; R1 hit %: of track frames + tile frames whose tile held the card's last known
-    position, those with >= 1 card id (n shown); sweep = first tile visit -> the visit that
-    completes all n_tiles, then the next sweep starts; time to first detection from the clip's
-    first frame. Pure."""
+    position, those with >= 1 card id (n shown); sweep = first acquire-mode tile visit -> the
+    visit that completes all n_tiles, then the next sweep starts. Any track frame (including its
+    track+tileK re-acquire probes) ends an open sweep uncounted: those probes come only every
+    reacq-th search and would read as a slow sweep (QE 011 rig #144 N1). Time to first detection
+    from the clip's first frame. Pure."""
     import re
 
     searched = [r for r in rows if r.get("tag_ms") not in (None, "")]
@@ -124,7 +126,11 @@ def g2_summary(rows: list[dict], n_tiles: int) -> dict:
     hit = [r for r in counted if json.loads(r["tag_ids"] or "[]")]
     sweeps, seen, start = [], set(), None
     for r in searched:
-        m = re.search(r"tile(\d+)", str(r.get("tag_mode", "")))
+        mode = str(r.get("tag_mode", ""))
+        if mode.startswith("track"):
+            seen, start = set(), None
+            continue
+        m = re.fullmatch(r"tile(\d+)", mode)
         if not m:
             continue
         t = int(r["ticks_ms"])
@@ -777,7 +783,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--board-tags-lit", default=None,
                     help="search this grayscale image on the board's filesystem instead of the "
                          "live frame (G2 must do 3: lit timing on a dark bench), e.g. "
-                         "/flash/lit.pgm")
+                         "/flash/lit.pgm. Timing clips only, at the board's own frame size: "
+                         "the image stays in the board heap all stream (AE3 G-F4 risk), so "
+                         "never on counted clips")
     for key in ("n6", "ae3"):
         ap.add_argument(f"--{key}-tags-every", type=int, default=None)
         ap.add_argument(f"--{key}-tags-scale", type=float, default=None)

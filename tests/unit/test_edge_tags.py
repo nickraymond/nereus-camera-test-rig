@@ -518,16 +518,37 @@ def test_g2_summary_sweep_first_detection_and_r1_hit_pct(sv):
     rows += [_g2_row(1000 + 500 * k, "tile%d" % k, held=0) for k in range(4)]     # sweep 1: 1.5 s
     rows += [_g2_row(3000, "tile0", ids=[0], held=0, over=1),                     # first hit 2.0 s
              _g2_row(3500, "track", ids=[0]), _g2_row(4000, "track"),             # lost
-             _g2_row(4500, "track+tile1", ids=[0, 1], held=0),
-             _g2_row(5000, "tile2", held=0), _g2_row(7000, "tile3", held=0),     # sweep 2: 4.0 s
-             _g2_row(9000, "tile0", held=1)]                                       # (3rd: open)
+             _g2_row(4500, "track+tile1", ids=[0, 1], held=0),                   # ends sweep
+             _g2_row(5000, "tile2", held=0), _g2_row(7000, "tile3", held=0),     # sweep 2: 4.5 s
+             _g2_row(9000, "tile0", held=1), _g2_row(9500, "tile1", held=0),
+             _g2_row(10000, "tile2", held=0)]                                      # (3rd: open)
     g = sv.g2_summary(rows, 4)
-    assert g["sweeps"] == 2 and g["sweep_s_max"] == 4.0 and g["sweep_ok"] is False
+    assert g["sweeps"] == 2 and g["sweep_s_max"] == 4.5 and g["sweep_ok"] is False
     assert g["first_detection_s"] == 2.0 and g["over_searches"] == 1
     # R1: 3 track frames + 1 held tile = 4 counted, 2 with a card id (the miss-free tile0 at 3000
     # held nothing yet: no frame counts before the first detection)
     assert g["r1_frames"] == 4 and g["r1_hit_pct"] == 50.0
     assert sv.g2_summary([{"ticks_ms": "0", "tag_ms": ""}], 6)["sweep_ok"] is None
+
+
+def test_g2_sweep_ignores_the_re_acquire_probes_while_tracking(sv):
+    # QE 011 rig #144 N1: 2x3 tiles, 3 searches/s, the card found in tile4 at 1.33 s, then
+    # tracked for 10 s with a track+tileK probe every 4th search. Those probes visit all 6 tiles
+    # in ~8 s; they are not an acquisition sweep and must not fail the 3 s bar.
+    rows = [_g2_row(round(1000 * k / 3), "tile%d" % k, held=0) for k in range(4)]
+    rows.append(_g2_row(1333, "tile4", ids=[0, 1, 2, 3], held=0))
+    for i in range(1, 31):
+        mode = "track+tile%d" % ((4 + i // 4) % 6) if i % 4 == 0 else "track"
+        rows.append(_g2_row(1333 + round(1000 * i / 3), mode, ids=[0, 1, 2, 3]))
+    g = sv.g2_summary(rows, 6)
+    assert g["first_detection_s"] == 1.33
+    assert g["sweeps"] == 0 and g["sweep_s_max"] is None and g["sweep_ok"] is None
+    # The card is lost: a full acquire sweep at 3 searches/s now times 5 / 3 s, and passes.
+    t0 = 1333 + 10000
+    rows += [_g2_row(t0 + round(1000 * k / 3), "tile%d" % ((5 + k) % 6), held=int(k == 5))
+             for k in range(6)]
+    g = sv.g2_summary(rows, 6)
+    assert g["sweeps"] == 1 and g["sweep_s_max"] == 1.67 and g["sweep_ok"] is True
 
 
 def test_host_logs_the_board_tag_records_and_summarises_them(sv, tmp_path, monkeypatch):
