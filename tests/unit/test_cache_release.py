@@ -102,6 +102,23 @@ def test_release_opens_by_path_skips_unchanged_and_runs_a_last_pass(tmp_path):
     assert stats["max_ms"] is not None and stats["errors"] == 0
 
 
+def test_last_pass_releases_every_file_even_unchanged(tmp_path):
+    # QE 011 N1: finish() hashes each clip file before stop, which caches it again; a size-only
+    # skip on the last pass would leave ~120 MB cached and fail the next run's idle check.
+    calls, sync, advise = _record(tmp_path)
+    (tmp_path / "a.mjpeg").write_bytes(b"x" * 10)
+    stop, stats = threading.Event(), {}
+    t = threading.Thread(target=sv.cache_releaser, args=(tmp_path, 0.05, stop, stats, sync,
+                                                         advise))
+    t.start()
+    time.sleep(0.2)  # first pass releases it, later periodic passes skip it (unchanged)
+    stop.set()
+    t.join(timeout=5)
+    assert stats["passes"] >= 3
+    assert [c for c in calls if c[0] == "sync"] == [("sync", 10), ("sync", 10)]  # first + last
+    assert calls.count(("advise", 0, 0, os.POSIX_FADV_DONTNEED)) == 2
+
+
 def test_release_error_is_counted_not_fatal(tmp_path):
     (tmp_path / "a.mjpeg").write_bytes(b"x")
 

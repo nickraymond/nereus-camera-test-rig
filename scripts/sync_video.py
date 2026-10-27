@@ -520,7 +520,8 @@ def cache_releaser(out: Path, period_s: float, stop: threading.Event, stats: dic
                    sync=getattr(os, "fdatasync", None),
                    advise=getattr(os, "posix_fadvise", None)) -> None:
     """Every period_s, and once more after stop: each regular file in the clip dir that grew
-    since its last release is opened by path (read-only: the writers' fds are never touched),
+    since its last release (on the last pass, every file: finish() reads each clip back for its
+    sha256, QE 011 N1) is opened by path (read-only: the writers' fds are never touched),
     fdatasync'd, then POSIX_FADV_DONTNEED'd. One row per pass to cache_release.csv; stats gets
     passes / max_ms / median_ms / errors. fdatasync of ~5 s of clip (~10 MB) took ~720 ms on
     nereus002's SD (D1), which is why this is a thread of its own."""
@@ -543,7 +544,7 @@ def cache_releaser(out: Path, period_s: float, stop: threading.Event, stats: dic
                     if not e.is_file() or e.name == "cache_release.csv":
                         continue
                     size = e.stat().st_size
-                    if released.get(e.name) == size:
+                    if not last and released.get(e.name) == size:
                         continue
                     fd = os.open(e.path, os.O_RDONLY)
                     try:
