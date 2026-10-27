@@ -422,8 +422,17 @@ def send_file(usb, command_id, filename):
 # a frame gap stays short (spec rev 1 N4: <= 2 frame periods): while the last search kept a card
 # id, only boxes around those tags are searched (track); otherwise one of B overlapping horizontal
 # bands, in turn (acquire; B = 1 is the full frame). Known limit (QE 011 N4): while one card id is
-# tracked, the card's other tags are not re-acquired. Ids outside "ids" (the card copy in view; 25h9
-# has a small code distance, openmv/firmware/README.md) are reported as rejected, never as hits.
+# tracked, the card's other tags are not re-acquired.
+# G2 (docs/specs/yard_g2.md), on only when settings["tags"]["tiles"] = [rows, cols] is sent: acquire
+# visits a rows x cols grid of tiles (each grown by "pad" px, default h/8) instead of bands; every
+# "reacq"-th track search also searches the next tile (re-acquire, fixes N4) if the last tile's cost
+# still fits "budget_ms" (default one frame period); a search over budget skips the next "every"
+# frames and is counted ("over"). A tile search also says whether the tile held the card's last
+# known position ("held": one last-kept tag wholly inside it; spec rev 1 R1 scores hit % on track
+# frames + held tiles). "lit": a grayscale image on the board's filesystem searched in
+# place of the live frame, to time a lit scene on a dark bench (must do 3).
+# Ids outside "ids" (the card copy in view; 25h9 has a small code distance,
+# openmv/firmware/README.md) are reported as rejected, never as hits.
 # Result fields (tag.id / tag.corners), find_apriltags(roi=, families=) and
 # to_grayscale(x_scale=, y_scale=, copy=True) read from modules/py_image.c at OpenMV v5.0.0 (AE3)
 # and v5.0.1 + patch 0001 (N6).
@@ -433,7 +442,8 @@ _TAG_MARGIN = 1.0  # track box = the tag's bounding box grown by this x its size
 
 def _tag_config(settings):
     """settings["tags"] -> None (off, the default) or the validated
-    {"every", "scale", "bands", "ids"}."""
+    {"every", "scale", "bands", "ids", "tiles", "pad", "reacq", "budget", "lit"} (tiles None = no
+    G2: the bands behaviour above, unchanged)."""
     t = settings.get("tags")
     if not t:
         return None
@@ -442,14 +452,32 @@ def _tag_config(settings):
         scale = float(t.get("scale", 1.0))
         bands = int(t.get("bands", 1))
         ids = [int(i) for i in t.get("ids") or ()]
-    except (TypeError, ValueError, AttributeError):
+        tiles = t.get("tiles")
+        tiles = None if tiles is None else [int(tiles[0]), int(tiles[1])]
+        pad = t.get("pad")
+        pad = None if pad is None else int(pad)
+        reacq = int(t.get("reacq", 4))
+        budget = t.get("budget_ms")
+        budget = None if budget is None else int(budget)
+        lit = t.get("lit")
+    except (TypeError, ValueError, AttributeError, IndexError, KeyError):
         raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "bad tags settings: " + repr(t))
     if every < 1 or not 0 < scale <= 1 or not 1 <= bands <= 8 or not ids:
         raise cp.ProtocolError(
             cp.ERR_CAPTURE_FAILED,
             "tags needs every >= 1, 0 < scale <= 1, 1 <= bands <= 8 and ids: " + repr(t),
         )
-    return {"every": every, "scale": scale, "bands": bands, "ids": ids}
+    if (tiles is not None and not (1 <= tiles[0] <= 8 and 1 <= tiles[1] <= 8)) \
+            or (pad is not None and pad < 0) or reacq < 1 \
+            or (budget is not None and budget < 1) \
+            or (lit is not None and not isinstance(lit, str)):
+        raise cp.ProtocolError(
+            cp.ERR_CAPTURE_FAILED,
+            "tags G2 needs tiles [1..8, 1..8], pad >= 0, reacq >= 1, budget_ms >= 1, lit a path: "
+            + repr(t),
+        )
+    return {"every": every, "scale": scale, "bands": bands, "ids": ids, "tiles": tiles,
+            "pad": pad, "reacq": reacq, "budget": budget, "lit": lit}
 
 
 def _tag_due(seq, last_seq, every, late_ms):
@@ -469,6 +497,37 @@ def _band(k, bands, w, h):
     y0 = max(0, k * h // bands - pad)
     y1 = min(h, (k + 1) * h // bands + pad)
     return (0, y0, w, y1 - y0)
+
+
+def _tile(k, rows, cols, w, h, pad):
+    """Acquire tile k of a rows x cols grid over a w x h frame (row-major), each grown by pad px
+    on every side (clipped), so a tag up to pad px across lies wholly inside at least one tile."""
+    r, c = k // cols, k % cols
+    x0, x1 = max(0, c * w // cols - pad), min(w, (c + 1) * w // cols + pad)
+    y0, y1 = max(0, r * h // rows - pad), min(h, (r + 1) * h // rows + pad)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def _holds(box, corners):
+    """1 if at least one tag's corners (full-frame px) lie wholly inside box, else 0."""
+    x, y, bw, bh = box
+    for c in corners:
+        if all(x <= px <= x + bw and y <= py <= y + bh for px, py in c):
+            return 1
+    return 0
+
+
+def _acquire_box(cfg, state, w, h):
+    """The next acquire box (tile with G2, else band) and its header name; advances the cursor."""
+    if cfg.get("tiles"):
+        rows, cols = cfg["tiles"]
+        k = state["tile"]
+        state["tile"] = (k + 1) % (rows * cols)
+        pad = cfg["pad"] if cfg["pad"] is not None else h // 8
+        return "tile%d" % k, _tile(k, rows, cols, w, h, pad)
+    k = state["band"]
+    state["band"] = (k + 1) % cfg["bands"]
+    return "band%d" % k, _band(k, cfg["bands"], w, h)
 
 
 def _track_boxes(corners, w, h):
@@ -504,28 +563,54 @@ def _tag_result(tags, ids, scale, ms):
 
 
 def _find_tags(img, cfg, family, state):
-    """One bounded search (track or acquire, see above). ``state`` carries the last kept corners
-    and the next acquire band between calls."""
+    """One bounded search (track or acquire, see above). ``state`` carries the last kept corners,
+    the next acquire band / tile, and (G2) the track count and the last tile's ms between calls."""
     t0 = time.ticks_ms()
     w, h = img.width(), img.height()
     s = cfg["scale"]
     src = img if s == 1 else img.to_grayscale(x_scale=s, y_scale=s, copy=True)
-    boxes = _track_boxes(state["corners"], w, h)
-    mode = "track"
-    if not boxes:
-        mode = "band%d" % state["band"]
-        boxes = [_band(state["band"], cfg["bands"], w, h)]
-        state["band"] = (state["band"] + 1) % cfg["bands"]
     tags = []
-    for x, y, bw, bh in boxes:
+
+    def search(box):
+        x, y, bw, bh = box
         tags.extend(src.find_apriltags(roi=(int(x * s), int(y * s), max(4, int(bw * s)),
                                             max(4, int(bh * s))), families=family))
+
+    held = []
+
+    def search_tile():
+        name, box = _acquire_box(cfg, state, w, h)
+        held.append(_holds(box, state["last"]))
+        t1 = time.ticks_ms()
+        search(box)
+        state["tile_ms"] = time.ticks_diff(time.ticks_ms(), t1)
+        return name
+
+    boxes = _track_boxes(state["corners"], w, h)
+    if boxes:
+        mode = "track"
+        for box in boxes:
+            search(box)
+        if cfg.get("tiles"):  # G2 re-acquire: the card's other tags (QE 011 N4)
+            state["tracks"] += 1
+            if state["tracks"] % cfg["reacq"] == 0 and (
+                    state["tile_ms"] is None
+                    or time.ticks_diff(time.ticks_ms(), t0) + state["tile_ms"] <= cfg["budget"]):
+                mode = "track+" + search_tile()
+    else:
+        mode = search_tile()
     if src is not img:  # free the scaled copy before the JPEG encoder needs the heap (F4)
         src = None
         gc.collect()
     rec = _tag_result(tags, cfg["ids"], s, time.ticks_diff(time.ticks_ms(), t0))
     rec["mode"] = mode
+    if cfg.get("tiles"):
+        rec["over"] = 1 if rec["ms"] > cfg["budget"] else 0
+        if held:
+            rec["held"] = held[0]
     state["corners"] = rec["corners"]
+    if rec["corners"]:
+        state["last"] = rec["corners"]  # the card's last known position (kept across a loss)
     return rec
 
 
@@ -588,7 +673,17 @@ def stream_frames(usb, command_id, board_config, settings):
                                    + " (openmv/firmware/README.md)")
         if not period_ms:  # the on-schedule guard needs a frame period (QE 011 N3)
             raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "tags need an fps cap (fps > 0)")
+        if tags["budget"] is None:  # G2 guard: a search may take one extra frame period
+            tags["budget"] = period_ms
+    lit = None
+    if tags is not None and tags["lit"]:
+        try:  # loaded before the sensor starts: a missing / unloadable file fails the arm
+            lit = image.Image(tags["lit"])
+        except Exception as e:
+            raise cp.ProtocolError(cp.ERR_CAPTURE_FAILED, "tags lit image: " + repr(e))
     tag_stats = {"searches": 0, "max_ms": 0, "error": None}
+    if tags is not None and tags["tiles"]:
+        tag_stats["over"] = 0
 
     sensor.reset()
     sensor.set_pixformat(sensor.RGB565)
@@ -609,7 +704,7 @@ def stream_frames(usb, command_id, board_config, settings):
     due = None  # tags on: when this frame was due (pacing grid, _next_due)
     late = 0  # tags on: how late the previous frame left this one (ms)
     last_tag_seq = None
-    tag_state = {"corners": [], "band": 0}
+    tag_state = {"corners": [], "last": [], "band": 0, "tile": 0, "tracks": 0, "tile_ms": None}
     deadline = time.ticks_add(time.ticks_ms(), max_seconds * 1000)
     while True:
         # Any inbound byte is the host's stop signal; drain it and exit.
@@ -630,10 +725,13 @@ def stream_frames(usb, command_id, board_config, settings):
         tag = None
         if tags is not None and _tag_due(seq, last_tag_seq, tags["every"], late):
             try:
-                tag = _find_tags(img, tags, family, tag_state)
+                tag = _find_tags(img if lit is None else lit, tags, family, tag_state)
                 last_tag_seq = seq
                 tag_stats["searches"] += 1
                 tag_stats["max_ms"] = max(tag_stats["max_ms"], tag["ms"])
+                if tag.get("over"):  # G2 guard: also skip the next `every` frames
+                    tag_stats["over"] += 1
+                    last_tag_seq = seq + tags["every"]
             except Exception as e:  # e.g. MemoryError beside the JPEG encoder (F4): hook off,
                 tags = None         # the stream goes on; the reason is in the completed line
                 tag_stats["error"] = repr(e)

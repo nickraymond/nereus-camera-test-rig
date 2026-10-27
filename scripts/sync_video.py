@@ -31,6 +31,8 @@ Usage (Pi, repo root):
   python scripts/sync_video.py --seconds 10 --board-framesize VGA --board-fps 10 --out DIR
   python scripts/sync_video.py --seconds 60 --n6-tags-every 5 --ae3-tags-every 10 --tag-ids c1
       # on-board tags (pool 3; off by default)
+  python scripts/sync_video.py --seconds 60 --n6-tags-every 5 --n6-tags-tiles 3x3 \
+      --ae3-tags-every 5 --ae3-tags-tiles 2x3 --tag-ids c1   # G2 tiles (docs/specs/yard_g2.md)
 Outputs (DIR, default results/video/<ts>/): imx708.h264 (+ .pts, .meta.json, .log),
   openmv_n6.mjpeg + openmv_n6_frames.csv, openmv_ae3.mjpeg + openmv_ae3_frames.csv,
   host_stats.csv (+ cached_mb, dirty_mb), cache_release.csv (one row per release pass: files,
@@ -74,7 +76,7 @@ BOARDS = {"openmv_n6": "10003500025043364d343000", "openmv_ae3": "0829c140000000
 TIMING_KEYS = ("snap_ms", "jpeg_ms", "prev_write_ms")
 # On-board AprilTags (start_stream "tags", pool 3 edge test, docs/specs/pool3_edge_tags.md): a frame
 # the board searched carries its result; frames.csv gets one column per field (lists as JSON).
-TAG_KEYS = ("tag_mode", "tag_ms", "tag_ids", "tag_rej", "tag_corners")
+TAG_KEYS = ("tag_mode", "tag_ms", "tag_ids", "tag_rej", "tag_corners", "tag_over", "tag_held")
 
 
 def tag_columns(tags: dict | None) -> dict:
@@ -83,7 +85,9 @@ def tag_columns(tags: dict | None) -> dict:
         return {k: None for k in TAG_KEYS}
     return {"tag_mode": tags.get("mode"), "tag_ms": tags.get("ms"),
             "tag_ids": json.dumps(tags.get("ids", [])), "tag_rej": json.dumps(tags.get("rej", [])),
-            "tag_corners": json.dumps(tags.get("corners", []))}
+            "tag_corners": json.dumps(tags.get("corners", [])),
+            # G2 (docs/specs/yard_g2.md): over budget 0/1; the tile held the card's last position
+            "tag_over": tags.get("over"), "tag_held": tags.get("held")}
 
 
 def tag_summary(rows: list[dict], seconds: float | None) -> dict:
@@ -101,6 +105,43 @@ def tag_summary(rows: list[dict], seconds: float | None) -> dict:
             "false_ids": len(false_ids), "false_id_values": sorted(set(false_ids)),
             "decode_ms_median": ms[len(ms) // 2] if ms else None,
             "decode_ms_max": ms[-1] if ms else None}
+
+
+SWEEP_MAX_S = 3.0  # yard G2 spec rev 1 N3: all tiles visited within 3 s (Nick pauses ~4 s a mark)
+
+
+def g2_summary(rows: list[dict], n_tiles: int) -> dict:
+    """G2 per-board numbers from frames.csv rows (board ticks_ms as the clock). Over-budget
+    searches; R1 hit %: of track frames + tile frames whose tile held the card's last known
+    position, those with >= 1 card id (n shown); sweep = first tile visit -> the visit that
+    completes all n_tiles, then the next sweep starts; time to first detection from the clip's
+    first frame. Pure."""
+    import re
+
+    searched = [r for r in rows if r.get("tag_ms") not in (None, "")]
+    counted = [r for r in searched if str(r.get("tag_mode", "")).startswith("track")
+               or str(r.get("tag_held")) == "1"]
+    hit = [r for r in counted if json.loads(r["tag_ids"] or "[]")]
+    sweeps, seen, start = [], set(), None
+    for r in searched:
+        m = re.search(r"tile(\d+)", str(r.get("tag_mode", "")))
+        if not m:
+            continue
+        t = int(r["ticks_ms"])
+        start = t if start is None else start
+        seen.add(int(m.group(1)))
+        if len(seen) == n_tiles:
+            sweeps.append(round((t - start) / 1000, 2))
+            seen, start = set(), None
+    first = next((r for r in searched if json.loads(r["tag_ids"] or "[]")), None)
+    return {"over_searches": sum(str(r.get("tag_over")) == "1" for r in searched),
+            "r1_frames": len(counted),
+            "r1_hit_pct": round(100 * len(hit) / len(counted), 1) if counted else None,
+            "sweeps": len(sweeps), "sweep_s_max": max(sweeps) if sweeps else None,
+            "sweep_s_median": sorted(sweeps)[len(sweeps) // 2] if sweeps else None,
+            "sweep_ok": (max(sweeps) <= SWEEP_MAX_S) if sweeps else None,
+            "first_detection_s": round((int(first["ticks_ms"]) - int(rows[0]["ticks_ms"]))
+                                       / 1000, 2) if first and rows else None}
 
 
 def card_tag_ids(copy: str) -> list[int]:
@@ -304,6 +345,9 @@ class BoardVideo:
             board = (self.rec.get("board_done") or {}).get("tags") or {}
             # max_gap_ms above is the N4 bar's input (<= 2 frame periods with tags on)
             self.rec["tags"] = {**tag_summary(rows, self.seconds), "board": board}
+            tiles = self.settings["tags"].get("tiles")
+            if tiles:
+                self.rec["tags"].update(g2_summary(rows, tiles[0] * tiles[1]))
         self.rec["ok"] = bool(rows) and "error" not in self.rec and bool(times)
         return self.rec
 
@@ -605,6 +649,15 @@ def board_settings(a: argparse.Namespace, name: str) -> dict:
     if pick("tags_every"):  # 0 = off (the default): the stream is exactly as without the hook
         s["tags"] = {"every": pick("tags_every"), "scale": pick("tags_scale"),
                      "bands": pick("tags_bands"), "ids": card_tag_ids(a.tag_ids)}
+        if pick("tags_tiles"):  # G2 (docs/specs/yard_g2.md); unset = the bands behaviour
+            r, c = (int(v) for v in pick("tags_tiles").lower().split("x"))
+            s["tags"]["tiles"] = [r, c]
+            for opt, field in (("tags_pad", "pad"), ("tags_reacq", "reacq"),
+                               ("tags_budget_ms", "budget_ms")):
+                if pick(opt) is not None:
+                    s["tags"][field] = pick(opt)
+        if pick("tags_lit"):
+            s["tags"]["lit"] = pick("tags_lit")
     return s
 
 
@@ -711,10 +764,29 @@ def build_parser() -> argparse.ArgumentParser:
                     help="search a grayscale copy scaled by this (1 = the frame itself)")
     ap.add_argument("--board-tags-bands", type=int, default=1,
                     help="acquire search covers 1 of N horizontal bands per detection frame")
+    ap.add_argument("--board-tags-tiles", default=None,
+                    help="G2: acquire over a ROWSxCOLS grid of tiles instead of bands, e.g. 2x3 "
+                         "(unset = bands); docs/specs/yard_g2.md")
+    ap.add_argument("--board-tags-pad", type=int, default=None,
+                    help="G2: px each tile grows on every side (board default h/8)")
+    ap.add_argument("--board-tags-reacq", type=int, default=None,
+                    help="G2: every Nth track search also searches the next tile (board default 4)")
+    ap.add_argument("--board-tags-budget-ms", type=int, default=None,
+                    help="G2: a search over this skips the next --*-tags-every frames (board "
+                         "default one frame period)")
+    ap.add_argument("--board-tags-lit", default=None,
+                    help="search this grayscale image on the board's filesystem instead of the "
+                         "live frame (G2 must do 3: lit timing on a dark bench), e.g. "
+                         "/flash/lit.pgm")
     for key in ("n6", "ae3"):
         ap.add_argument(f"--{key}-tags-every", type=int, default=None)
         ap.add_argument(f"--{key}-tags-scale", type=float, default=None)
         ap.add_argument(f"--{key}-tags-bands", type=int, default=None)
+        ap.add_argument(f"--{key}-tags-tiles", default=None)
+        ap.add_argument(f"--{key}-tags-pad", type=int, default=None)
+        ap.add_argument(f"--{key}-tags-reacq", type=int, default=None)
+        ap.add_argument(f"--{key}-tags-budget-ms", type=int, default=None)
+        ap.add_argument(f"--{key}-tags-lit", default=None)
     ap.add_argument("--tag-ids", default=None, choices=("c1", "c2", "c3", "c4"),
                     help="V3 card copy in view; its corner_map ids are the filter")
     ap.add_argument("--cache-release-s", type=float, default=CACHE_RELEASE_S,
@@ -848,6 +920,13 @@ def main() -> int:
               f"lost {r.get('frames_lost')} resyncs {r.get('resyncs', 0)} "
               f"short {r.get('short_frames', 0)} "
               f"{str(r.get('error', ''))[:120]}", flush=True)
+        t = r.get("tags") or {}
+        if "sweeps" in t:  # G2 (yard spec rev 1 R1, N3): per board, per clip
+            print(f"    {n} G2: searches {t.get('detection_frames')} over {t.get('over_searches')} "
+                  f"search ms median/max {t.get('decode_ms_median')}/{t.get('decode_ms_max')} "
+                  f"sweep s max {t.get('sweep_s_max')} (<= {SWEEP_MAX_S}: {t.get('sweep_ok')}, "
+                  f"n {t.get('sweeps')}) first detection {t.get('first_detection_s')} s "
+                  f"R1 hit {t.get('r1_hit_pct')} % (n {t.get('r1_frames')})", flush=True)
     print(f"sync_video: start skew {summary['start_skew_ms']} ms offsets "
           f"{summary['start_offsets_ms']} host {summary.get('host')} -> "
           f"{'OK' if summary['ok'] else 'FAIL'}", flush=True)
