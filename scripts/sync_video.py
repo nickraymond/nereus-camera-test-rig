@@ -22,8 +22,9 @@ How:
   - page cache (spec pool3 rev 2.3/2.4 must do 7): the clip files' page cache filled free CMA at
     ~2 MB/s on nereus002 (B0b, CmaFree 60 -> 0 MB; D1 with a side loop held it at 10 MB). So a
     thread of its own (``cache_releaser``, off the USB readers and the rpicam-vid pipe) opens each
-    file in the clip dir by path every --cache-release-s (<= 5 s) and runs fdatasync, then
-    POSIX_FADV_DONTNEED (it drops clean pages only; the bytes on disk are unchanged).
+    file in the clip dir by path every --cache-release-s (default 1, <= 5 s) and runs fdatasync,
+    then POSIX_FADV_DONTNEED (it drops clean pages only; the bytes on disk are unchanged). The
+    sha256 read-back in finish() drops each 1 MB chunk as it is hashed (rev 2.6 N4).
 
 Usage (Pi, repo root):
   python scripts/sync_video.py --seconds 10                      # all three, defaults
@@ -533,6 +534,8 @@ def host_sampler(path: Path, stop: threading.Event, meminfo: Path = Path("/proc/
 
 
 CACHE_RELEASE_MAX_S = 5.0  # spec pool3 rev 2.3 must do 7: release cadence <= 5 s
+# rev 2.5 ruling 1: 1 s for counted runs (bench_pr143 Q2: 5 s passes of ~1 s fdatasync, N6 18 lost)
+CACHE_RELEASE_S = 1.0
 
 
 def cache_releaser(out: Path, period_s: float, stop: threading.Event, stats: dict,
@@ -714,9 +717,10 @@ def build_parser() -> argparse.ArgumentParser:
         ap.add_argument(f"--{key}-tags-bands", type=int, default=None)
     ap.add_argument("--tag-ids", default=None, choices=("c1", "c2", "c3", "c4"),
                     help="V3 card copy in view; its corner_map ids are the filter")
-    ap.add_argument("--cache-release-s", type=float, default=CACHE_RELEASE_MAX_S,
-                    help="every this many s (<= 5), fdatasync + drop the clip files' page "
-                         "cache, which otherwise fills free CMA (spec pool3 must do 7; 0 = off)")
+    ap.add_argument("--cache-release-s", type=float, default=CACHE_RELEASE_S,
+                    help="every this many s (default 1, <= 5), fdatasync + drop the clip "
+                         "files' page cache, which otherwise fills free CMA (spec pool3 must do "
+                         "7; 0 = off)")
     ap.add_argument("--timing", action="store_true",
                     help="boards report per-frame snapshot / JPEG / USB-write ms (frames.csv)")
     return ap

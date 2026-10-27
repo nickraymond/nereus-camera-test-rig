@@ -138,7 +138,7 @@ def test_release_without_the_calls_is_a_no_op(tmp_path):
 
 
 def test_cache_release_flag_default_and_bounds(monkeypatch, capsys):
-    assert sv.build_parser().parse_args([]).cache_release_s == 5.0
+    assert sv.build_parser().parse_args([]).cache_release_s == 1.0  # spec rev 2.5 ruling 1
     assert sv.build_parser().parse_args(["--cache-release-s", "0"]).cache_release_s == 0
     for bad in ("5.5", "-1"):
         monkeypatch.setattr(sys, "argv", ["sync_video.py", "--cache-release-s", bad])
@@ -175,6 +175,12 @@ def test_hash_read_back_drops_the_cache_as_it_reads(tmp_path):
     d = os.POSIX_FADV_DONTNEED
     assert calls == [("sync",), ("advise", 0, 1 << 20, d), ("advise", 1 << 20, 1 << 20, d),
                      ("advise", 2 << 20, 12345, d), ("advise", 0, 0, d)]
+    # spec rev 2.6 N4: the in-loop advise calls cover the file end to end in steps <= 4 MB
+    steps = [c for c in calls if c[0] == "advise" and c[2]]
+    assert all(0 < n <= 4 << 20 for _, _, n, _ in steps)
+    assert [off for _, off, _, _ in steps] == [0] + [sum(c[2] for c in steps[:i])
+                                                     for i in range(1, len(steps))]
+    assert sum(n for _, _, n, _ in steps) == len(data)
 
 
 def test_hash_is_the_same_without_the_calls_or_when_they_fail(tmp_path):
