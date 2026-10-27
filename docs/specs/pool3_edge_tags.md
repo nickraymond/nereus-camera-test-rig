@@ -149,3 +149,32 @@
   USB readers and the rpicam-vid pipe. Must do 7's bench check includes the gap bars (an fdatasync of ~10 MB to SD can stall 100s of ms,
   :181–182), not only byte-identity.
 - **N3, must do 7:** `host_stats.csv` (sync_video.py:490) adds `cached_mb` and `dirty_mb`, so every counted clip shows the mechanism.
+
+## Rev 2.5 (PE 009, Mon 10/26 7:49 PM PT; Lead 005's ask on owner 2's rig #143 bench, 2026-10-26_bench_pr143/MANIFEST.md). No bar moves.
+- **Data (n = 1 each, rig #143 @ dcd51ba1, rungs I2/N2/A3, 60 s):**
+  - Q1 tags on (IMX708 follower decodes H.264 on the Pi, intra 30; boards N6 5/2, AE3 10/3), 5 s release: gaps IMX708 533 ms, N6 321 ms,
+    AE3 203 ms (all three over 100 ms); min CmaFree 2 MB at the follower's start; IMX708 0.38 det/s at decode median 1256 ms (below the
+    ≥ 1 det/s target). Board tags: N6 3.0 det/s, 99.4 % hit; AE3 1.0 det/s, 98.3 %.
+  - Q2 tags off, 5 s release: N6 18 lost, gap 198 ms. Q3 tags off, 1 s release: every capture bar met during capture; CmaFree 3 MB only
+    after capture, while finish() reads each file back for its sha256 (Cached 135 → 226 MB at t ≈ 74–80 s).
+- **Ruling 1, release cadence (PE's call, no must do dropped):** 1 s becomes the default for counted runs (within must do 7's ≤ 5 s); set as
+  the default in the rig PR (→ QE), not by a run flag. The 10/10 is its test; 5 s is out (Q2).
+- **Ruling 2, new must do 7 item N4 (fix, not a bar change):** finish()'s sha256 read-back releases each file's pages as it hashes
+  (fadvise DONTNEED after each file, as owner 2's rehash.py does), so min CmaFree stays ≥ 4 MB after capture too. Builder, same PR, → QE.
+- **Options for the demo, IMX708 tags vs F7 (Nick decides through the Lead; A and B differ from his "all three cameras" line):**
+
+  | Option | What runs Tue | Cost / risk | Drops a must do? |
+  |---|---|---|---|
+  | A. Board tags only, IMX708 records without tags (F7's existing fallback) | N6 + AE3 tags on board, IMX708 30 fps video | Needs one confirming clip: boards' gaps with the Pi follower off are **unknown** (Q1 broke them with it on) | No (F7 already says so), but differs from Nick's "all three running tag detection" → Nick |
+  | B. A + IMX708 tags offline on the Mac after each clip | Same as A live; IMX708 det rate in Nick's table from the saved H.264 | Mac-side script, no Pi load; not live | Live IMX708 detection dropped → Nick |
+  | C. IMX708 tags live from rpicam-vid's low-res YUV stream (no H.264 decode) | All three live | New code + QE + bench before Tue ~2 PM; Pi cost at low res **unknown** | No, if it passes; high schedule risk |
+  | D. Keep the H.264 follower, sparser (e.g. intra 90) | All three live | Each pass still ~1.26 s of decode (Q1 median); Q1 broke all three gaps | No, if it passes; not supported by Q1 |
+- **PE rec (conditional, not from n = 1):** A for the live demo, with B for the IMX708 number in Nick's table; C after Tue. A's first step is
+  one clip "boards tags on, IMX708 tags off, 1 s release"; if it misses a capture bar, the boards' tag rates (N/K) step down per rev 2's ladder.
+  The 10/10 then confirms whichever Nick picks. If Nick picks C or D, the 10/10 starts only on main with that code in (N2).
+
+## Rev 2.6 (PE 009, Mon 10/26 7:50 PM PT; QE 011 N1 on rev 2.5, qe_reviews/QE011_spec_pool3_edge_tags_1f303d06b14b.md rev 2.5 section). Text only; no bar moves.
+- **N1, must do 7 N4 (replaces "after each file"; lands before the builder codes N4):** finish()'s sha256 read-back releases **each chunk as
+  it is hashed, ≤ 4 MB**: `posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED)` inside the read loop, as owner 2's rehash.py :25–27 does.
+  Per file is not enough: Q3's openmv_n6.mjpeg is 101 MB and imx708.h264 80 MB against 72–92 MB of CmaFree during capture. Test (builder,
+  same PR): the advise calls cover each file end to end in steps ≤ 4 MB, and the hashes are unchanged.
