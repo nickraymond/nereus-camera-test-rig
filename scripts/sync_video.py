@@ -116,11 +116,30 @@ def card_tag_ids(copy: str) -> list[int]:
     return sorted(int(v) for v in corner_map.values())
 
 
-def sha256(path: Path) -> str:
+def sha256(path: Path, sync=getattr(os, "fdatasync", None),
+           advise=getattr(os, "posix_fadvise", None)) -> str:
+    """Hash a clip file, dropping its page cache as it reads (where the calls exist): finish()
+    reads each ~100 MB file back, which refilled the cache and took CmaFree to 3 MB after the
+    capture (rig #143 bench Q3, 2026-10-26). fdatasync first: dirty pages can't be dropped.
+    Best effort: a failed sync/advise never changes the hash."""
     h = hashlib.sha256()
-    with path.open("rb") as f:
+
+    def quiet(fn, *args):
+        try:
+            fn(*args)
+        except OSError:
+            pass
+    with path.open("rb", buffering=0) as f:
+        fd, off, release = f.fileno(), 0, sync is not None and advise is not None
+        if release:
+            quiet(sync, fd)
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
+            if release:
+                quiet(advise, fd, off, len(chunk), os.POSIX_FADV_DONTNEED)
+            off += len(chunk)
+        if release:  # whatever readahead brought in past the last chunk
+            quiet(advise, fd, 0, 0, os.POSIX_FADV_DONTNEED)
     return h.hexdigest()
 
 

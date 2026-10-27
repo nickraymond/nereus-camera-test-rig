@@ -160,3 +160,30 @@ def test_host_stats_has_cached_and_dirty_mb(tmp_path):
     cols = dict(zip(head.split(","), row.split(",")))
     assert cols["cached_mb"] == "162" and cols["dirty_mb"] == "2"
     assert cols["cma_free_mb"] == "10" and cols["throttled"] == "0x0"
+
+
+def test_hash_read_back_drops_the_cache_as_it_reads(tmp_path):
+    # rig #143 bench Q3: finish()'s sha256 read-back refilled the cache after capture (CmaFree
+    # 3 MB). The hash syncs once, then drops each chunk it read, then the whole file.
+    data = os.urandom((1 << 20) * 2 + 12345)
+    p = tmp_path / "openmv_n6.mjpeg"
+    p.write_bytes(data)
+    calls = []
+    got = sv.sha256(p, sync=lambda fd: calls.append(("sync",)),
+                    advise=lambda fd, off, n, adv: calls.append(("advise", off, n, adv)))
+    assert got == hashlib.sha256(data).hexdigest()
+    d = os.POSIX_FADV_DONTNEED
+    assert calls == [("sync",), ("advise", 0, 1 << 20, d), ("advise", 1 << 20, 1 << 20, d),
+                     ("advise", 2 << 20, 12345, d), ("advise", 0, 0, d)]
+
+
+def test_hash_is_the_same_without_the_calls_or_when_they_fail(tmp_path):
+    p = tmp_path / "imx708.h264"
+    p.write_bytes(b"h264" * 100_000)
+    want = hashlib.sha256(p.read_bytes()).hexdigest()
+
+    def fail(*a):
+        raise OSError(22, "EINVAL")
+    assert sv.sha256(p, sync=None, advise=None) == want
+    assert sv.sha256(p, sync=fail, advise=fail) == want
+    assert sv.sha256(p) == want  # the real calls on Linux, none on a Mac
